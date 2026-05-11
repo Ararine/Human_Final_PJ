@@ -83,8 +83,8 @@ python main.py
 
 ### 개발 관련 가이드라인
 
-- [코드 관련 가이드라인](./guides/CODE_DOCS.md)
-- [git 메세지 관련 가이드 라인](./guides/CODE_DOCS.md)
+- [코드 관련 가이드라인](https://github.com/Ararine/Human_Final_PJ/blob/main/resource/guides/CODE_DOCS.md)
+- [git 메세지 관련 가이드 라인](https://github.com/Ararine/Human_Final_PJ/blob/main/resource/guides/GIT_메세지작성.md)
 
 ## 🚧 향후 개발 계획
 
