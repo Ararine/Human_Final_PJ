@@ -1,0 +1,16 @@
+services:
+  final_db:
+    image: mariadb:11
+    container_name: team_3_db
+    volumes:
+      - ./database/mariadb_data:/var/lib/mysql
+      - ./database/init/:/docker-entrypoint-initdb.d
+    ports:
+      - "${DB_PORT}:3306"
+    env_file:
+      - ".env"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
