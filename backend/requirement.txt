@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+SQLAlchemy
+pandas
+numpy
+pandasql
+python-dotenv
+bcrypt
+joblib
