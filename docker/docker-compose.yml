@@ -1,16 +1,30 @@
 services:
   final_db:
-    image: mariadb:11
-    container_name: team_3_db
-    volumes:
-      - ./database/mariadb_data:/var/lib/mysql
-      - ./database/init/:/docker-entrypoint-initdb.d
+    image: pgvector/pgvector:pg16
+    container_name: final_db
+    restart: always
+
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB}"
+
     ports:
-      - "${DB_PORT}:3306"
-    env_file:
-      - ".env"
+      - "${DB_PORT}:5432"
+
+    volumes:
+      - "./database/postgre_data:/var/lib/postgresql/data"
+      - "./database/init:/docker-entrypoint-initdb.d"
+
     healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
       timeout: 5s
       retries: 5
+
+    networks:
+      - garim_network
+
+networks:
+  garim_network:
+    driver: bridge
