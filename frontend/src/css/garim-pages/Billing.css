@@ -1,0 +1,20 @@
+.billing-page { padding: 48px 32px; max-width: 900px; margin: 0 auto; }
+  .billing-page h1 { font: 500 28px var(--font-sans); margin: 0 0 24px; }
+  .empty-state {
+    background: #fff; border-radius: 4px; box-shadow: var(--mui-elev-1);
+    padding: 64px 32px; text-align: center;
+  }
+  .empty-state .material-icons { font-size: 72px; color: var(--fg-3); margin-bottom: 16px; }
+  .empty-state h2 { font: 500 24px var(--font-sans); margin: 0 0 12px; }
+  .empty-state p { font: 400 15px/1.6 var(--font-sans); color: var(--fg-2); max-width: 480px; margin: 0 auto 24px; }
+  .preview-area { margin-top: 48px; opacity: 0.5; pointer-events: none; }
+  .preview-area .caption-k { text-align: center; margin-bottom: 16px; }
+  .plan-card { background: #fff; border-radius: 4px; box-shadow: var(--mui-elev-1); padding: 24px; margin-bottom: 16px; display: flex; align-items: center; gap: 24px; }
+  .plan-card .info h3 { font: 500 18px var(--font-sans); margin: 0 0 4px; }
+  .plan-card .info p { font: 400 13px var(--font-sans); color: var(--fg-2); margin: 0; }
+  .plan-card .price { font: 300 32px var(--font-sans); color: #1976d2; margin-left: auto; }
+  .table-card { background: #fff; border-radius: 4px; box-shadow: var(--mui-elev-1); padding: 24px; }
+  .table-card h3 { font: 500 16px var(--font-sans); margin: 0 0 16px; }
+  table.bills { width: 100%; border-collapse: collapse; }
+  table.bills th, table.bills td { padding: 12px; text-align: left; font: 400 13px var(--font-sans); border-bottom: 1px solid var(--mui-divider); }
+  table.bills th { font-weight: 500; color: var(--fg-2); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }

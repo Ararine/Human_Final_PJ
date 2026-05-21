@@ -1,0 +1,38 @@
+.hist-page { padding: 32px; max-width: 1200px; margin: 0 auto; }
+  .hist-head { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+  .hist-head h1 { font: 500 28px var(--font-sans); margin: 0; flex: 1; }
+  .hist-toolbar { background: #fff; border-radius: 4px; box-shadow: var(--mui-elev-1); padding: 16px 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .hist-toolbar .search-mini {
+    flex: 1; min-width: 240px; display: flex; align-items: center; gap: 8px;
+    padding: 8px 14px; border: 1px solid var(--mui-border); border-radius: 4px;
+  }
+  .hist-toolbar .search-mini input { flex: 1; border: none; outline: none; font: 400 14px var(--font-sans); }
+  .hist-toolbar .search-mini .material-icons { color: var(--fg-2); }
+  .filter-bar { display: flex; gap: 8px; }
+  .hist-list { background: #fff; border-radius: 4px; box-shadow: var(--mui-elev-1); overflow: hidden; }
+  .hist-row {
+    display: grid; grid-template-columns: 100px 1fr 130px 130px 120px 100px;
+    align-items: center; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--mui-divider);
+    transition: background 150ms;
+  }
+  .hist-row:hover { background: rgba(0,0,0,0.02); }
+  .hist-row:last-child { border-bottom: none; }
+  .hist-row.head { background: #fafafa; padding: 12px 20px; font: 500 12px var(--font-sans); color: var(--fg-2); text-transform: uppercase; letter-spacing: 0.5px; }
+  .hist-row .thumb { width: 80px; aspect-ratio: 16/9; border-radius: 4px; overflow: hidden; background: #000; }
+  .hist-row .thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .hist-row .name { font: 500 14px var(--font-sans); margin-bottom: 2px; }
+  .hist-row .sub { font: 400 12px var(--font-sans); color: var(--fg-2); }
+  .hist-row .date { font: 400 13px var(--font-sans); }
+  .hist-row .detected { font: 500 14px var(--font-sans); }
+  .hist-row .detected small { font-weight: 400; color: var(--fg-2); }
+  .hist-row .actions { display: flex; gap: 4px; }
+  .hist-row .actions button { background: transparent; border: none; cursor: pointer; padding: 8px; border-radius: 4px; color: var(--fg-2); }
+  .hist-row .actions button:hover { background: rgba(0,0,0,0.04); color: var(--fg-1); }
+  .hist-row.warn-delete { background: rgba(237,108,2,0.04); }
+  .pagination { display: flex; justify-content: center; align-items: center; gap: 4px; padding: 16px; }
+  .pagination button { padding: 6px 12px; border: 1px solid var(--mui-border); background: #fff; border-radius: 4px; cursor: pointer; font: 400 13px var(--font-sans); color: var(--fg-1); }
+  .pagination button.active { background: #1976d2; color: #fff; border-color: #1976d2; }
+  .empty-hint {
+    background: #fff; border-radius: 4px; box-shadow: var(--mui-elev-1); padding: 48px;
+    text-align: center;
+  }

@@ -1,0 +1,23 @@
+.pay-page { padding: 48px 32px; min-height: calc(100vh - 64px); display: flex; align-items: flex-start; justify-content: center; }
+  .pay-shell { max-width: 560px; width: 100%; background: #fff; border-radius: 4px; box-shadow: var(--mui-elev-2); overflow: hidden; }
+  .pay-head { padding: 24px 32px; border-bottom: 1px solid var(--mui-divider); }
+  .pay-head h1 { font: 500 22px var(--font-sans); margin: 0; }
+  .summary { padding: 24px 32px; background: #fafafa; }
+  .summary .row { display: flex; justify-content: space-between; padding: 8px 0; font: 400 14px var(--font-sans); }
+  .summary .row.total { font: 500 18px var(--font-sans); padding-top: 16px; margin-top: 8px; border-top: 1px solid var(--mui-divider); }
+  .summary .row.total .v { color: #1976d2; font-size: 24px; }
+  .pay-disabled { padding: 56px 32px; text-align: center; }
+  .pay-disabled .material-icons { font-size: 64px; color: var(--fg-3); margin-bottom: 16px; }
+  .pay-disabled h2 { font: 500 22px var(--font-sans); margin: 0 0 12px; }
+  .pay-disabled p { font: 400 14px/1.6 var(--font-sans); color: var(--fg-2); max-width: 380px; margin: 0 auto 24px; }
+  .pg-mock { padding: 32px; opacity: 0.5; pointer-events: none; }
+  .pg-mock h3 { font: 500 14px var(--font-sans); color: var(--fg-2); margin: 0 0 12px; }
+  .pg-method { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+  .pg-method button { padding: 16px 8px; border: 1px solid var(--mui-border); background: #fff; border-radius: 4px; cursor: pointer; font: 500 13px var(--font-sans); display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .pg-method button .material-icons { font-size: 24px; color: var(--fg-2); }
+  .pg-method button.active { border-color: #1976d2; background: rgba(25,118,210,0.04); color: #1976d2; }
+  .pg-method button.active .material-icons { color: #1976d2; }
+  .pg-input { width: 100%; padding: 14px; border: 1px solid var(--mui-border); border-radius: 4px; font: 400 16px var(--font-sans); margin-bottom: 8px; }
+  .trust-strip { background: rgba(0,0,0,0.02); padding: 12px 32px; border-top: 1px solid var(--mui-divider); display: flex; align-items: center; gap: 16px; }
+  .trust-strip .trust { display: flex; align-items: center; gap: 6px; font: 400 12px var(--font-sans); color: var(--fg-2); }
+  .trust-strip .material-icons { font-size: 14px; color: #2e7d32; }

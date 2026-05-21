@@ -1,0 +1,24 @@
+.hero-vis {
+    max-width: 920px; margin: 56px auto 0; aspect-ratio: 16/9;
+    border-radius: 8px; overflow: hidden; position: relative;
+    box-shadow: var(--mui-elev-12); background: #000;
+  }
+  .hero-vis img { width: 100%; height: 100%; object-fit: cover; }
+  .hero-vis .badge-overlay {
+    position: absolute; bottom: 16px; left: 16px;
+    background: rgba(0,0,0,0.7); color: #fff;
+    padding: 8px 12px; border-radius: 4px;
+    font: 500 13px var(--font-sans);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .hero-vis .badge-overlay .material-icons { font-size: 16px; color: #4caf50; }
+  .problem-cards { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; max-width: 1100px; margin: 0 auto; }
+  .problem-card { background: #fff; border: 1px solid var(--mui-border); border-radius: 4px; padding: 24px; display: flex; flex-direction: column; gap: 8px; }
+  .problem-card .material-icons { color: #d32f2f; font-size: 28px; }
+  .problem-card h4 { font: 500 16px var(--font-sans); margin: 0; }
+  .problem-card p { font: 400 13px/1.5 var(--font-sans); color: var(--fg-2); margin: 0; }
+  .closing-cta { background: #1976d2; color: #fff; padding: 96px 32px; text-align: center; }
+  .closing-cta h2 { font: 300 48px/1.2 var(--font-sans); color: #fff; margin: 0 0 16px; letter-spacing: -0.5px; }
+  .closing-cta p { font: 400 18px/1.6 var(--font-sans); color: rgba(255,255,255,0.85); max-width: 540px; margin: 0 auto 32px; }
+  .closing-cta .mui-btn--contained { background: #fff; color: #1976d2; }
+  .closing-cta .mui-btn--contained:hover { background: #f5f5f5; }

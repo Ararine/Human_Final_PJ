@@ -7,3 +7,8 @@ pandasql
 python-dotenv
 bcrypt
 joblib
+python-multipart
+pytest
+httpx
+psycopg2-binary
+redis

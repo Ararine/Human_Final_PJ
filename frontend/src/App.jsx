@@ -1,19 +1,29 @@
-import { StrictMode } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { BrowserRouter } from "react-router-dom";
 
-import Home from "./pages/Home";
 /* css */
 import "./css/index.css";
 import "./css/App.css";
-import { URL } from "./constants";
+import "./css/garim.css";
+import { GarimRouteProvider } from "./context/GarimRouteContext.jsx";
+import { garimPages } from "./data/garim/pages";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path={URL.HOME} element={<Home />} />
-        <Route path="*" element={<Navigate to={URL.HOME} />} />
+        {garimPages.map((route) => (
+          <Route
+            key={route.path}
+            path={route.path}
+            element={
+              <GarimRouteProvider route={route}>
+                <route.component />
+              </GarimRouteProvider>
+            }
+          />
+        ))}
+        <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </BrowserRouter>
   );

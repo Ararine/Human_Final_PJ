@@ -1,0 +1,33 @@
+.upload-page { padding: 32px 32px 64px; }
+  .upload-head { max-width: 1100px; margin: 0 auto 24px; }
+  .upload-head h1 { font: 500 28px var(--font-sans); margin: 0 0 4px; letter-spacing: -0.25px; }
+  .upload-head .sub { font: 400 14px var(--font-sans); color: var(--fg-2); }
+  .upload-banner {
+    max-width: 1100px; margin: 0 auto 24px;
+  }
+  .upload-grid { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 1fr 320px; gap: 24px; align-items: flex-start; }
+  .dropzone-card { background: #fff; border-radius: 4px; box-shadow: var(--mui-elev-1); padding: 24px; }
+  .dropzone-card .dropzone { padding: 64px 32px; cursor: pointer; }
+  .dropzone-card .dropzone--selected { border-color: #1976d2; background: rgba(25,118,210,0.02); }
+  .upload-input { display: none; }
+  .dropzone-card .dropzone h2 { font: 500 22px var(--font-sans); margin: 0 0 8px; }
+  .dropzone-card .dropzone p { font: 400 14px/1.5 var(--font-sans); color: var(--fg-2); margin: 0 0 16px; }
+  .file-types { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 16px; }
+  .file-types .mui-chip { background: rgba(0,0,0,0.05); }
+  .or-sample { text-align: center; margin-top: 24px; font: 400 13px var(--font-sans); color: var(--fg-2); }
+  .or-sample a { color: #1976d2; font-weight: 500; }
+  .sidebar-card { background: #fff; border-radius: 4px; box-shadow: var(--mui-elev-1); padding: 20px; margin-bottom: 16px; }
+  .sidebar-card h3 { font: 500 14px var(--font-sans); text-transform: uppercase; letter-spacing: 0.5px; color: var(--fg-2); margin: 0 0 12px; }
+  .spec-row { display: flex; justify-content: space-between; padding: 6px 0; font: 400 13px var(--font-sans); border-bottom: 1px dashed var(--mui-divider); }
+  .spec-row:last-child { border-bottom: none; }
+  .spec-row .v { color: var(--fg-1); font-weight: 500; }
+  .spec-row .k { color: var(--fg-2); }
+  .queue-card { background: rgba(151,71,255,0.04); border: 1px solid rgba(151,71,255,0.2); }
+  .queue-card h3 { color: #9747ff; }
+  .queue-num { font: 300 36px var(--font-sans); color: #9747ff; line-height: 1; }
+  .progress-state { display: none; }
+  .progress-state.show { display: block; }
+  .progress-state .file-info { display: flex; align-items: center; gap: 16px; padding: 12px 0; }
+  .progress-state .file-info .material-icons { font-size: 40px; color: #1976d2; }
+  .progress-state .file-info .name { font: 500 15px var(--font-sans); }
+  .progress-state .file-info .meta { font: 400 12px var(--font-sans); color: var(--fg-2); }

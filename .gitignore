@@ -6,6 +6,8 @@ dist
 
 # 파이썬 캐시
 __pycache__
+.pytest_cache
+.pytest_tmp
 
 # vscode 설정 폴더
 .vscode
@@ -15,3 +17,8 @@ __pycache__
 
 # DB data 폴더
 postgre_data
+
+# codex 관련 설정
+superpowers
+Microsoft
+.tmp_*

@@ -18,9 +18,34 @@ services:
 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 5
+
+    networks:
+      - garim_network
+
+  final_redis:
+    image: redis:7
+    container_name: final_redis
+    restart: always
+
+    ports:
+      - "${REDIS_PORT}:6379"
+
+    ### 데이터 영속성 고려시 아래 주석 해제 ###
+    # volumes:
+    #   - "./database/redis_data:/data"
+
+    ## 모든 write 명령을 파일에 기록
+    # command: redis-server --appendonly yes
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
     networks:
       - garim_network
