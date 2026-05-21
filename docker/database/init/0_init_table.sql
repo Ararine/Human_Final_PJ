@@ -696,4 +696,13 @@ COMMENT ON INDEX idx_worker_tasks_next_retry_at IS '업무 이벤트가 발생�
 CREATE INDEX IF NOT EXISTS idx_worker_tasks_worker_status ON worker_tasks (worker_id, status, updated_at DESC);
 COMMENT ON INDEX idx_worker_tasks_worker_status IS '업무 규칙 또는 제약조건 관리: worker_tasks(worker_id, status, updated_at desc), 워커 모니터링';
 
+CREATE TABLE user_settings (
+    user_id uuid PRIMARY KEY REFERENCES users(user_id),
+    email_notification boolean DEFAULT true,
+    browser_notification boolean DEFAULT true,
+    data_usage_consent boolean DEFAULT true,
+    created_at timestamp default now(),
+    updated_at timestamp
+);
+
 commit;
