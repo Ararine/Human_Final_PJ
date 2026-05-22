@@ -12,3 +12,5 @@ pytest
 httpx
 psycopg2-binary
 redis
+ffmpeg-python
+pyngrok
