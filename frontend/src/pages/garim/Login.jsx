@@ -1,7 +1,7 @@
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
-import { getOAuthStartUrl } from "../../utils/api";
+import { getOAuthStartUrl, getOAuthReregisterUrl } from "../../utils/api";
 import "../../css/garim-pages/Login.css";
 
 import GarimPage from "../../components/garim/GarimPage";
@@ -9,7 +9,7 @@ import GarimPage from "../../components/garim/GarimPage";
 const socialButtons = [
   {
     provider: "kakao",
-    label: "카카오 계정으로 로그인",
+    label: "카카오 OAuth로 로그인",
     className: "login-social login-social--kakao",
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
@@ -21,8 +21,18 @@ const socialButtons = [
     ),
   },
   {
+    provider: "naver",
+    label: "네이버 OAuth로 로그인",
+    className: "login-social login-social--naver",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="currentColor" d="M4 4h5.1l5.8 8.4V4H20v16h-5.1L9.1 11.6V20H4V4z" />
+      </svg>
+    ),
+  },
+  {
     provider: "google",
-    label: "구글 로그인",
+    label: "구글 OAuth로 로그인",
     className: "login-social login-social--google",
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
@@ -33,47 +43,57 @@ const socialButtons = [
       </svg>
     ),
   },
-  {
-    provider: "facebook",
-    label: "facebook 로그인",
-    className: "login-social login-social--facebook",
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
-        <path
-          fill="#1877F2"
-          d="M12 2C6.5 2 2 6.5 2 12c0 5 3.7 9.1 8.4 9.9v-7H7.9V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.5h-1.3c-1.2 0-1.6.8-1.6 1.6V12h2.8l-.4 2.9h-2.3v7C18.3 21.1 22 17 22 12c0-5.5-4.5-10-10-10z"
-        />
-      </svg>
-    ),
-  },
-  {
-    provider: "x",
-    label: "X 로그인",
-    className: "login-social login-social--x",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-        <path
-          fill="currentColor"
-          d="M18.9 2h3.3l-7.3 8.3L23.4 22h-6.7l-5.2-6.8L5.5 22H2.2l7.8-8.9L1.8 2h6.9l4.7 6.2L18.9 2zm-1.2 18h1.8L7.7 3.9H5.8L17.7 20z"
-        />
-      </svg>
-    ),
-  },
 ];
 
 export default function Login() {
   useDocumentTitle("로그인 · Garim");
+  const [searchParams] = useSearchParams();
+  const isReregister = searchParams.get("reregister") === "true";
+  const reregisterProvider = searchParams.get("provider") || "";
 
   const startOAuth = (provider) => {
     window.location.assign(getOAuthStartUrl(provider));
   };
 
+  const startReregister = () => {
+    window.location.assign(getOAuthReregisterUrl(reregisterProvider));
+  };
+
+  if (isReregister) {
+    return (
+      <GarimPage bodyClass="page-auth" screenLabel="06 Login">
+        <main className="auth-main">
+          <div className="auth-card">
+            <h1>계정 재가입</h1>
+            <p className="sub">
+              이전에 탈퇴한 계정입니다. 재가입하시려면 개인정보 제공에 다시
+              동의해 주세요.
+            </p>
+            <button
+              type="button"
+              className="mui-btn mui-btn--contained mui-btn--block"
+              style={{ marginTop: "16px" }}
+              onClick={startReregister}
+            >
+              동의하고 재가입하기
+            </button>
+            <div className="login-terms-action" style={{ marginTop: "12px" }}>
+              <Link className="mui-btn mui-btn--outlined mui-btn--block" to="/login">
+                돌아가기
+              </Link>
+            </div>
+          </div>
+        </main>
+      </GarimPage>
+    );
+  }
+
   return (
     <GarimPage bodyClass="page-auth" screenLabel="06 Login">
       <main className="auth-main">
         <div className="auth-card">
-          <h1>다시 만나서 반가워요</h1>
-          <p className="sub">로그인 후 이전에 작업하던 곳으로 안내해드릴게요.</p>
+          <h1>OAuth 계정으로 시작</h1>
+          <p className="sub">사용할 OAuth 계정을 선택해 로그인해 주세요.</p>
 
           <div className="social-stack">
             {socialButtons.map((button) => (
@@ -88,9 +108,10 @@ export default function Login() {
               </button>
             ))}
           </div>
-
-          <div className="footer-link">
-            아직 계정이 없나요? <Link to="/signup">무료로 가입하기</Link>
+          <div className="login-terms-action">
+            <Link className="mui-btn mui-btn--outlined mui-btn--block" to="/terms">
+              이용약관 확인
+            </Link>
           </div>
         </div>
       </main>

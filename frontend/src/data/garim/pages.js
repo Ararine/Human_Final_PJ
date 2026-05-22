@@ -22,9 +22,12 @@ import Billing from "../../pages/garim/Billing";
 import Settings from "../../pages/garim/Settings";
 import LearningConsent from "../../pages/garim/LearningConsent";
 import FaceWhitelist from "../../pages/garim/FaceWhitelist";
-import AdminAbuse from "../../pages/garim/AdminAbuse";
+import AdminMonitoring from "../../pages/garim/AdminMonitoring";
 import AdminQueue from "../../pages/garim/AdminQueue";
 import AdminCompliance from "../../pages/garim/AdminCompliance";
+import AdminUsers from "../../pages/garim/AdminUsers";
+import AdminAnalytics from "../../pages/garim/AdminAnalytics";
+import AdminPolicy from "../../pages/garim/AdminPolicy";
 
 export const garimPages = [
   { path: "/", name: "Landing", component: Landing, file: "01-landing.html", layout: "public", current: "landing" },
@@ -51,7 +54,10 @@ export const garimPages = [
   { path: "/settings", name: "Settings", component: Settings, file: "22-settings.html", layout: "app", current: "settings" },
   { path: "/learning-consent", name: "LearningConsent", component: LearningConsent, file: "23-learning-consent.html", layout: "app", current: "settings" },
   { path: "/face-whitelist", name: "FaceWhitelist", component: FaceWhitelist, file: "24-face-whitelist.html", layout: "app", current: "settings" },
-  { path: "/admin/abuse", name: "AdminAbuse", component: AdminAbuse, file: "25-admin-abuse.html", layout: "admin", current: "abuse" },
+  { path: "/admin/monitoring", name: "AdminMonitoring", component: AdminMonitoring, file: "25-admin-monitoring.html", layout: "admin", current: "monitoring" },
   { path: "/admin/queue", name: "AdminQueue", component: AdminQueue, file: "26-admin-queue.html", layout: "admin", current: "queue" },
-  { path: "/admin/compliance", name: "AdminCompliance", component: AdminCompliance, file: "27-admin-compliance.html", layout: "admin", current: "compliance" }
+  { path: "/admin/compliance", name: "AdminCompliance", component: AdminCompliance, file: "27-admin-compliance.html", layout: "admin", current: "compliance" },
+  { path: "/admin/users", name: "AdminUsers", component: AdminUsers, file: "28-admin-users.html", layout: "admin", current: "users" },
+  { path: "/admin/analytics", name: "AdminAnalytics", component: AdminAnalytics, file: "29-admin-analytics.html", layout: "admin", current: "analytics" },
+  { path: "/admin/policy", name: "AdminPolicy", component: AdminPolicy, file: "30-admin-policy.html", layout: "admin", current: "policy" },
 ];

@@ -47,11 +47,11 @@ def test_session_helpers_use_session_ttl_and_delete(monkeypatch):
 
     redis_store.save_session("session-1", {"user_id": "user-1"})
 
-    assert client.expirations["session:session-1"] == 604800
+    assert client.expirations["auth:session:session-1"] == 604800
     assert redis_store.get_session("session-1") == {"user_id": "user-1"}
 
     assert redis_store.delete_session("session-1") is True
-    assert "session:session-1" in client.deleted
+    assert "auth:session:session-1" in client.deleted
     assert redis_store.get_session("session-1") is None
 
 

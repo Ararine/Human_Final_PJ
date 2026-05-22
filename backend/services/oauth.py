@@ -1,6 +1,5 @@
 import base64
 import hashlib
-import hmac
 import json
 import os
 import time
@@ -11,9 +10,7 @@ from dataclasses import dataclass
 from secrets import token_urlsafe
 
 
-AUTH_COOKIE_NAME = "garim_auth"
 STATE_TTL_SECONDS = 600
-AUTH_COOKIE_TTL_SECONDS = 60 * 60 * 24 * 7
 
 _oauth_states = {}
 
@@ -46,11 +43,21 @@ PROVIDERS = {
         name="google",
         authorize_url="https://accounts.google.com/o/oauth2/v2/auth",
         token_url="https://oauth2.googleapis.com/token",
-        userinfo_url="https://www.googleapis.com/oauth2/v2/userinfo",
+        userinfo_url="https://openidconnect.googleapis.com/v1/userinfo",
         scope="openid email profile",
         client_id_env="GOOGLE_CLIENT_ID",
         client_secret_env="GOOGLE_CLIENT_SECRET",
         redirect_uri_env="GOOGLE_REDIRECT_URI",
+    ),
+    "naver": OAuthProvider(
+        name="naver",
+        authorize_url="https://nid.naver.com/oauth2.0/authorize",
+        token_url="https://nid.naver.com/oauth2.0/token",
+        userinfo_url="https://openapi.naver.com/v1/nid/me",
+        scope="",
+        client_id_env="NAVER_CLIENT_ID",
+        client_secret_env="NAVER_CLIENT_SECRET",
+        redirect_uri_env="NAVER_REDIRECT_URI",
     ),
     "facebook": OAuthProvider(
         name="facebook",
@@ -105,12 +112,13 @@ def get_provider_config(provider):
     return provider_config, config
 
 
-def create_oauth_state(provider):
+def create_oauth_state(provider, reregister=False):
     state = token_urlsafe(32)
     code_verifier = token_urlsafe(64) if provider == "x" else None
     _oauth_states[state] = {
         "provider": provider,
         "code_verifier": code_verifier,
+        "reregister": reregister,
         "expires_at": time.time() + STATE_TTL_SECONDS,
     }
     return state
@@ -127,9 +135,9 @@ def consume_oauth_state(provider, state):
     return state_data
 
 
-def build_authorization_url(provider):
+def build_authorization_url(provider, force_consent=False):
     provider_config, config = get_provider_config(provider)
-    state = create_oauth_state(provider)
+    state = create_oauth_state(provider, reregister=force_consent)
     state_data = _oauth_states[state]
     params = {
         "client_id": config["client_id"],
@@ -141,7 +149,7 @@ def build_authorization_url(provider):
 
     if provider == "google":
         params["access_type"] = "offline"
-        params["prompt"] = "select_account"
+        params["prompt"] = "consent" if force_consent else "select_account"
 
     if provider == "x":
         code_challenge = base64_urlencode(
@@ -173,7 +181,7 @@ def exchange_code_for_user(provider, code, state):
         raise OAuthExchangeError("OAuth access token을 받지 못했습니다.")
 
     user_response = get_json(provider_config.userinfo_url, access_token)
-    return normalize_user(provider, user_response)
+    return normalize_user(provider, user_response), state_data, access_token
 
 
 def post_form(url, data):
@@ -216,6 +224,26 @@ def normalize_user(provider, user_response):
             "provider_user_id": str(user_response.get("id", "")),
             "email": kakao_account.get("email"),
             "name": profile.get("nickname"),
+            "profile_image_url": profile.get("profile_image_url") or profile.get("thumbnail_image_url"),
+        }
+
+    if provider == "naver":
+        profile = user_response.get("response", {})
+        return {
+            "provider": provider,
+            "provider_user_id": str(profile.get("id", "")),
+            "email": profile.get("email"),
+            "name": profile.get("name") or profile.get("nickname"),
+            "profile_image_url": profile.get("profile_image"),
+        }
+
+    if provider == "google":
+        return {
+            "provider": provider,
+            "provider_user_id": str(user_response.get("sub") or user_response.get("id", "")),
+            "email": user_response.get("email"),
+            "name": user_response.get("name"),
+            "profile_image_url": user_response.get("picture"),
         }
 
     if provider == "x":
@@ -225,6 +253,7 @@ def normalize_user(provider, user_response):
             "provider_user_id": str(data.get("id", "")),
             "email": None,
             "name": data.get("name") or data.get("username"),
+            "profile_image_url": data.get("profile_image_url"),
         }
 
     return {
@@ -232,41 +261,8 @@ def normalize_user(provider, user_response):
         "provider_user_id": str(user_response.get("id", "")),
         "email": user_response.get("email"),
         "name": user_response.get("name"),
+        "profile_image_url": user_response.get("picture"),
     }
-
-
-def create_auth_cookie(user):
-    expires_at = int(time.time() + AUTH_COOKIE_TTL_SECONDS)
-    payload = {
-        "provider": user.get("provider"),
-        "provider_user_id": user.get("provider_user_id"),
-        "email": user.get("email"),
-        "name": user.get("name"),
-        "exp": expires_at,
-    }
-    encoded_payload = base64_urlencode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
-    signature = sign(encoded_payload)
-    return f"{encoded_payload}.{signature}"
-
-
-def read_auth_cookie(cookie_value):
-    if not cookie_value or "." not in cookie_value:
-        return None
-    encoded_payload, signature = cookie_value.rsplit(".", 1)
-    if not hmac.compare_digest(sign(encoded_payload), signature):
-        return None
-    try:
-        payload = json.loads(base64_urldecode(encoded_payload).decode("utf-8"))
-    except (ValueError, json.JSONDecodeError):
-        return None
-    if payload.get("exp", 0) < time.time():
-        return None
-    return payload
-
-
-def sign(value):
-    secret = os.getenv("AUTH_COOKIE_SECRET") or "change-me"
-    return base64_urlencode(hmac.new(secret.encode("utf-8"), value.encode("utf-8"), hashlib.sha256).digest())
 
 
 def base64_urlencode(value):
@@ -276,6 +272,48 @@ def base64_urlencode(value):
 def base64_urldecode(value):
     padding = "=" * (-len(value) % 4)
     return base64.urlsafe_b64decode(value + padding)
+
+
+def unlink_kakao_with_user_token(kakao_access_token):
+    """유저 access token으로 카카오 앱 연결 해제 (Admin 키 불필요)."""
+    if not kakao_access_token:
+        return
+    request = urllib.request.Request(
+        "https://kapi.kakao.com/v1/user/unlink",
+        headers={"Authorization": f"Bearer {kakao_access_token}"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except Exception:
+        pass
+
+
+def unlink_naver_with_user_token(naver_access_token):
+    """유저 access token으로 네이버 앱 토큰 폐기 — 다음 로그인 시 consent 재표시."""
+    if not naver_access_token:
+        return
+    client_id = os.getenv("NAVER_CLIENT_ID", "").strip()
+    client_secret = os.getenv("NAVER_CLIENT_SECRET", "").strip()
+    if not client_id or not client_secret:
+        return
+    params = urllib.parse.urlencode({
+        "grant_type": "delete",
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "access_token": naver_access_token,
+        "service_provider": "NAVER",
+    })
+    request = urllib.request.Request(
+        f"https://nid.naver.com/oauth2.0/token?{params}",
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except Exception:
+        pass
 
 
 def get_frontend_base_url():

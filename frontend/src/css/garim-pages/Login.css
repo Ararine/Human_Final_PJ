@@ -43,21 +43,11 @@
           border-color: #FEE500;
           color: rgba(0,0,0,0.85);
         }
-        .login-social--facebook {
-          color: #1877F2;
-        }
-        .login-social--x {
-          background: #111;
-          border-color: #111;
+        .login-social--naver {
+          background: #03C75A;
+          border-color: #03C75A;
           color: #fff;
         }
-        .footer-link {
-          text-align: center;
-          margin-top: 24px;
-          font: 400 14px var(--font-sans);
-          color: var(--fg-2);
-        }
-        .footer-link a {
-          color: #1976d2;
-          font-weight: 500;
+        .login-terms-action {
+          margin-top: 14px;
         }

@@ -1,10 +1,13 @@
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
+import { useAuthStatus } from "../../hooks/useAuthStatus";
 import "../../css/garim-pages/Pricing.css";
 
 import GarimPage from "../../components/garim/GarimPage";
 
 export default function Pricing() {
   useDocumentTitle("요금제 · Garim");
+  const isAuthed = useAuthStatus();
+  const startHref = isAuthed ? "/upload" : "/login";
 
   return (
     <GarimPage bodyClass="page-public" screenLabel="02 Pricing">
@@ -89,7 +92,7 @@ export default function Pricing() {
                 표준 큐 우선순위
               </li>
             </ul>
-            <a href="/signup" className="mui-btn mui-btn--contained mui-btn--block">
+            <a href={startHref} className="mui-btn mui-btn--contained mui-btn--block">
               무료로 시작
             </a>
           </div>

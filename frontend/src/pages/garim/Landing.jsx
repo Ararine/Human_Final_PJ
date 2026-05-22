@@ -1,10 +1,13 @@
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
+import { useAuthStatus } from "../../hooks/useAuthStatus";
 import "../../css/garim-pages/Landing.css";
 
 import GarimPage from "../../components/garim/GarimPage";
 
 export default function Landing() {
   useDocumentTitle("Garim — 영상 속 개인정보, 자연스럽게 가립니다");
+  const isAuthed = useAuthStatus();
+  const startHref = isAuthed ? "/upload" : "/login";
 
   return (
     <GarimPage bodyClass="page-public" screenLabel="01 Landing">
@@ -24,7 +27,7 @@ export default function Landing() {
           택배 송장·번호판·얼굴·음성 — AI가 30초 안에 찾아내고, 보안 처리는 1분 안에 끝납니다.
         </p>
         <div className="hero__cta">
-          <a href="/signup" className="mui-btn mui-btn--contained mui-btn--lg">
+          <a href={startHref} className="mui-btn mui-btn--contained mui-btn--lg">
             무료로 시작하기
           </a>
           <a href="/pricing" className="mui-btn mui-btn--outlined mui-btn--lg">
@@ -306,7 +309,7 @@ export default function Landing() {
                 처리 결과 워터마크 포함
               </li>
             </ul>
-            <a href="/signup" className="mui-btn mui-btn--contained mui-btn--block">
+            <a href={startHref} className="mui-btn mui-btn--contained mui-btn--block">
               무료로 시작
             </a>
           </div>
@@ -405,7 +408,7 @@ export default function Landing() {
         <p>
           지금 내 영상에 무엇이 노출돼 있는지, 한 번 확인해보세요. 가입 후 첫 검출까지 1분.
         </p>
-        <a href="/signup" className="mui-btn mui-btn--contained mui-btn--lg">
+        <a href={startHref} className="mui-btn mui-btn--contained mui-btn--lg">
           무료로 시작하기 →
         </a>
       </section>

@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from core.logger import setup_logging
-from routes import oauth, post, uploads
+from routes import oauth, post, setting, uploads, admin
 
 ################## 초기 세팅 ######################
 ## 로거 기본 세팅
@@ -34,6 +34,8 @@ app.add_middleware(
 app.include_router(post.router, prefix="/posts")
 app.include_router(uploads.router, prefix="/uploads")
 app.include_router(oauth.router, prefix="/auth")
+app.include_router(setting.router, prefix="/settings")
+app.include_router(admin.router, prefix="/admin")
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",          # 모듈:앱 경로

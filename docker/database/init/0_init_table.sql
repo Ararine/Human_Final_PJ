@@ -626,12 +626,15 @@ COMMENT ON COLUMN worker_tasks.created_at IS '생성 일시 - 레코드가 생�
 COMMENT ON COLUMN worker_tasks.updated_at IS '수정 일시 - 레코드가 마지막으로 수정된 시각';
 
 -- Indexes
-CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON users (email);
-COMMENT ON INDEX idx_users_email_unique IS '이름 그대로 실제 PostgreSQL 인덱스 생성 시 참고하는 설계 항목';
+DROP INDEX IF EXISTS idx_users_email_unique;
+CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
+COMMENT ON INDEX idx_users_email IS '연락용 이메일 조회 인덱스. OAuth 로그인 식별자는 oauth_accounts(provider, provider_email)를 사용한다';
 CREATE INDEX IF NOT EXISTS idx_users_status_created_at ON users (status, created_at);
 COMMENT ON INDEX idx_users_status_created_at IS '업무 이벤트가 발생한 시각';
 CREATE UNIQUE INDEX IF NOT EXISTS idx_oauth_accounts_provider_user_unique ON oauth_accounts (provider, provider_user_id);
 COMMENT ON INDEX idx_oauth_accounts_provider_user_unique IS '업무 규칙 또는 제약조건 관리: oauth_accounts(provider, provider_user_id), 소셜 로그인 식별';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_oauth_accounts_provider_email_unique ON oauth_accounts (provider, LOWER(provider_email)) WHERE provider_email IS NOT NULL;
+COMMENT ON INDEX idx_oauth_accounts_provider_email_unique IS 'OAuth 제공자와 제공자 이메일 조합으로 계정을 식별하기 위한 복합 유니크 인덱스';
 CREATE INDEX IF NOT EXISTS idx_oauth_accounts_user_id ON oauth_accounts (user_id);
 COMMENT ON INDEX idx_oauth_accounts_user_id IS '관련 테이블(users.user_id)과 연결하기 위한 외래 키';
 CREATE INDEX IF NOT EXISTS idx_user_consents_user_type_version ON user_consents (user_id, consent_type, version);
@@ -696,7 +699,7 @@ COMMENT ON INDEX idx_worker_tasks_next_retry_at IS '업무 이벤트가 발생�
 CREATE INDEX IF NOT EXISTS idx_worker_tasks_worker_status ON worker_tasks (worker_id, status, updated_at DESC);
 COMMENT ON INDEX idx_worker_tasks_worker_status IS '업무 규칙 또는 제약조건 관리: worker_tasks(worker_id, status, updated_at desc), 워커 모니터링';
 
-CREATE TABLE user_settings (
+CREATE TABLE IF NOT EXISTS user_settings (
     user_id uuid PRIMARY KEY REFERENCES users(user_id),
     email_notification boolean DEFAULT true,
     browser_notification boolean DEFAULT true,
@@ -704,5 +707,12 @@ CREATE TABLE user_settings (
     created_at timestamp default now(),
     updated_at timestamp
 );
+COMMENT ON TABLE user_settings IS '사용자 환경 설정 - 알림 수신 여부와 데이터 활용 동의 설정을 저장하는 테이블';
+COMMENT ON COLUMN user_settings.user_id IS '사용자 ID - users 테이블과 1:1로 연결되는 기본 키이자 외래 키';
+COMMENT ON COLUMN user_settings.email_notification IS '이메일 알림 여부 - 이메일 알림 수신 동의 상태';
+COMMENT ON COLUMN user_settings.browser_notification IS '브라우저 알림 여부 - 웹 브라우저 알림 수신 동의 상태';
+COMMENT ON COLUMN user_settings.data_usage_consent IS '데이터 활용 동의 여부 - 서비스 개선 또는 분석을 위한 데이터 활용 동의 상태';
+COMMENT ON COLUMN user_settings.created_at IS '생성 일시 - 설정 레코드가 생성된 시각';
+COMMENT ON COLUMN user_settings.updated_at IS '수정 일시 - 설정 레코드가 마지막으로 수정된 시각';
 
 commit;

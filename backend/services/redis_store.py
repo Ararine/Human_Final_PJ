@@ -71,17 +71,35 @@ def consume_oauth_state(state):
 def save_session(session_id, data):
     """로그인 세션 데이터를 Redis에 저장합니다."""
     ttl = get_ttl("REDIS_SESSION_TTL_SECONDS", DEFAULT_SESSION_TTL_SECONDS)
-    return set_json("session", session_id, data, ttl)
+    return set_json("auth:session", session_id, data, ttl)
 
 
 def get_session(session_id):
     """session_id에 해당하는 로그인 세션 데이터를 조회합니다."""
-    return get_json("session", session_id)
+    return get_json("auth:session", session_id)
 
 
 def delete_session(session_id):
     """로그아웃 또는 만료 처리 시 로그인 세션 데이터를 삭제합니다."""
-    return delete_key("session", session_id)
+    return delete_key("auth:session", session_id)
+
+
+def delete_user_sessions(user_id):
+    """Delete every Redis auth session belonging to a user."""
+    client = get_redis_client()
+    deleted_count = 0
+    user_id = str(user_id)
+    for redis_key in list(client.scan_iter(match="auth:session:*")):
+        payload = client.get(redis_key)
+        if payload is None:
+            continue
+        try:
+            session = json.loads(payload)
+        except json.JSONDecodeError:
+            continue
+        if str(session.get("user_id")) == user_id:
+            deleted_count += int(client.delete(redis_key))
+    return deleted_count
 
 
 def set_dashboard_cache(key, data):

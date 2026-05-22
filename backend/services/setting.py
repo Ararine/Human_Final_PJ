@@ -29,6 +29,28 @@ def get_setting(user_id):
     return data
 
 
+def get_or_create_setting(user_id):
+    with engine.begin() as conn:
+        row = setting.get_setting_query(conn, user_id)
+        if not row:
+            setting.create_setting_query(conn, user_id)
+            row = setting.get_setting_query(conn, user_id)
+
+    if not row:
+        return None
+
+    result = dict(row._mapping)
+    result["user_id"] = str(result["user_id"])
+
+    if result.get("created_at"):
+        result["created_at"] = result["created_at"].strftime("%Y-%m-%d %H:%M:%S")
+
+    if result.get("updated_at"):
+        result["updated_at"] = result["updated_at"].strftime("%Y-%m-%d %H:%M:%S")
+
+    return result
+
+
 def update_setting(
     user_id,
     email_notification,

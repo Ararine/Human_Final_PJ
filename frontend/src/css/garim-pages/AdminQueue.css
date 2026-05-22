@@ -1,12 +1,12 @@
 body { background: #fafafa; }
   .adm-shell { display: grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 64px); }
-  .adm-side { background: #212121; padding: 16px 8px; }
+  .adm-side { background: #1e1b3a; padding: 16px 8px; }
   .adm-side .sec { font: 500 10px var(--font-sans); text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,0.5); padding: 14px 12px 6px; }
   .adm-side a { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 4px; font: 400 13px var(--font-sans); color: rgba(255,255,255,0.85); margin-bottom: 2px; }
   .adm-side a:hover { background: rgba(255,255,255,0.06); }
-  .adm-side a.active { background: rgba(25,118,210,0.15); color: #42a5f5; }
+  .adm-side a.active { background: rgba(149,117,205,0.2); color: #b39ddb; }
   .adm-side a .material-icons { font-size: 18px; color: rgba(255,255,255,0.5); }
-  .adm-side a.active .material-icons { color: #42a5f5; }
+  .adm-side a.active .material-icons { color: #b39ddb; }
   .adm-main { padding: 24px 28px; }
   .adm-head { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
   .adm-head h1 { font: 500 22px var(--font-sans); margin: 0; }
@@ -35,7 +35,7 @@ body { background: #fafafa; }
   .adm-card .head h3 { font: 500 13px var(--font-sans); margin: 0; flex: 1; }
 
   .job-row { display: grid; grid-template-columns: 100px 1fr 90px 100px 110px 80px; gap: 12px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--mui-divider); }
-  .job-row.head { background: #fafafa; font: 500 11px var(--font-sans); text-transform: uppercase; letter-spacing: 0.5px; color: var(--fg-2); }
+  .adm-shell .job-row.tbl-head { display: grid; background: #fafafa; font: 500 11px var(--font-sans); text-transform: uppercase; letter-spacing: 0.5px; color: var(--fg-2); }
   .job-row .jid { font-family: var(--font-mono); font-size: 12px; }
   .job-row .file { font: 400 12px var(--font-sans); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .job-row .file small { color: var(--fg-2); display: block; font-size: 11px; }

@@ -1,10 +1,13 @@
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
+import { useAuthUser } from "../../hooks/useAuthStatus";
 import "../../css/garim-pages/Dashboard.css";
 
 import GarimPage from "../../components/garim/GarimPage";
 
 export default function Dashboard() {
   useDocumentTitle("마이 대시보드 · Garim");
+  const { user } = useAuthUser();
+  const displayEmail = user?.email || user?.provider_email || user?.name || "사용자";
 
   return (
     <GarimPage bodyClass="page-app" screenLabel="19 Dashboard">
@@ -12,7 +15,7 @@ export default function Dashboard() {
         <div className="dash-hero">
           <div>
             <h1>
-              안녕하세요, 민지님 👋
+              안녕하세요, {displayEmail}님 👋
             </h1>
             <p>
               지난주 검출한 영상은 안전하게 가려졌어요. 오늘은 어떤 영상을 점검해볼까요?

@@ -1,9 +1,54 @@
 from uuid import UUID
 
-from fastapi import Body, Path, status
+from fastapi import Body, Cookie, Path, status
 from fastapi.responses import JSONResponse
 
-from services import setting
+from services import auth, setting, users, redis_store
+
+
+def delete_my_account(access_token: str | None = Cookie(default=None)):
+    current_user = auth.authenticate_access_token(access_token)
+    users.mark_user_deleted(current_user["id"])
+    redis_store.delete_session(current_user["session_id"])
+
+    response = JSONResponse(
+        {"message": "계정 삭제 신청이 완료되었습니다."},
+        status_code=status.HTTP_200_OK,
+    )
+    auth.delete_auth_cookies(response)
+    return response
+
+
+def get_my_setting(access_token: str | None = Cookie(default=None)):
+    current_user = auth.authenticate_access_token(access_token)
+    data = setting.get_or_create_setting(current_user["id"])
+    return JSONResponse(
+        {
+            "data": data,
+            "message": "환경설정 조회",
+        },
+        status_code=status.HTTP_200_OK,
+    )
+
+
+def update_my_setting(
+    payload: dict = Body(...),
+    access_token: str | None = Cookie(default=None),
+):
+    current_user = auth.authenticate_access_token(access_token)
+    data = setting.update_setting(
+        current_user["id"],
+        bool(payload.get("email_notification")),
+        bool(payload.get("browser_notification")),
+        bool(payload.get("data_usage_consent")),
+    )
+    return JSONResponse(
+        {
+            "data": data,
+            "message": "환경설정 수정 완료",
+        },
+        status_code=status.HTTP_200_OK,
+    )
 
 
 async def get_setting(

@@ -92,7 +92,7 @@ if (packageSource.includes("--port 5173")) {
 }
 
 const apiSource = fs.readFileSync(apiFile, "utf8");
-for (const apiExport of ["uploadFile"]) {
+for (const apiExport of ["uploadFile", "getAuthStatus", "getCurrentUser", "refreshAuthSession", "logout"]) {
   if (!apiSource.includes(`function ${apiExport}`)) {
     throw new Error(`Missing API helper: ${apiExport}`);
   }
@@ -100,6 +100,10 @@ for (const apiExport of ["uploadFile"]) {
 
 if (!apiSource.includes("function getOAuthStartUrl")) {
   throw new Error("Missing OAuth start URL helper.");
+}
+
+if (!apiSource.includes('credentials: "include"')) {
+  throw new Error("Auth API helpers must include HttpOnly cookies.");
 }
 
 if (apiSource.includes("getMetaOAuthStartUrl") || apiSource.includes("/auth/instagram")) {
@@ -179,7 +183,7 @@ if (pagesWithoutTitleHook.length > 0) {
 }
 
 const loginSource = fs.readFileSync(path.join(pageDir, "Login.jsx"), "utf8");
-const requiredLoginLabels = ["구글 로그인", "facebook 로그인", "X 로그인"];
+const requiredLoginLabels = ["카카오 OAuth로 로그인", "네이버 OAuth로 로그인", "구글 OAuth로 로그인"];
 const missingLoginLabels = requiredLoginLabels.filter(
   (label) => !loginSource.includes(label),
 );
@@ -188,7 +192,7 @@ if (missingLoginLabels.length > 0) {
   throw new Error(`Missing social login buttons: ${missingLoginLabels.join(", ")}`);
 }
 
-for (const provider of ["kakao", "google", "facebook", "x"]) {
+for (const provider of ["kakao", "naver", "google"]) {
   if (!loginSource.includes(`provider: "${provider}"`)) {
     throw new Error(`Missing social login provider wiring: ${provider}`);
   }

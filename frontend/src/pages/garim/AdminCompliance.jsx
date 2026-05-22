@@ -13,11 +13,11 @@ export default function AdminCompliance() {
           <div className="sec">
             운영
           </div>
-          <a href="/admin/abuse">
+          <a href="/admin/monitoring">
             <span className="material-icons">
-              shield
+              monitor_heart
             </span>
-            어뷰징 모니터링
+            사용자 모니터링
           </a>
           <a href="/admin/queue">
             <span className="material-icons">
@@ -34,19 +34,19 @@ export default function AdminCompliance() {
           <div className="sec">
             시스템
           </div>
-          <a href="#">
+          <a href="/admin/users">
             <span className="material-icons">
               people
             </span>
             사용자
           </a>
-          <a href="#">
+          <a href="/admin/analytics">
             <span className="material-icons">
               analytics
             </span>
             분석
           </a>
-          <a href="#">
+          <a href="/admin/policy">
             <span className="material-icons">
               tune
             </span>
@@ -104,7 +104,7 @@ export default function AdminCompliance() {
                     데이터 종류별 보존·삭제 정책 (B-1)
                   </h3>
                 </div>
-                <div className="policy-row head">
+                <div className="policy-row tbl-head">
                   <span>
                     데이터 종류
                   </span>
@@ -631,7 +631,7 @@ export default function AdminCompliance() {
                   응답 이력 — 최근 30일
                 </h3>
               </div>
-              <div className="policy-row head" style={{ gridTemplateColumns: "130px 130px 1fr 100px 100px" }}>
+              <div className="policy-row tbl-head" style={{ gridTemplateColumns: "130px 130px 1fr 100px 100px" }}>
                 <span>
                   요청 일시
                 </span>

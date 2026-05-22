@@ -13,11 +13,11 @@ export default function AdminQueue() {
           <div className="sec">
             운영
           </div>
-          <a href="/admin/abuse">
+          <a href="/admin/monitoring">
             <span className="material-icons">
-              shield
+              monitor_heart
             </span>
-            어뷰징 모니터링
+            사용자 모니터링
           </a>
           <a href="/admin/queue" className="active">
             <span className="material-icons">
@@ -34,19 +34,19 @@ export default function AdminQueue() {
           <div className="sec">
             시스템
           </div>
-          <a href="#">
+          <a href="/admin/users">
             <span className="material-icons">
               people
             </span>
             사용자
           </a>
-          <a href="#">
+          <a href="/admin/analytics">
             <span className="material-icons">
               analytics
             </span>
             분석
           </a>
-          <a href="#">
+          <a href="/admin/policy">
             <span className="material-icons">
               tune
             </span>
@@ -237,7 +237,7 @@ export default function AdminQueue() {
                   Studio 2
                 </span>
               </div>
-              <div className="job-row head">
+              <div className="job-row tbl-head">
                 <span>
                   작업 ID
                 </span>

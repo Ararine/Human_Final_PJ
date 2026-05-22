@@ -1,0 +1,58 @@
+body { background: #fafafa; }
+.adm-shell { display: grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 64px); }
+.adm-side { background: #1e1b3a; padding: 16px 8px; }
+.adm-side .sec { font: 500 10px var(--font-sans); text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,0.5); padding: 14px 12px 6px; }
+.adm-side a { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 4px; font: 400 13px var(--font-sans); color: rgba(255,255,255,0.85); margin-bottom: 2px; }
+.adm-side a:hover { background: rgba(255,255,255,0.06); }
+.adm-side a.active { background: rgba(149,117,205,0.2); color: #b39ddb; }
+.adm-side a .material-icons { font-size: 18px; color: rgba(255,255,255,0.5); }
+.adm-side a.active .material-icons { color: #b39ddb; }
+
+/* 컨텐츠 영역 */
+.pol-adm-main { padding: 0; background: var(--bg-2, #f5f5f5); }
+.pol-content { padding: 32px 48px; max-width: 900px; }
+
+.pol-section { margin-bottom: 48px; scroll-margin-top: 88px; }
+.pol-section h1 { font: 500 24px var(--font-sans); margin: 0 0 24px; }
+
+/* 카드 */
+.pol-card { background: #fff; border-radius: 4px; box-shadow: var(--mui-elev-1, 0 1px 3px rgba(0,0,0,0.12)); overflow: hidden; margin-bottom: 16px; }
+.pol-card-head { padding: 16px 20px; border-bottom: 1px solid var(--mui-divider); }
+.pol-card-head h3 { font: 500 15px var(--font-sans); margin: 0; }
+.pol-card-body { padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+
+/* 플랜별 테이블 */
+.pol-plan-table { padding: 0; }
+.pol-plan-row { display: grid; grid-template-columns: 200px 1fr 1fr 1fr; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--mui-divider); gap: 12px; }
+.pol-plan-head { background: #fafafa; font: 500 11px var(--font-sans); text-transform: uppercase; letter-spacing: 0.5px; color: var(--fg-2); }
+.pol-plan-label { font: 500 13px var(--font-sans); color: var(--fg-1); }
+.pol-plan-cell { display: flex; align-items: center; gap: 6px; }
+.pol-unlimited { font: 400 13px var(--font-sans); color: #1976d2; }
+
+/* 공통 허용 형식 */
+.pol-common { display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: #fafafa; border-top: 1px solid var(--mui-divider); }
+.pol-common-label { font: 500 13px var(--font-sans); color: var(--fg-1); white-space: nowrap; min-width: 200px; }
+.pol-input--wide { width: 280px; }
+
+/* 필드 */
+.pol-field { display: flex; flex-direction: column; gap: 6px; }
+.pol-field label { font: 500 13px var(--font-sans); color: var(--fg-1); }
+.pol-hint { font: 400 11px var(--font-sans); color: var(--fg-2); margin: 0; }
+
+.pol-input-row { display: flex; align-items: center; gap: 8px; }
+.pol-input { width: 100px; padding: 8px 10px; border: 1px solid var(--mui-border); border-radius: 4px; font: 400 14px var(--font-sans); outline: none; }
+.pol-input:focus { border-color: #1976d2; }
+.pol-unit { font: 400 13px var(--font-sans); color: var(--fg-2); white-space: nowrap; }
+
+/* 토글 행 (Settings .row-toggle 스타일) */
+.pol-toggle-row { display: flex; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--mui-divider); }
+.pol-toggle-row:last-child { border-bottom: none; }
+.pol-toggle-text { flex: 1; }
+.pol-toggle-title { font: 500 14px var(--font-sans); }
+.pol-toggle-sub { font: 400 12px var(--font-sans); color: var(--fg-2); margin-top: 2px; }
+.pol-switch-wrap { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.pol-switch-wrap input[type="checkbox"] { width: 16px; height: 16px; accent-color: #1976d2; cursor: pointer; }
+.pol-toggle-label { font: 400 13px var(--font-sans); color: var(--fg-2); white-space: nowrap; }
+
+/* 저장 바 (Settings .save-bar 스타일) */
+.pol-save-bar { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
