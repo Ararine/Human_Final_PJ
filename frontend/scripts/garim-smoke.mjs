@@ -30,7 +30,7 @@ const expectedPages = [
   "Settings",
   "LearningConsent",
   "FaceWhitelist",
-  "AdminAbuse",
+  "AdminMonitoring",
   "AdminQueue",
   "AdminCompliance",
 ];
@@ -60,7 +60,7 @@ const expectedRoutes = [
   "/settings",
   "/learning-consent",
   "/face-whitelist",
-  "/admin/abuse",
+  "/admin/monitoring",
   "/admin/queue",
   "/admin/compliance",
 ];

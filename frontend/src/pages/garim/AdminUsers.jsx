@@ -19,7 +19,7 @@ export default function AdminUsers() {
   const [users,      setUsers]      = useState([]);
   const [metrics,    setMetrics]    = useState({ total: 0, active: 0, suspended: 0, deleted: 0 });
   const [page,       setPage]       = useState(1);
-  const [pageLimit,  setPageLimit]  = useState(20);
+  const [pageLimit,  setPageLimit]  = useState(PAGE_LIMIT);
   const [total,      setTotal]      = useState(0);
   const [roleFilter, setRoleFilter] = useState("");
   const [statFilter, setStatFilter] = useState("");
@@ -28,17 +28,32 @@ export default function AdminUsers() {
   const [error,      setError]      = useState(null);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    getAdminUsers({ page, limit: pageLimit, role: roleFilter || undefined, status: statFilter || undefined })
+    let ignore = false;
+
+    Promise.resolve()
+      .then(() => {
+        if (ignore) return null;
+        setLoading(true);
+        setError(null);
+        return getAdminUsers({ page, limit: pageLimit, role: roleFilter || undefined, status: statFilter || undefined });
+      })
       .then((res) => {
+        if (ignore || !res) return;
         const d = res.data;
         setUsers(d.users);
         setTotal(d.total);
         setMetrics({ total: d.total, active: d.active, suspended: d.suspended, deleted: d.deleted });
       })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
+      .catch((e) => {
+        if (!ignore) setError(e.message);
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
   }, [page, pageLimit, roleFilter, statFilter]);
 
   const filteredUsers = search

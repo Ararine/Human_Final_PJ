@@ -76,19 +76,23 @@ def active_user():
 def test_oauth_callback_issues_jwt_cookies_and_stores_session(monkeypatch, fake_redis):
     monkeypatch.setenv("FRONTEND_BASE_URL", "http://localhost:3000")
     state = oauth.create_oauth_state("google")
-    monkeypatch.setattr(oauth, "exchange_code_for_user", lambda provider, code, state_value: {
-        "provider": provider,
-        "provider_user_id": "google-user-1",
-        "email": "user@example.com",
-        "name": "Garim User",
-        "profile_image_url": None,
-    })
+    monkeypatch.setattr(oauth, "exchange_code_for_user", lambda provider, code, state_value: (
+        {
+            "provider": provider,
+            "provider_user_id": "google-user-1",
+            "email": "user@example.com",
+            "name": "Garim User",
+            "profile_image_url": None,
+        },
+        {"provider": provider, "reregister": False},
+        "provider-token",
+    ))
     monkeypatch.setattr(users, "get_or_create_oauth_user", lambda oauth_user: active_user())
 
     response = client.get(f"/auth/google/callback?code=sample-code&state={state}")
 
     assert response.status_code == 307
-    assert response.headers["location"] == "http://localhost:3000/dashboard?login=success&provider=google"
+    assert response.headers["location"] == "http://localhost:3000/dashboard"
     set_cookie = response.headers.get_list("set-cookie")
     assert any(cookie.startswith("access_token=") and "HttpOnly" in cookie for cookie in set_cookie)
     assert any(cookie.startswith("refresh_token=") and "HttpOnly" in cookie for cookie in set_cookie)

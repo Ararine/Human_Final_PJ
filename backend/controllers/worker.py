@@ -32,9 +32,9 @@ class HeartbeatRequest(BaseModel):
     job_id: str
     worker_id: str | None = None
     worker_type: str = "colab"
-    public_endpoint: str | None = None
+    ngrok_url: str | None = None
     current_stage: str | None = None
-    progress: int = Field(default=0, ge=0, le=100)
+    progress_percent: int = Field(default=0, ge=0, le=100)
     message: str | None = None
 
 
@@ -95,6 +95,46 @@ def get_file_handler(
     except Exception as exc:
         return JSONResponse(
             {"message": f"파일 조회에 실패했습니다: {exc}"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+def get_job_status_handler(
+    job_id: str,
+    authorization: str | None = Header(default=None),
+):
+    if (err := _check_auth(authorization)):
+        return err
+    try:
+        result = worker.get_job_status(job_id)
+        return JSONResponse(result, status_code=status.HTTP_200_OK)
+    except ValueError as exc:
+        return JSONResponse({"message": str(exc)}, status_code=status.HTTP_404_NOT_FOUND)
+    except Exception as exc:
+        return JSONResponse(
+            {"message": f"job 상태 조회에 실패했습니다: {exc}"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+def download_file_handler(
+    upload_id: str,
+    authorization: str | None = Header(default=None),
+):
+    if (err := _check_auth(authorization)):
+        return err
+    try:
+        info = worker.get_upload_file_info(upload_id)
+        return FileResponse(
+            path=info["stored_path"],
+            media_type=info["content_type"],
+            filename=info["original_filename"],
+        )
+    except ValueError as exc:
+        return JSONResponse({"message": str(exc)}, status_code=status.HTTP_404_NOT_FOUND)
+    except Exception as exc:
+        return JSONResponse(
+            {"message": f"파일 다운로드에 실패했습니다: {exc}"},
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
@@ -166,6 +206,97 @@ def fail_job_handler(
         )
 
 
+class STTResultRequest(BaseModel):
+    worker_id: str | None = None
+    language: str = "unknown"
+    full_text: str = ""
+    segment_count: int = 0
+
+
+class PIIResultRequest(BaseModel):
+    worker_id: str | None = None
+    pii_segments: list = Field(default_factory=list)
+
+
+class ArtifactResultRequest(BaseModel):
+    worker_id: str | None = None
+    artifact_type: str
+    stored_path: str
+    content_type: str | None = None
+    file_size: int | None = None
+    metadata: dict | None = None
+
+
+def save_stt_result_handler(
+    job_id: str,
+    body: STTResultRequest,
+    authorization: str | None = Header(default=None),
+):
+    if (err := _check_auth(authorization)):
+        return err
+    try:
+        result = worker.save_stt_result(
+            job_id=job_id,
+            language=body.language,
+            full_text=body.full_text,
+            segment_count=body.segment_count,
+        )
+        return JSONResponse(result, status_code=status.HTTP_200_OK)
+    except ValueError as exc:
+        return JSONResponse({"message": str(exc)}, status_code=status.HTTP_404_NOT_FOUND)
+    except Exception as exc:
+        return JSONResponse(
+            {"message": f"STT 결과 저장에 실패했습니다: {exc}"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+def save_pii_result_handler(
+    job_id: str,
+    body: PIIResultRequest,
+    authorization: str | None = Header(default=None),
+):
+    if (err := _check_auth(authorization)):
+        return err
+    try:
+        result = worker.save_pii_result(
+            job_id=job_id,
+            pii_segments=body.pii_segments,
+        )
+        return JSONResponse(result, status_code=status.HTTP_200_OK)
+    except Exception as exc:
+        return JSONResponse(
+            {"message": f"PII 결과 저장에 실패했습니다: {exc}"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+def save_artifact_handler(
+    job_id: str,
+    body: ArtifactResultRequest,
+    authorization: str | None = Header(default=None),
+):
+    if (err := _check_auth(authorization)):
+        return err
+    try:
+        result = worker.save_artifact(
+            job_id=job_id,
+            artifact_type=body.artifact_type,
+            stored_path=body.stored_path,
+            content_type=body.content_type,
+            file_size=body.file_size,
+            metadata=body.metadata,
+        )
+        return JSONResponse(result, status_code=status.HTTP_200_OK)
+    except ValueError as exc:
+        return JSONResponse({"message": str(exc)}, status_code=status.HTTP_404_NOT_FOUND)
+    except Exception as exc:
+        return JSONResponse(
+            {"message": f"분석 산출물 저장에 실패했습니다: {exc}"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
 def heartbeat_handler(
     body: HeartbeatRequest,
     authorization: str | None = Header(default=None),
@@ -177,9 +308,9 @@ def heartbeat_handler(
             job_id=body.job_id,
             worker_id=body.worker_id,
             worker_type=body.worker_type,
-            public_endpoint=body.public_endpoint,
+            ngrok_url=body.ngrok_url,
             current_stage=body.current_stage,
-            progress=body.progress,
+            progress_percent=body.progress_percent,
             message=body.message,
         )
         return JSONResponse(result, status_code=status.HTTP_200_OK)

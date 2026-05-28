@@ -24,6 +24,26 @@ def sanitize_filename(filename):
     return Path(filename or "upload.bin").name
 
 
+def _is_expired(expires_at) -> bool:
+    if not expires_at:
+        return False
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return expires_at <= datetime.now(timezone.utc)
+
+
+def _mark_upload_status(db, upload_id: str, upload_status: str) -> None:
+    db.execute(
+        text("""
+            UPDATE uploads
+            SET status = :status,
+                updated_at = now()
+            WHERE upload_id = :upload_id
+        """),
+        {"upload_id": upload_id, "status": upload_status},
+    )
+
+
 def init_upload(
     user_id: str,
     original_filename: str,
@@ -95,7 +115,7 @@ def save_chunk(
     try:
         row = db.execute(
             text("""
-                SELECT user_id, status, total_chunks, uploaded_chunks, temp_dir_path
+                SELECT user_id, status, total_chunks, uploaded_chunks, temp_dir_path, expires_at
                 FROM uploads
                 WHERE upload_id = :upload_id
             """),
@@ -108,6 +128,10 @@ def save_chunk(
         m = row._mapping
         if str(m["user_id"]) != user_id:
             raise PermissionError("접근 권한이 없습니다.")
+        if _is_expired(m["expires_at"]):
+            _mark_upload_status(db, upload_id, "expired")
+            db.commit()
+            raise ValueError("upload expired")
         if m["status"] not in ("initialized", "uploading"):
             raise ValueError(f"업로드할 수 없는 상태입니다: {m['status']}")
         if chunk_index < 0 or chunk_index >= m["total_chunks"]:
@@ -135,26 +159,46 @@ def save_chunk(
         chunk_path = temp_dir / str(chunk_index)
 
         chunk_size = 0
+        hasher = hashlib.sha256()
         with chunk_path.open("wb") as f:
             while data := chunk_file.file.read(1024 * 1024):
                 chunk_size += len(data)
+                hasher.update(data)
                 f.write(data)
 
-        db.execute(
+        computed_hash = hasher.hexdigest()
+        if chunk_hash and computed_hash.lower() != chunk_hash.strip().lower():
+            chunk_path.unlink(missing_ok=True)
+            raise ValueError("chunk hash mismatch")
+
+        inserted_chunk_id = db.execute(
             text("""
                 INSERT INTO upload_chunks
                     (upload_chunk_id, upload_id, chunk_index, chunk_size, chunk_hash, storage_path, status)
                 VALUES
                     (gen_random_uuid(), :upload_id, :chunk_index, :chunk_size, :chunk_hash, :storage_path, 'uploaded')
+                ON CONFLICT (upload_id, chunk_index) DO NOTHING
+                RETURNING upload_chunk_id
             """),
             {
                 "upload_id": upload_id,
                 "chunk_index": chunk_index,
                 "chunk_size": chunk_size,
-                "chunk_hash": chunk_hash,
+                "chunk_hash": chunk_hash or computed_hash,
                 "storage_path": str(chunk_path),
             },
-        )
+        ).scalar()
+
+        if not inserted_chunk_id:
+            chunk_path.unlink(missing_ok=True)
+            db.commit()
+            return {
+                "upload_id": upload_id,
+                "chunk_index": chunk_index,
+                "status": "already_uploaded",
+                "uploaded_chunks": m["uploaded_chunks"],
+                "total_chunks": m["total_chunks"],
+            }
 
         db.execute(
             text("""
@@ -203,6 +247,12 @@ def get_upload_status(upload_id: str, user_id: str) -> dict:
         if str(m["user_id"]) != user_id:
             raise PermissionError("접근 권한이 없습니다.")
 
+        if _is_expired(m["expires_at"]) and m["status"] not in ("uploaded", "cancelled", "failed", "expired"):
+            _mark_upload_status(db, upload_id, "expired")
+            db.commit()
+            m = dict(m)
+            m["status"] = "expired"
+
         total = m["total_chunks"] or 0
         done = m["uploaded_chunks"] or 0
         progress = round(done / total * 100) if total > 0 else 0
@@ -239,7 +289,7 @@ def complete_upload(upload_id: str, user_id: str) -> dict:
         row = db.execute(
             text("""
                 SELECT user_id, status, total_chunks, uploaded_chunks,
-                       temp_dir_path, stored_path, file_hash
+                       temp_dir_path, stored_path, file_hash, expires_at
                 FROM uploads
                 WHERE upload_id = :upload_id
             """),
@@ -252,6 +302,11 @@ def complete_upload(upload_id: str, user_id: str) -> dict:
         m = row._mapping
         if str(m["user_id"]) != user_id:
             raise PermissionError("접근 권한이 없습니다.")
+
+        if _is_expired(m["expires_at"]) and m["status"] != "uploaded":
+            _mark_upload_status(db, upload_id, "expired")
+            db.commit()
+            raise ValueError("upload expired")
 
         if m["status"] == "uploaded":
             return {
@@ -326,6 +381,40 @@ def complete_upload(upload_id: str, user_id: str) -> dict:
             "file_hash": file_hash,
             "stored_path": str(final_path),
         }
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def cancel_upload(upload_id: str, user_id: str) -> dict:
+    db = SessionLocal()
+    try:
+        row = db.execute(
+            text("""
+                SELECT user_id, status, temp_dir_path
+                FROM uploads
+                WHERE upload_id = :upload_id
+            """),
+            {"upload_id": upload_id},
+        ).fetchone()
+
+        if not row:
+            raise ValueError("?낅줈?쒕? 李얠쓣 ???놁뒿?덈떎.")
+
+        m = row._mapping
+        if str(m["user_id"]) != user_id:
+            raise PermissionError("?묎렐 沅뚰븳???놁뒿?덈떎.")
+        if m["status"] == "uploaded":
+            raise ValueError("uploaded files cannot be cancelled")
+
+        _mark_upload_status(db, upload_id, "cancelled")
+        db.commit()
+        if m["temp_dir_path"]:
+            shutil.rmtree(Path(m["temp_dir_path"]), ignore_errors=True)
+
+        return {"upload_id": upload_id, "status": "cancelled"}
     except Exception:
         db.rollback()
         raise

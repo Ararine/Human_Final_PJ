@@ -144,12 +144,16 @@ def test_oauth_callback_sets_auth_cookie_and_redirects(monkeypatch):
         assert provider == "google"
         assert code == "sample-code"
         assert state_value == state
-        return {
-            "provider": "google",
-            "provider_user_id": "google-user-1",
-            "email": "user@example.com",
-            "name": "Garim User",
-        }
+        return (
+            {
+                "provider": "google",
+                "provider_user_id": "google-user-1",
+                "email": "user@example.com",
+                "name": "Garim User",
+            },
+            {"provider": "google", "reregister": False},
+            "provider-token",
+        )
 
     monkeypatch.setattr(oauth, "exchange_code_for_user", fake_exchange_code)
     monkeypatch.setattr(users, "get_or_create_oauth_user", lambda oauth_user: {
@@ -167,7 +171,7 @@ def test_oauth_callback_sets_auth_cookie_and_redirects(monkeypatch):
     response = client.get(f"/auth/google/callback?code=sample-code&state={state}")
 
     assert response.status_code == 307
-    assert response.headers["location"] == "http://localhost:3000/dashboard?login=success&provider=google"
+    assert response.headers["location"] == "http://localhost:3000/dashboard"
     cookies = response.headers.get_list("set-cookie")
     assert any(cookie.startswith("access_token=") for cookie in cookies)
     assert any(cookie.startswith("refresh_token=") for cookie in cookies)

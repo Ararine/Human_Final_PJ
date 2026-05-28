@@ -6,6 +6,9 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 commit;
 
+DROP TABLE IF EXISTS uploaded_files;
+DROP TABLE IF EXISTS upload_sessions;
+
 CREATE TABLE IF NOT EXISTS users (
     user_id uuid NOT NULL DEFAULT gen_random_uuid(),
     email varchar(255),
@@ -153,27 +156,46 @@ COMMENT ON COLUMN upload_chunks.created_at IS '생성 일시 - 레코드 생성 
 
 CREATE TABLE IF NOT EXISTS analysis_jobs (
     job_id uuid NOT NULL DEFAULT gen_random_uuid(),
-    upload_id uuid NOT NULL REFERENCES uploads(upload_id),
     user_id uuid NOT NULL REFERENCES users(user_id),
+    upload_id uuid REFERENCES uploads(upload_id) ON DELETE SET NULL,
+    job_type varchar(30) NOT NULL,
     status varchar(30) NOT NULL DEFAULT 'queued',
-    progress_percent integer NOT NULL DEFAULT 0 CHECK (progress_percent BETWEEN 0 AND 100),
+    current_stage varchar(50),
+    stage_progress integer NOT NULL DEFAULT 0 CHECK (stage_progress BETWEEN 0 AND 100),
+    total_progress integer NOT NULL DEFAULT 0 CHECK (total_progress BETWEEN 0 AND 100),
+    queue_position integer CHECK (queue_position IS NULL OR queue_position >= 0),
+    eta_seconds integer CHECK (eta_seconds IS NULL OR eta_seconds >= 0),
+    message text,
+    cancel_requested boolean NOT NULL DEFAULT false,
     duration_seconds integer,
     width integer,
     height integer,
     detection_count integer NOT NULL DEFAULT 0,
+    error_code varchar(100),
     error_message text,
+    result_file_path text,
+    report_id uuid,
     started_at timestamp,
     completed_at timestamp,
     created_at timestamp NOT NULL DEFAULT now(),
     updated_at timestamp,
-    CONSTRAINT pk_analysis_jobs PRIMARY KEY (job_id)
+    CONSTRAINT pk_analysis_jobs PRIMARY KEY (job_id),
+    CONSTRAINT ck_analysis_jobs_status CHECK (status IN ('queued','processing','completed','failed','cancelled','cancelling','retrying')),
+    CONSTRAINT ck_analysis_jobs_job_type CHECK (job_type IN ('analysis','preview','render','sns_scan','whitelist_scan'))
 );
 COMMENT ON TABLE analysis_jobs IS '업로드 파일의 개인정보 탐지 및 처리 작업 상태 관리 테이블';
 COMMENT ON COLUMN analysis_jobs.job_id IS '작업 ID - analysis_jobs 테이블의 기본 식별자';
 COMMENT ON COLUMN analysis_jobs.upload_id IS '업로드 ID - 관련 테이블(O)과 연결하기 위한 외래 키';
 COMMENT ON COLUMN analysis_jobs.user_id IS '사용자 ID - 관련 테이블(O)과 연결하기 위한 외래 키';
+COMMENT ON COLUMN analysis_jobs.job_type IS '작업 유형 - analysis, preview, render, sns_scan, whitelist_scan';
 COMMENT ON COLUMN analysis_jobs.status IS '작업 상태 - 분석 작업의 현재 상태';
-COMMENT ON COLUMN analysis_jobs.progress_percent IS '진행률 - 처리 진행률, DB 업데이트는 5% 단위 변화 시에만 수행';
+COMMENT ON COLUMN analysis_jobs.current_stage IS '현재 단계';
+COMMENT ON COLUMN analysis_jobs.stage_progress IS '단계 진행률';
+COMMENT ON COLUMN analysis_jobs.total_progress IS '전체 진행률';
+COMMENT ON COLUMN analysis_jobs.queue_position IS '큐 대기 순번';
+COMMENT ON COLUMN analysis_jobs.eta_seconds IS '예상 남은 시간 초';
+COMMENT ON COLUMN analysis_jobs.message IS '진행 메시지';
+COMMENT ON COLUMN analysis_jobs.cancel_requested IS '취소 요청 여부';
 COMMENT ON COLUMN analysis_jobs.duration_seconds IS '원본 길이 초 - 원본 길이 초 정보를 저장하는 컬럼';
 COMMENT ON COLUMN analysis_jobs.width IS '원본 너비 - 원본 너비 정보를 저장하는 컬럼';
 COMMENT ON COLUMN analysis_jobs.height IS '원본 높이 - 원본 높이 정보를 저장하는 컬럼';
@@ -694,8 +716,8 @@ COMMENT ON INDEX idx_upload_chunks_status_created_at IS '실패 chunk 재시도 
 CREATE INDEX IF NOT EXISTS idx_analysis_jobs_user_created_at ON analysis_jobs (user_id, created_at DESC);
 COMMENT ON INDEX idx_analysis_jobs_user_created_at IS '관련 테이블(users.user_id)과 연결하기 위한 외래 키';
 -- SKIP idx_analysis_jobs_status_priority_created: index design references columns not found in table definition: analysis_jobs(status, priority, created_at), 워커 작업 선택
-CREATE INDEX IF NOT EXISTS idx_analysis_jobs_status_progress ON analysis_jobs (status, progress_percent);
-COMMENT ON INDEX idx_analysis_jobs_status_progress IS '업무 규칙 또는 제약조건 관리: analysis_jobs(status, progress_percent), 진행 페이지 폴링';
+CREATE INDEX IF NOT EXISTS idx_analysis_jobs_status_progress ON analysis_jobs (status, total_progress);
+COMMENT ON INDEX idx_analysis_jobs_status_progress IS '업무 규칙 또는 제약조건 관리: analysis_jobs(status, total_progress), 진행 페이지 폴링';
 CREATE INDEX IF NOT EXISTS idx_detections_job_type ON detections (job_id, detection_type);
 COMMENT ON INDEX idx_detections_job_type IS '관련 테이블(analysis_jobs.job_id)과 연결하기 위한 외래 키';
 -- SKIP idx_detections_job_severity: index design references columns not found in table definition: detections(job_id, severity), 위험도 요약
@@ -817,18 +839,12 @@ BEGIN
     ) THEN
         ALTER TABLE analysis_jobs
             ADD CONSTRAINT ck_analysis_jobs_job_type_v4
-            CHECK (job_type IN ('analysis','preview','render','sns_scan','white_list_scan','metadata_scan'))
+            CHECK (job_type IN ('analysis','preview','render','sns_scan','whitelist_scan'))
             NOT VALID;
     END IF;
 END $$;
 
 -- 기존 progress_percent와 신규 total_progress를 함께 사용할 수 있도록 신규 컬럼 초기 보정
-UPDATE analysis_jobs
-SET total_progress = progress_percent
-WHERE total_progress = 0
-  AND progress_percent IS NOT NULL
-  AND progress_percent > 0;
-
 -- 2. SNS 진단 작업과 analysis_jobs 연결
 ALTER TABLE sns_diagnosis_jobs
     ADD COLUMN IF NOT EXISTS job_id uuid REFERENCES analysis_jobs(job_id) ON DELETE SET NULL;
@@ -837,26 +853,30 @@ COMMENT ON COLUMN sns_diagnosis_jobs.job_id IS '작업 ID - analysis_jobs(job_ty
 
 -- 3. 작업 단계 이력
 CREATE TABLE IF NOT EXISTS job_stage_logs (
-    job_stage_log_id uuid NOT NULL DEFAULT gen_random_uuid(),
+    stage_log_id uuid NOT NULL DEFAULT gen_random_uuid(),
     job_id uuid NOT NULL REFERENCES analysis_jobs(job_id) ON DELETE CASCADE,
     stage_name varchar(50) NOT NULL,
     stage_progress integer NOT NULL DEFAULT 0 CHECK (stage_progress BETWEEN 0 AND 100),
     total_progress integer NOT NULL DEFAULT 0 CHECK (total_progress BETWEEN 0 AND 100),
-    status varchar(30),
+    status varchar(30) NOT NULL CHECK (status IN ('queued','processing','completed','failed','cancelled','cancelling','retrying')),
     message text,
-    payload jsonb,
+    eta_seconds integer CHECK (eta_seconds IS NULL OR eta_seconds >= 0),
+    queue_position integer CHECK (queue_position IS NULL OR queue_position >= 0),
+    source varchar(50),
     created_at timestamp NOT NULL DEFAULT now(),
-    CONSTRAINT pk_job_stage_logs PRIMARY KEY (job_stage_log_id)
+    CONSTRAINT pk_job_stage_logs PRIMARY KEY (stage_log_id)
 );
 COMMENT ON TABLE job_stage_logs IS '작업 단계별 진행률 변경 이력 테이블 - 진행 화면 복원, 관리자 모니터링, 장애 분석에 사용';
-COMMENT ON COLUMN job_stage_logs.job_stage_log_id IS '작업 단계 로그 ID - job_stage_logs 테이블의 기본 식별자';
+COMMENT ON COLUMN job_stage_logs.stage_log_id IS '작업 단계 로그 ID - job_stage_logs 테이블의 기본 식별자';
 COMMENT ON COLUMN job_stage_logs.job_id IS '작업 ID - analysis_jobs와 연결되는 외래 키';
 COMMENT ON COLUMN job_stage_logs.stage_name IS '단계명 - upload_completed, queued, visual_detection, audio_detection, report_generation, render_processing 등';
 COMMENT ON COLUMN job_stage_logs.stage_progress IS '단계 진행률 - 해당 stage 내부 진행 퍼센트';
 COMMENT ON COLUMN job_stage_logs.total_progress IS '전체 진행률 - 작업 전체 기준 진행 퍼센트';
 COMMENT ON COLUMN job_stage_logs.status IS '작업 상태 - 로그 발생 시점의 작업 상태';
 COMMENT ON COLUMN job_stage_logs.message IS '진행 메시지 - 사용자/관리자 표시용 상태 메시지';
-COMMENT ON COLUMN job_stage_logs.payload IS '추가 페이로드 - 모델별 세부 결과, stage별 추가 메타데이터';
+COMMENT ON COLUMN job_stage_logs.eta_seconds IS 'ETA 초';
+COMMENT ON COLUMN job_stage_logs.queue_position IS '큐 위치';
+COMMENT ON COLUMN job_stage_logs.source IS '로그 출처';
 COMMENT ON COLUMN job_stage_logs.created_at IS '로그 생성 일시 - 단계 변경 또는 진행률 업데이트 시각';
 
 -- 4. Worker heartbeat
@@ -865,10 +885,10 @@ CREATE TABLE IF NOT EXISTS job_worker_heartbeats (
     job_id uuid NOT NULL REFERENCES analysis_jobs(job_id) ON DELETE CASCADE,
     worker_task_id uuid REFERENCES worker_tasks(worker_task_id) ON DELETE SET NULL,
     worker_id varchar(100),
-    worker_type varchar(50) NOT NULL DEFAULT 'colab',
-    public_endpoint text,
+    worker_type varchar(30) NOT NULL DEFAULT 'colab' CHECK (worker_type IN ('colab','local','cloud','scheduler')),
+    ngrok_url text,
     current_stage varchar(50),
-    progress integer NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),
+    progress_percent integer NOT NULL DEFAULT 0 CHECK (progress_percent BETWEEN 0 AND 100),
     message text,
     heartbeat_at timestamp NOT NULL DEFAULT now(),
     created_at timestamp NOT NULL DEFAULT now(),
@@ -879,10 +899,10 @@ COMMENT ON COLUMN job_worker_heartbeats.heartbeat_id IS 'Heartbeat ID - job_work
 COMMENT ON COLUMN job_worker_heartbeats.job_id IS '작업 ID - analysis_jobs와 연결되는 외래 키';
 COMMENT ON COLUMN job_worker_heartbeats.worker_task_id IS '워커 세부 작업 ID - worker_tasks와 연결되는 선택 외래 키';
 COMMENT ON COLUMN job_worker_heartbeats.worker_id IS '워커 식별자 - Colab 런타임 또는 워커 프로세스 식별 값';
-COMMENT ON COLUMN job_worker_heartbeats.worker_type IS '워커 유형 - colab, local, gpu_worker 등';
-COMMENT ON COLUMN job_worker_heartbeats.public_endpoint IS '공개 엔드포인트 - ngrok 등 임시 공개 URL 기록';
+COMMENT ON COLUMN job_worker_heartbeats.worker_type IS '워커 유형 - colab, local, cloud, scheduler';
+COMMENT ON COLUMN job_worker_heartbeats.ngrok_url IS 'ngrok URL - Colab 임시 공개 URL 기록';
 COMMENT ON COLUMN job_worker_heartbeats.current_stage IS '현재 단계 - heartbeat 발생 시점의 작업 단계';
-COMMENT ON COLUMN job_worker_heartbeats.progress IS '진행률 - heartbeat 발생 시점의 진행 퍼센트';
+COMMENT ON COLUMN job_worker_heartbeats.progress_percent IS '진행률 - heartbeat 발생 시점의 진행 퍼센트';
 COMMENT ON COLUMN job_worker_heartbeats.message IS '상태 메시지 - heartbeat와 함께 전달된 워커 상태 설명';
 COMMENT ON COLUMN job_worker_heartbeats.heartbeat_at IS 'Heartbeat 시각 - 워커가 생존 신호를 보낸 시각';
 COMMENT ON COLUMN job_worker_heartbeats.created_at IS '등록 일시 - heartbeat 레코드 생성 시각';
@@ -891,12 +911,13 @@ COMMENT ON COLUMN job_worker_heartbeats.created_at IS '등록 일시 - heartbeat
 CREATE TABLE IF NOT EXISTS job_queue_history (
     queue_log_id uuid NOT NULL DEFAULT gen_random_uuid(),
     job_id uuid NOT NULL REFERENCES analysis_jobs(job_id) ON DELETE CASCADE,
-    worker_task_id uuid REFERENCES worker_tasks(worker_task_id) ON DELETE SET NULL,
     queue_name varchar(50) NOT NULL DEFAULT 'default',
     priority integer NOT NULL DEFAULT 0 CHECK (priority >= 0),
-    queue_position integer CHECK (queue_position IS NULL OR queue_position >= 0),
-    event_type varchar(30) NOT NULL DEFAULT 'entered',
-    entered_at timestamp,
+    entered_position integer CHECK (entered_position IS NULL OR entered_position >= 0),
+    dequeued_position integer CHECK (dequeued_position IS NULL OR dequeued_position >= 0),
+    status varchar(30) NOT NULL DEFAULT 'entered',
+    message text,
+    entered_at timestamp NOT NULL DEFAULT now(),
     dequeued_at timestamp,
     created_at timestamp NOT NULL DEFAULT now(),
     CONSTRAINT pk_job_queue_history PRIMARY KEY (queue_log_id)
@@ -904,11 +925,12 @@ CREATE TABLE IF NOT EXISTS job_queue_history (
 COMMENT ON TABLE job_queue_history IS 'Redis Queue 진입/해제/우선순위 변경 이력 테이블 - 사용자 큐 위치 표시와 관리자 큐 분석에 사용';
 COMMENT ON COLUMN job_queue_history.queue_log_id IS '큐 이력 ID - job_queue_history 테이블의 기본 식별자';
 COMMENT ON COLUMN job_queue_history.job_id IS '작업 ID - analysis_jobs와 연결되는 외래 키';
-COMMENT ON COLUMN job_queue_history.worker_task_id IS '워커 세부 작업 ID - worker_tasks와 연결되는 선택 외래 키';
 COMMENT ON COLUMN job_queue_history.queue_name IS '큐 이름 - default, high_priority, pro, admin 등';
 COMMENT ON COLUMN job_queue_history.priority IS '우선순위 - 큐 처리 우선순위 값';
-COMMENT ON COLUMN job_queue_history.queue_position IS '큐 위치 - 해당 시점의 대기 순번';
-COMMENT ON COLUMN job_queue_history.event_type IS '큐 이벤트 유형 - entered, dequeued, reprioritized, cancelled 등';
+COMMENT ON COLUMN job_queue_history.entered_position IS '큐 진입 위치';
+COMMENT ON COLUMN job_queue_history.dequeued_position IS '큐 해제 위치';
+COMMENT ON COLUMN job_queue_history.status IS '큐 상태 - entered, dequeued, expired, cancelled, failed';
+COMMENT ON COLUMN job_queue_history.message IS '큐 상태 메시지';
 COMMENT ON COLUMN job_queue_history.entered_at IS '큐 진입 일시 - 작업이 큐에 들어간 시각';
 COMMENT ON COLUMN job_queue_history.dequeued_at IS '큐 해제 일시 - 작업이 큐에서 빠져 워커 처리로 넘어간 시각';
 COMMENT ON COLUMN job_queue_history.created_at IS '등록 일시 - 큐 이력 레코드 생성 시각';
@@ -920,7 +942,7 @@ BEGIN
     ) THEN
         ALTER TABLE job_queue_history
             ADD CONSTRAINT ck_job_queue_history_event_type_v4
-            CHECK (event_type IN ('entered','dequeued','reprioritized','cancelled','failed','retrying'))
+            CHECK (status IN ('entered','dequeued','expired','cancelled','failed'))
             NOT VALID;
     END IF;
 END $$;
@@ -956,8 +978,8 @@ COMMENT ON INDEX idx_job_worker_heartbeats_worker_time IS '워커별 생존 상�
 CREATE INDEX IF NOT EXISTS idx_job_queue_history_job_created ON job_queue_history (job_id, created_at DESC);
 COMMENT ON INDEX idx_job_queue_history_job_created IS '작업별 큐 이력 조회용 인덱스';
 
-CREATE INDEX IF NOT EXISTS idx_job_queue_history_queue_event ON job_queue_history (queue_name, event_type, created_at DESC);
-COMMENT ON INDEX idx_job_queue_history_queue_event IS '큐별 entered/dequeued/retry/cancel 이벤트 분석용 인덱스';
+CREATE INDEX IF NOT EXISTS idx_job_queue_history_queue_status ON job_queue_history (queue_name, status, created_at DESC);
+COMMENT ON INDEX idx_job_queue_history_queue_status IS '큐별 상태 분석용 인덱스';
 
 -- =========================================================
 -- v4 추가 끝

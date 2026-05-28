@@ -137,7 +137,17 @@ export default function Upload() {
 
     setPhase("success");
     setMessage("분석 작업이 등록되었습니다. 분석 진행 화면으로 이동합니다.");
-    window.setTimeout(() => navigate("/analysis-progress", { state: { jobId } }), 700);
+    window.setTimeout(() => {
+      navigate(`/analysis-progress?jobId=${encodeURIComponent(jobId)}`, {
+        state: {
+          jobId,
+          uploadId,
+          fileName: file.name,
+          fileSize: file.size,
+          contentType: file.type || "application/octet-stream",
+        },
+      });
+    }, 700);
   }
 
   function handleReset() {

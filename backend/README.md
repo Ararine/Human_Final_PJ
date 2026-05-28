@@ -22,6 +22,18 @@
 2. uvicorn main:app --host 0.0.0.0 --port 8000 --reload 로 서버 실행
 3. ** nodemon main.py 로 실행 안 하는 이유 ** : 1. logging이 두번씩 찍힘 2. 파일 경로 일원화
 
+## cloudflare 서버 실행 방법
+
+1. backend 폴더로 이동
+2. python cloudflare_tunnel.py 로 서버 실행
+
+### Colab 과 연결
+
+3. prompt 에 아래 주소 나오는 주소 저장
+   ex) Colab BACKEND_URL 에 아래 주소를 넣으세요:
+   https://href-dui-marketplace-facilities.trycloudflare.com
+4. BACKEND_URL 부분에 복사한 주소 붙여넣기
+
 ## 깃 사용법
 
     - 1. git pull(최신 소스 받아오기)

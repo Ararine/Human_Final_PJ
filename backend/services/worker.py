@@ -1,3 +1,4 @@
+import json
 import os
 
 from sqlalchemy import text
@@ -27,6 +28,7 @@ def get_next_job() -> dict | None:
                 FROM analysis_jobs aj
                 JOIN uploads u ON u.upload_id = aj.upload_id
                 WHERE aj.status = 'queued'
+                  AND aj.cancel_requested = false
                 ORDER BY aj.queue_position ASC NULLS LAST, aj.created_at ASC
                 LIMIT 1
             """)
@@ -58,6 +60,8 @@ def accept_job(job_id: str) -> dict:
             text("""
                 UPDATE analysis_jobs
                 SET status = 'processing',
+                    current_stage = 'queued',
+                    message = '작업자가 분석 작업을 시작했습니다.',
                     started_at = now(),
                     updated_at = now()
                 WHERE job_id = :job_id AND status = 'queued'
@@ -79,6 +83,26 @@ def accept_job(job_id: str) -> dict:
                 "status": existing._mapping["status"],
                 "message": "이미 처리 중이거나 완료된 작업입니다.",
             }
+
+        db.execute(
+            text("""
+                INSERT INTO job_queue_history
+                    (job_id, queue_name, priority, dequeued_position, status, message, dequeued_at)
+                VALUES
+                    (:job_id, 'default', 0, 0, 'dequeued', :message, now())
+            """),
+            {"job_id": job_id, "message": "작업자가 분석 작업을 가져갔습니다."},
+        )
+
+        db.execute(
+            text("""
+                INSERT INTO job_stage_logs
+                    (job_id, stage_name, stage_progress, total_progress, status, message, source)
+                VALUES
+                    (:job_id, 'queued', 100, 0, 'processing', :message, 'worker')
+            """),
+            {"job_id": job_id, "message": "작업자가 분석 작업을 시작했습니다."},
+        )
 
         db.commit()
         return {"job_id": job_id, "status": "processing"}
@@ -149,9 +173,9 @@ def update_job_progress(
         db.execute(
             text("""
                 INSERT INTO job_stage_logs
-                    (job_id, stage_name, stage_progress, total_progress, status, message)
+                    (job_id, stage_name, stage_progress, total_progress, status, message, source)
                 VALUES
-                    (:job_id, :stage_name, :stage_progress, :total_progress, 'running', :message)
+                    (:job_id, :stage_name, :stage_progress, :total_progress, 'processing', :message, 'worker')
             """),
             {
                 "job_id": job_id,
@@ -200,9 +224,9 @@ def complete_job(
         db.execute(
             text("""
                 INSERT INTO job_stage_logs
-                    (job_id, stage_name, stage_progress, total_progress, status, message)
+                    (job_id, stage_name, stage_progress, total_progress, status, message, source)
                 VALUES
-                    (:job_id, 'completed', 100, 100, 'completed', '분석이 완료되었습니다.')
+                    (:job_id, 'completed', 100, 100, 'completed', '분석이 완료되었습니다.', 'worker')
             """),
             {"job_id": job_id},
         )
@@ -243,9 +267,9 @@ def fail_job(
         db.execute(
             text("""
                 INSERT INTO job_stage_logs
-                    (job_id, stage_name, stage_progress, total_progress, status, message)
+                    (job_id, stage_name, stage_progress, total_progress, status, message, source)
                 VALUES
-                    (:job_id, 'failed', 0, 0, 'failed', :error_message)
+                    (:job_id, 'failed', 0, 0, 'failed', :error_message, 'worker')
             """),
             {"job_id": job_id, "error_message": error_message},
         )
@@ -259,13 +283,179 @@ def fail_job(
         db.close()
 
 
+def get_job_status(job_id: str) -> dict:
+    db = SessionLocal()
+    try:
+        row = db.execute(
+            text("""
+                SELECT job_id, status, cancel_requested, current_stage, total_progress
+                FROM analysis_jobs
+                WHERE job_id = :job_id
+            """),
+            {"job_id": job_id},
+        ).fetchone()
+
+        if not row:
+            raise ValueError("분석 작업을 찾을 수 없습니다.")
+
+        m = row._mapping
+        return {
+            "job_id": str(m["job_id"]),
+            "status": m["status"],
+            "cancel_requested": bool(m["cancel_requested"]),
+            "current_stage": m["current_stage"],
+            "total_progress": m["total_progress"],
+        }
+    finally:
+        db.close()
+
+
+def save_stt_result(
+    job_id: str,
+    language: str,
+    full_text: str,
+    segment_count: int,
+) -> dict:
+    db = SessionLocal()
+    try:
+        row = db.execute(
+            text("SELECT user_id FROM analysis_jobs WHERE job_id = :job_id"),
+            {"job_id": job_id},
+        ).fetchone()
+        if not row:
+            raise ValueError("분석 작업을 찾을 수 없습니다.")
+        user_id = row._mapping["user_id"]
+
+        result = db.execute(
+            text("""
+                INSERT INTO analysis_artifacts
+                    (job_id, user_id, artifact_type, stored_path, metadata)
+                VALUES
+                    (:job_id, :user_id, 'stt_transcript', '', :metadata)
+                RETURNING artifact_id
+            """),
+            {
+                "job_id": job_id,
+                "user_id": user_id,
+                "metadata": json.dumps({
+                    "language": language,
+                    "full_text": full_text,
+                    "segment_count": segment_count,
+                }),
+            },
+        ).fetchone()
+
+        db.commit()
+        return {
+            "job_id": job_id,
+            "artifact_id": str(result._mapping["artifact_id"]),
+            "artifact_type": "stt_transcript",
+        }
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def save_pii_result(job_id: str, pii_segments: list) -> dict:
+    db = SessionLocal()
+    try:
+        detection_ids = []
+        for seg in pii_segments:
+            result = db.execute(
+                text("""
+                    INSERT INTO detections
+                        (job_id, detection_type, label, confidence,
+                         start_time_sec, end_time_sec, detected_text)
+                    VALUES
+                        (:job_id, 'voice_pii', :label, :confidence,
+                         :start_time_sec, :end_time_sec, :detected_text)
+                    RETURNING detection_id
+                """),
+                {
+                    "job_id": job_id,
+                    "label": seg.get("label"),
+                    "confidence": seg.get("confidence"),
+                    "start_time_sec": seg.get("start_time_sec"),
+                    "end_time_sec": seg.get("end_time_sec"),
+                    "detected_text": seg.get("detected_text"),
+                },
+            ).fetchone()
+            detection_ids.append(str(result._mapping["detection_id"]))
+
+        db.commit()
+        return {
+            "job_id": job_id,
+            "saved_count": len(detection_ids),
+            "detection_ids": detection_ids,
+        }
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def save_artifact(
+    job_id: str,
+    artifact_type: str,
+    stored_path: str,
+    content_type: str | None = None,
+    file_size: int | None = None,
+    metadata: dict | None = None,
+) -> dict:
+    db = SessionLocal()
+    try:
+        row = db.execute(
+            text("SELECT user_id FROM analysis_jobs WHERE job_id = :job_id"),
+            {"job_id": job_id},
+        ).fetchone()
+        if not row:
+            raise ValueError("분석 작업을 찾을 수 없습니다.")
+        user_id = row._mapping["user_id"]
+
+        result = db.execute(
+            text("""
+                INSERT INTO analysis_artifacts
+                    (job_id, user_id, artifact_type, stored_path,
+                     content_type, file_size, metadata)
+                VALUES
+                    (:job_id, :user_id, :artifact_type, :stored_path,
+                     :content_type, :file_size, :metadata)
+                RETURNING artifact_id
+            """),
+            {
+                "job_id": job_id,
+                "user_id": user_id,
+                "artifact_type": artifact_type,
+                "stored_path": stored_path,
+                "content_type": content_type,
+                "file_size": file_size,
+                "metadata": json.dumps(metadata) if metadata else None,
+            },
+        ).fetchone()
+
+        db.commit()
+        return {
+            "job_id": job_id,
+            "artifact_id": str(result._mapping["artifact_id"]),
+            "artifact_type": artifact_type,
+        }
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 def record_heartbeat(
     job_id: str,
     worker_id: str | None,
     worker_type: str,
-    public_endpoint: str | None,
+    ngrok_url: str | None,
     current_stage: str | None,
-    progress: int,
+    progress_percent: int,
     message: str | None,
 ) -> dict:
     db = SessionLocal()
@@ -273,19 +463,19 @@ def record_heartbeat(
         db.execute(
             text("""
                 INSERT INTO job_worker_heartbeats
-                    (job_id, worker_id, worker_type, public_endpoint,
-                     current_stage, progress, message)
+                    (job_id, worker_id, worker_type, ngrok_url,
+                     current_stage, progress_percent, message)
                 VALUES
-                    (:job_id, :worker_id, :worker_type, :public_endpoint,
-                     :current_stage, :progress, :message)
+                    (:job_id, :worker_id, :worker_type, :ngrok_url,
+                     :current_stage, :progress_percent, :message)
             """),
             {
                 "job_id": job_id,
                 "worker_id": worker_id,
                 "worker_type": worker_type,
-                "public_endpoint": public_endpoint,
+                "ngrok_url": ngrok_url,
                 "current_stage": current_stage,
-                "progress": progress,
+                "progress_percent": progress_percent,
                 "message": message,
             },
         )

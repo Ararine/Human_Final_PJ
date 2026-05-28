@@ -112,6 +112,10 @@ export async function getAnalysisJob(jobId) {
   return requestJson(`/analysis/jobs/${jobId}`);
 }
 
+export async function cancelAnalysisJob(jobId) {
+  return requestJson(`/analysis/jobs/${jobId}/cancel`, { method: "POST" });
+}
+
 export async function getUploadStatus(uploadId) {
   return requestJson(`/uploads/${uploadId}/status`);
 }

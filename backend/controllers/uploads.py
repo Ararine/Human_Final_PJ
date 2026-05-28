@@ -125,6 +125,28 @@ def get_upload_status_handler(
         )
 
 
+def cancel_upload_handler(
+    upload_id: str,
+    access_token: str | None = Cookie(default=None),
+):
+    current_user = auth.authenticate_access_token(access_token)
+    try:
+        result = uploads.cancel_upload(
+            upload_id=upload_id,
+            user_id=str(current_user["id"]),
+        )
+        return JSONResponse(result, status_code=status.HTTP_200_OK)
+    except PermissionError as exc:
+        return JSONResponse({"message": str(exc)}, status_code=status.HTTP_403_FORBIDDEN)
+    except ValueError as exc:
+        return JSONResponse({"message": str(exc)}, status_code=status.HTTP_400_BAD_REQUEST)
+    except Exception as exc:
+        return JSONResponse(
+            {"message": f"upload cancel failed: {exc}"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
 async def create_upload(file: UploadFile = File(...)):
     try:
         data = uploads.save_upload_file(file)

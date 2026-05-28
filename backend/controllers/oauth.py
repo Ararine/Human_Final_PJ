@@ -64,6 +64,9 @@ def oauth_callback(
     except HTTPException:
         logger.warning("[oauth] provider=%s email=%s ip=%s error=account_inactive", provider, oauth_user.get("email"), ip)
         return redirect_to_frontend()
+    except Exception as exc:
+        logger.error("[oauth] provider=%s ip=%s unhandled_error=%s", provider, ip, exc, exc_info=True)
+        return redirect_to_frontend()
 
     role = user.get("role", users.USER)
     logger.info("[oauth] login_success provider=%s user_id=%s role=%s ip=%s", provider, user.get("id"), role, ip)
@@ -140,7 +143,7 @@ def delete_sessions(access_token: str | None = Cookie(default=None)):
 
 def redirect_to_frontend(role=None):
     base_url = oauth.get_frontend_base_url()
-    path = "/admin/abuse" if role == "admin" else "/dashboard"
+    path = "/admin/monitoring" if role == "admin" else "/dashboard"
     return RedirectResponse(f"{base_url}{path}", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 
 

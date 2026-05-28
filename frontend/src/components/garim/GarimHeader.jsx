@@ -15,7 +15,7 @@ export default function GarimHeader({ layout = "public", current = "" }) {
   if (layout === "admin") {
     return (
       <header className="gh gh--admin">
-        <Link to="/admin/abuse" className="gh__logo">
+        <Link to="/admin/monitoring" className="gh__logo">
           <img
             src="/garim/logo.svg"
             alt="Garim"

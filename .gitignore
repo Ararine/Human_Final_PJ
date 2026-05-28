@@ -18,6 +18,9 @@ __pycache__
 # DB data 폴더
 postgre_data
 
+# 클로드 관련 설정
+.claude
+
 # codex 관련 설정
 superpowers
 Microsoft

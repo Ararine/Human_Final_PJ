@@ -17,25 +17,7 @@ logger = logging.getLogger(__name__)
 
 logger.info("backend server is running...")
 
-
-# @asynccontextmanager
-# async def lifespan(app: FastAPI):
-#     if os.getenv("USE_NGROK", "false").lower() == "true":
-#         from pyngrok import ngrok, conf
-#         authtoken = os.getenv("NGROK_AUTHTOKEN", "")
-#         if authtoken:
-#             conf.get_default().auth_token = authtoken
-#         tunnels = ngrok.get_tunnels()
-#         if tunnels:
-#             logger.info(f"[ngrok] existing tunnel: {tunnels[0].public_url}")
-#         else:
-#             tunnel = ngrok.connect(int(os.getenv("PORT", 8000)))
-#             logger.info(f"[ngrok] public URL: {tunnel.public_url}")
-#     yield
-
-
 app = FastAPI()
-# app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000",

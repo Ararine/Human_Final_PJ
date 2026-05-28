@@ -10,6 +10,7 @@ const PLANS = [
   { key: "studio", label: "Studio", color: "#1976d2" },
 ];
 
+// eslint-disable-next-line no-unused-vars
 const SECTIONS = [
   { key: "file",      icon: "storage",              label: "파일 처리 정책" },
   { key: "retention", icon: "auto_delete",           label: "데이터 보존 정책" },
@@ -19,6 +20,7 @@ const SECTIONS = [
 export default function AdminPolicy() {
   useDocumentTitle("정책 설정 · Garim Admin");
 
+  // eslint-disable-next-line no-unused-vars
   const [activeSection, setActiveSection] = useState("file");
 
   const [planPolicies, setPlanPolicies] = useState({
@@ -40,6 +42,7 @@ export default function AdminPolicy() {
     }));
   }
 
+  // eslint-disable-next-line no-unused-vars
   const handleNavClick = (e, key) => {
     e.preventDefault();
     setActiveSection(key);

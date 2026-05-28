@@ -27,7 +27,7 @@ def create_job_handler(
         return JSONResponse({"message": str(exc)}, status_code=status.HTTP_400_BAD_REQUEST)
     except Exception as exc:
         return JSONResponse(
-            {"message": f"분석 작업 생성에 실패했습니다: {exc}"},
+            {"message": f"analysis job creation failed: {exc}"},
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
@@ -49,6 +49,28 @@ def get_job_handler(
         return JSONResponse({"message": str(exc)}, status_code=status.HTTP_404_NOT_FOUND)
     except Exception as exc:
         return JSONResponse(
-            {"message": f"분석 작업 조회에 실패했습니다: {exc}"},
+            {"message": f"analysis job lookup failed: {exc}"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+def cancel_job_handler(
+    job_id: str,
+    access_token: str | None = Cookie(default=None),
+):
+    current_user = auth.authenticate_access_token(access_token)
+    try:
+        result = analysis.cancel_analysis_job(
+            job_id=job_id,
+            user_id=str(current_user["id"]),
+        )
+        return JSONResponse(result, status_code=status.HTTP_200_OK)
+    except PermissionError as exc:
+        return JSONResponse({"message": str(exc)}, status_code=status.HTTP_403_FORBIDDEN)
+    except ValueError as exc:
+        return JSONResponse({"message": str(exc)}, status_code=status.HTTP_404_NOT_FOUND)
+    except Exception as exc:
+        return JSONResponse(
+            {"message": f"analysis job cancel failed: {exc}"},
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
