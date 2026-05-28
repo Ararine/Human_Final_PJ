@@ -1,8 +1,8 @@
 import uvicorn,os,logging
-from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from routes import payment
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -39,11 +39,12 @@ app.include_router(setting.router, prefix="/settings")
 app.include_router(admin.router, prefix="/admin")
 app.include_router(analysis.router, prefix="/analysis")
 app.include_router(worker.router, prefix="/worker")
+app.include_router(payment.router, prefix="/payment")
 
 if __name__ == "__main__":
     uvicorn.run(
-        "main:app",
-        host=os.getenv("HOST"),
+        "main:app",          # 모듈:앱 경로
+        host=os.getenv("HOST"), 
         port=int(os.getenv("PORT")),
         reload=True,
     )

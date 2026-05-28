@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from services import auth, oauth, redis_store, users
 
 logger = logging.getLogger(__name__)
+MAX_LOGIN_ATTEMPTS = 5
 
 
 def start_oauth(provider: str, reregister: bool = Query(False)):
@@ -28,6 +29,14 @@ def oauth_callback(
 ):
     ip = request.client.host if request.client else "unknown"
     ua = request.headers.get("user-agent", "")
+
+    attempt_count = redis_store.get_login_attempt(ip)
+
+    if attempt_count >= MAX_LOGIN_ATTEMPTS:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="로그인 시도가 너무 많습니다. 잠시 후 다시 시도하세요."
+        )
 
     if error:
         logger.warning("[oauth] provider=%s ip=%s provider_error=%s", provider, ip, error)

@@ -78,6 +78,26 @@ BEGIN
             NOW() - ( floor(random() * 30)   ::text || ' days')::interval
         );
 
+        INSERT INTO plans (
+            plan_code,
+            plan_name,
+            monthly_quota,
+            result_retention_days,
+            watermark_required,
+            price_amount,
+            is_active
+        )
+        
+        VALUES (
+            'pro_test',
+            'PRO 테스트',
+            999,
+            30,
+            false,
+            100,
+            true
+        );
+
         INSERT INTO oauth_accounts (
             user_id, provider, provider_user_id,
             provider_email, provider_name, linked_at, last_used_at
@@ -90,5 +110,29 @@ BEGIN
             NOW() - ((floor(random() * 500) + 1)::text || ' days')::interval,
             NOW() - ( floor(random() * 14)   ::text || ' days')::interval
         );
+
+        INSERT INTO risk_reports (
+            user_id,
+            sns_platform,
+            account_identifier,
+            total_risk_score,
+            risk_grade,
+            risk_summary
+        )
+
+        SELECT
+            user_id,
+            'instagram',
+            'test_account_' || row_number() over(),
+            (random()*100)::int,
+            CASE
+                WHEN random()*100 > 70 THEN 'HIGH'
+                WHEN random()*100 > 40 THEN 'MEDIUM'
+                ELSE 'LOW'
+            END,
+            'keyword match result'
+        FROM users
+        LIMIT 10;
+
     END LOOP;
 END $$;
