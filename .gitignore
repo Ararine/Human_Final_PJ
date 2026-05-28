@@ -22,6 +22,3 @@ postgre_data
 superpowers
 Microsoft
 .tmp_*
-
-# Backend 이미지/영상 업로드 폴더
-storage/

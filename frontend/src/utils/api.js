@@ -62,60 +62,6 @@ export async function getAdminUsers(params = {}) {
   return requestJson(`/admin/users${qs ? "?" + qs : ""}`);
 }
 
-export async function initUpload(meta) {
-  return requestJson("/uploads/init", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(meta),
-  });
-}
-
-export async function uploadChunk(uploadId, chunkIndex, blob, chunkHash = null) {
-  const formData = new FormData();
-  formData.append("file", blob);
-
-  const headers = {};
-  if (chunkHash) headers["X-Chunk-Hash"] = chunkHash;
-
-  const response = await fetch(
-    `${getApiBaseUrl()}/uploads/${uploadId}/chunks/${chunkIndex}`,
-    {
-      method: "POST",
-      credentials: "include",
-      headers,
-      body: formData,
-    }
-  );
-
-  const body = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(body.message || `chunk ${chunkIndex} 업로드에 실패했습니다.`);
-  }
-
-  return body;
-}
-
-export async function completeUpload(uploadId) {
-  return requestJson(`/uploads/${uploadId}/complete`, { method: "POST" });
-}
-
-export async function createAnalysisJob(uploadId) {
-  return requestJson("/analysis/jobs", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ upload_id: uploadId }),
-  });
-}
-
-export async function getAnalysisJob(jobId) {
-  return requestJson(`/analysis/jobs/${jobId}`);
-}
-
-export async function getUploadStatus(uploadId) {
-  return requestJson(`/uploads/${uploadId}/status`);
-}
-
 export async function uploadFile(file) {
   const formData = new FormData();
   formData.append("file", file);
