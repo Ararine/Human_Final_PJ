@@ -1,6 +1,8 @@
 import base64
+import json
 import os
-import requests
+import urllib.error
+import urllib.request
 
 TOSS_SECRET_KEY = os.getenv("TOSS_SECRET_KEY")
 
@@ -23,10 +25,19 @@ def confirm_payment(payment_key, order_id, amount):
         "amount": amount,
     }
 
-    response = requests.post(
+    request = urllib.request.Request(
         "https://api.tosspayments.com/v1/payments/confirm",
-        json=payload,
+        data=json.dumps(payload).encode("utf-8"),
         headers=headers,
+        method="POST",
     )
 
-    return response.json()
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        error_body = exc.read().decode("utf-8")
+        try:
+            return json.loads(error_body)
+        except json.JSONDecodeError:
+            raise Exception(error_body) from exc

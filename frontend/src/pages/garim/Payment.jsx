@@ -1,85 +1,150 @@
-import { useDocumentTitle } from "../../hooks/useDocumentTitle";
-import "../../css/garim-pages/Payment.css";
-
+import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { loadTossPayments } from "@tosspayments/payment-sdk";
+
 import GarimPage from "../../components/garim/GarimPage";
+import { useDocumentTitle } from "../../hooks/useDocumentTitle";
+import { createPaymentTempOrder } from "../../utils/api";
+import "../../css/garim-pages/Payment.css";
 
 const clientKey = import.meta.env.VITE_TOSS_CLIENT_KEY;
 
+const PLAN_PAYMENT = {
+  pro: {
+    label: "PRO",
+    defaultCredits: 50,
+    defaultAmount: 19800,
+  },
+  studio: {
+    label: "STUDIO",
+    defaultCredits: 500,
+    defaultAmount: 49500,
+  },
+};
+
+function numberFromQuery(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function formatPrice(value) {
+  return Number(value || 0).toLocaleString("ko-KR");
+}
+
 export default function Payment() {
-  useDocumentTitle("결제 · Garim [v1 정식]");
+  const [searchParams] = useSearchParams();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const planKey = (searchParams.get("plan") || "pro").toLowerCase();
+  const isEmbed = searchParams.get("embed") === "1";
+  const basePlan = PLAN_PAYMENT[planKey] || PLAN_PAYMENT.pro;
+  const credits = numberFromQuery(searchParams.get("credits"), basePlan.defaultCredits);
+  const amount = numberFromQuery(searchParams.get("price"), basePlan.defaultAmount);
+  const plan = {
+    label: basePlan.label,
+    itemName: `${basePlan.label} 플랜`,
+    description: `크레딧 ${formatPrice(credits)}개`,
+    amount,
+  };
+
+  useDocumentTitle("결제 · Garim");
 
   const handlePayment = async () => {
+    if (isSubmitting) return;
+    if (!clientKey) {
+      alert("Toss Payments 클라이언트 키가 설정되지 않았습니다.");
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
+      const tempOrder = await createPaymentTempOrder({
+        plan_code: planKey,
+        amount: plan.amount,
+      });
+
+      sessionStorage.setItem("lastOrderId", tempOrder.orderId);
+
       const tossPayments = await loadTossPayments(clientKey);
-
       await tossPayments.requestPayment("CARD", {
-        amount: 100,
-
-        orderId: "order-" + Date.now(),
-
-        orderName: "Garim PRO 테스트",
-
-        customerName: "테스트유저",
-
-        successUrl: "http://localhost:3000/payment/success",
-
-        failUrl: "http://localhost:3000/payment/fail",
+        amount: tempOrder.amount,
+        orderId: tempOrder.orderId,
+        orderName: `Garim ${tempOrder.orderName}`,
+        customerName: "Garim 사용자",
+        successUrl: `${window.location.origin}/payment/success`,
+        failUrl: `${window.location.origin}/payment/fail`,
       });
     } catch (err) {
       console.error(err);
-      alert("결제창 실행 실패");
+      alert(err.message || "결제창 실행에 실패했습니다.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  return (
-    <GarimPage bodyClass="page-app" screenLabel="14 Payment">
-      <div className="pay-page">
-        <div className="pay-shell">
-          <div className="pay-head">
-            <h1>결제</h1>
+  const content = (
+    <div className={`pay-page${isEmbed ? " pay-page--embed" : ""}`}>
+      <div className="pay-shell">
+        <div className="pay-head">
+          <h1>결제</h1>
+        </div>
+
+        <div className="summary">
+          <div className="row">
+            <span>{plan.itemName} ({plan.description})</span>
+            <span className="v">{formatPrice(plan.amount)}원</span>
           </div>
 
-          <div className="summary">
-            <div className="row">
-              <span>1회권 (영상 1편 처리)</span>
-              <span className="v">100원</span>
-            </div>
-
-            <div className="row total">
-              <span>합계</span>
-              <span className="v">100원</span>
-            </div>
-          </div>
-
-          <div className="pay-disabled">
-            <span className="material-icons">payments</span>
-
-            <h2>테스트 결제</h2>
-
-            <p>토스페이먼츠 결제창 테스트입니다.</p>
-
-            <button
-              onClick={handlePayment}
-              className="mui-btn mui-btn--contained mui-btn--lg"
-            >
-              결제하기 →
-            </button>
-          </div>
-
-          <div className="trust-strip">
-            <span className="trust">
-              <span className="material-icons">lock</span>
-              SSL 256bit
-            </span>
-
-            <span className="trust">
-              <span className="material-icons">verified</span>
-              PCI DSS Level 1
-            </span>
+          <div className="row total">
+            <span>합계</span>
+            <span className="v">{formatPrice(plan.amount)}원</span>
           </div>
         </div>
+
+        <div className="pay-disabled">
+          <div className="pay-visual" aria-hidden="true">
+            <span className="material-icons pay-visual__card">credit_card</span>
+            <span className="material-icons pay-visual__shield">verified_user</span>
+          </div>
+
+          <h2>테스트 결제</h2>
+
+          <p className="pay-guide">결제 버튼을 누르면 백엔드 임시 주문 생성 후 Toss 결제창이 열립니다.</p>
+
+          <button
+            type="button"
+            onClick={handlePayment}
+            className="mui-btn mui-btn--contained mui-btn--lg pay-submit"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? "주문 생성 중" : "결제하기"}
+            <span className="material-icons">
+              arrow_forward
+            </span>
+          </button>
+        </div>
+
+        <div className="trust-strip">
+          <span className="trust">
+            <span className="material-icons">lock</span>
+            SSL 256bit
+          </span>
+
+          <span className="trust">
+            <span className="material-icons">verified</span>
+            PCI DSS Level 1
+          </span>
+        </div>
       </div>
+    </div>
+  );
+
+  if (isEmbed) {
+    return content;
+  }
+
+  return (
+    <GarimPage bodyClass="page-app" screenLabel="14 Payment">
+      {content}
     </GarimPage>
   );
 }

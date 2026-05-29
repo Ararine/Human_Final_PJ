@@ -1,461 +1,353 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { useAuthStatus } from "../../hooks/useAuthStatus";
 import "../../css/garim-pages/Pricing.css";
 
 import GarimPage from "../../components/garim/GarimPage";
+import { getAdminPolicySettings } from "../../utils/api";
+
+const PLAN_KEYS = ["free", "pro", "studio"];
+
+const DEFAULT_POLICY = {
+  file_processing: {
+    plans: {
+      free: { fileSizeLimit: 50, maxJobs: 3, monthlyQuota: 5, resultRetention: 3 },
+      pro: { fileSizeLimit: 500, maxJobs: 10, monthlyQuota: 50, resultRetention: 7 },
+      studio: { fileSizeLimit: 2048, maxJobs: 30, monthlyQuota: null, resultRetention: 30 },
+    },
+    allowedFormats: ["jpg", "jpeg", "png", "webp", "mp4", "mov"],
+  },
+  payment: {
+    plans: {
+      free: { credits: 5, price: 0 },
+      pro: { credits: 50, price: 2900 },
+      studio: { credits: 500, price: 19800 },
+    },
+  },
+  retention: {
+    plans: {
+      free: { autoDeleteOriginalHours: 12, metadataRetentionDays: 90 },
+      pro: { autoDeleteOriginalHours: 12, metadataRetentionDays: 90 },
+      studio: { autoDeleteOriginalHours: 12, metadataRetentionDays: 90 },
+    },
+  },
+};
+
+const PLAN_META = {
+  free: {
+    name: "Free",
+    badge: "기본",
+    badgeClass: "mui-chip--primary",
+    featured: true,
+    description: "개인 테스트와 가벼운 분석을 위한 무료 플랜입니다.",
+    cta: "무료로 시작",
+  },
+  pro: {
+    name: "PRO",
+    badge: "추천",
+    badgeClass: "mui-chip--soft-warning",
+    description: "정기적으로 영상을 분석하는 개인 사용자에게 적합합니다.",
+    cta: "결제하기",
+  },
+  studio: {
+    name: "STUDIO",
+    badge: "팀/스튜디오",
+    badgeClass: "mui-chip--secondary",
+    description: "팀 단위 작업과 대량 분석을 위한 플랜입니다.",
+    cta: "결제하기",
+  },
+};
+
+function formatPrice(value) {
+  const price = Number(value || 0);
+  return price === 0 ? "0" : price.toLocaleString("ko-KR");
+}
+
+function formatQuota(value, unit = "건") {
+  if (value === null || value === undefined || value === "") return "무제한";
+  return `${Number(value).toLocaleString("ko-KR")}${unit}`;
+}
+
+function formatFileSize(value) {
+  const size = Number(value || 0);
+  if (size >= 1024) {
+    return `${Number((size / 1024).toFixed(1)).toLocaleString("ko-KR")}GB`;
+  }
+  return `${size.toLocaleString("ko-KR")}MB`;
+}
+
+function mergePolicy(base, incoming) {
+  return {
+    file_processing: {
+      ...base.file_processing,
+      ...(incoming.file_processing || {}),
+      plans: {
+        ...base.file_processing.plans,
+        ...(incoming.file_processing?.plans || {}),
+      },
+    },
+    payment: {
+      ...base.payment,
+      ...(incoming.payment || {}),
+      plans: {
+        ...base.payment.plans,
+        ...(incoming.payment?.plans || {}),
+      },
+    },
+    retention: {
+      ...base.retention,
+      ...(incoming.retention || {}),
+      plans: {
+        ...base.retention.plans,
+        ...(incoming.retention?.plans || {}),
+      },
+    },
+  };
+}
 
 export default function Pricing() {
   useDocumentTitle("요금제 · Garim");
   const isAuthed = useAuthStatus();
+  const navigate = useNavigate();
   const startHref = isAuthed ? "/upload" : "/login";
+  const [policy, setPolicy] = useState(DEFAULT_POLICY);
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const paymentFrameRef = useRef(null);
+  const [paymentFrameHeight, setPaymentFrameHeight] = useState(820);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPolicy() {
+      try {
+        const response = await getAdminPolicySettings();
+        if (cancelled) return;
+        setPolicy(mergePolicy(DEFAULT_POLICY, response.data || {}));
+      } catch (error) {
+        console.error("Failed to load pricing policy", error);
+      }
+    }
+
+    loadPolicy();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const plans = useMemo(
+    () =>
+      PLAN_KEYS.map((key) => ({
+        key,
+        ...PLAN_META[key],
+        file: policy.file_processing.plans[key] || DEFAULT_POLICY.file_processing.plans[key],
+        payment: policy.payment.plans[key] || DEFAULT_POLICY.payment.plans[key],
+        retention: policy.retention.plans[key] || DEFAULT_POLICY.retention.plans[key],
+      })),
+    [policy],
+  );
+
+  function closePaymentPopup() {
+    setSelectedPlan(null);
+  }
+
+  function handlePayClick(plan) {
+    if (!isAuthed) {
+      navigate("/login");
+      return;
+    }
+
+    const params = new URLSearchParams({
+      plan: plan.key,
+      price: String(plan.payment.price ?? ""),
+      credits: String(plan.payment.credits ?? ""),
+    });
+
+    navigate(`/payment?${params.toString()}`);
+  }
+
+  function resizePaymentFrame() {
+    const frame = paymentFrameRef.current;
+    if (!frame?.contentWindow?.document) return;
+
+    const doc = frame.contentWindow.document;
+    const shell = doc.querySelector(".pay-shell");
+    const contentHeight = shell 
+      ? shell.offsetHeight 
+      : Math.max(doc.documentElement?.scrollHeight || 0, doc.body?.scrollHeight || 0);
+
+    const viewportLimit = Math.max(360, window.innerHeight - 88);
+    const nextHeight = Math.min(Math.max(contentHeight, 820), viewportLimit);
+
+    setPaymentFrameHeight(nextHeight);
+  }
+
+  useEffect(() => {
+    if (!selectedPlan) return undefined;
+
+    const handleResize = () => resizePaymentFrame();
+    window.addEventListener("resize", handleResize);
+    const timer = window.setTimeout(handleResize, 80);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.clearTimeout(timer);
+    };
+  }, [selectedPlan]);
 
   return (
     <GarimPage bodyClass="page-public" screenLabel="02 Pricing">
       <section className="page-head">
-        <h1>
-          이번 영상부터, 매달까지 — 골라 쓰는 요금제
-        </h1>
+        <h1>필요한 만큼 선택하는 요금제</h1>
         <p>
-          MVP1 단계에서는 모든 결제 기능이 비활성화되어 있습니다. 모든 핵심 기능을 무료로 이용하세요.
+          관리자 정책에서 설정한 크레딧, 금액, 파일 처리 한도, 데이터 보존 기간을
+          기준으로 플랜 정보를 표시합니다.
         </p>
         <div className="billing-toggle">
-          <button className="active">
-            월 결제
-          </button>
+          <button className="active">월 결제</button>
           <button>
             연 결제
-            <span className="save">
-              2개월 무료
-            </span>
+            <span className="save">준비 중</span>
           </button>
         </div>
       </section>
+
       <section style={{ padding: "24px 32px 64px" }}>
         <div className="pricing-grid">
-          <div className="price-card price-card--featured">
-            <span className="mui-chip mui-chip--primary price-card__badge">
-              현재 플랜 — MVP1
-            </span>
-            <span className="overline-k">
-              Free
-            </span>
-            <div className="price-card__price">
-              0
-              <small>
-                원
-              </small>
+          {plans.map((plan) => (
+            <div
+              key={plan.key}
+              className={`price-card${plan.featured ? " price-card--featured" : ""}`}
+            >
+              <span className={`mui-chip ${plan.badgeClass} price-card__badge`}>
+                {plan.badge}
+              </span>
+              <span className="overline-k">{plan.name}</span>
+              <div className="price-card__price">
+                {formatPrice(plan.payment.price)}
+                <small>원</small>
+              </div>
+              <p className="caption-k" style={{ fontSize: "13px" }}>
+                {plan.description}
+              </p>
+              <ul className="price-card__feats">
+                <li><span className="material-icons">check</span>크레딧 {formatQuota(plan.payment.credits, "개")}</li>
+                <li><span className="material-icons">check</span>월 처리 한도 {formatQuota(plan.file.monthlyQuota)}</li>
+                <li><span className="material-icons">check</span>최대 파일 크기 {formatFileSize(plan.file.fileSizeLimit)}</li>
+                <li><span className="material-icons">check</span>동시 처리 최대 {formatQuota(plan.file.maxJobs)}</li>
+                <li><span className="material-icons">check</span>결과 파일 {formatQuota(plan.file.resultRetention, "일")} 보관</li>
+                <li><span className="material-icons">check</span>원본 파일 {formatQuota(plan.retention.autoDeleteOriginalHours, "시간")} 후 삭제</li>
+                <li><span className="material-icons">check</span>메타데이터 {formatQuota(plan.retention.metadataRetentionDays, "일")} 보존</li>
+              </ul>
+              {plan.key === "free" ? (
+                <a href={startHref} className="mui-btn mui-btn--contained mui-btn--block">
+                  {plan.cta}
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  className="mui-btn mui-btn--outlined mui-btn--block"
+                  onClick={() => handlePayClick(plan)}
+                >
+                  {plan.cta}
+                </button>
+              )}
             </div>
-            <p className="caption-k" style={{ fontSize: "13px" }}>
-              개인 사용자, 가끔 점검이 필요한 분들.
-            </p>
-            <ul className="price-card__feats">
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                월 무제한 검출 (영원히 무료)
-              </li>
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                월 5회 치환 처리
-              </li>
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                1080p · 30분 · 2GB
-              </li>
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                SNS 셀프 점검 (Instagram)
-              </li>
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                결과 영상 7일 보관
-              </li>
-              <li className="muted">
-                <span className="material-icons">
-                  close
-                </span>
-                워터마크 포함
-              </li>
-              <li className="muted">
-                <span className="material-icons">
-                  close
-                </span>
-                표준 큐 우선순위
-              </li>
-            </ul>
-            <a href={startHref} className="mui-btn mui-btn--contained mui-btn--block">
-              무료로 시작
-            </a>
-          </div>
-          <div className="price-card">
-            <span className="mui-chip mui-chip--soft-warning price-card__badge">
-              추천 · 일회성
-            </span>
-            <span className="overline-k">
-              1회권
-            </span>
-            <div className="price-card__price">
-              2,900
-              <small>
-                원
-              </small>
-            </div>
-            <p className="caption-k" style={{ fontSize: "13px" }}>
-              이번 영상 하나만, 워터마크 없이.
-            </p>
-            <ul className="price-card__feats">
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                영상 1편 또는 사진 10장
-              </li>
-              <li>
-                <span className="material-icons">
-                  check"
-                </span>
-                워터마크 없음
-              </li>
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                4K · 60분 · 5GB
-              </li>
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                표준 큐 우선순위
-              </li>
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                결과 영상 30일 보관
-              </li>
-              <li className="muted">
-                <span className="material-icons">
-                  schedule
-                </span>
-                v1 정식 출시 후
-              </li>
-            </ul>
-            <button className="mui-btn mui-btn--outlined mui-btn--block" disabled>
-              v1 정식 출시 예정
-            </button>
-          </div>
-          <div className="price-card">
-            <span className="mui-chip mui-chip--secondary price-card__badge">
-              베스트셀러
-            </span>
-            <span className="overline-k">
-              Pro
-            </span>
-            <div className="price-card__price">
-              19,800
-              <small>
-                원/월
-              </small>
-            </div>
-            <p className="caption-k" style={{ fontSize: "13px" }}>
-              크리에이터·자영업자 ·정기 처리.
-            </p>
-            <ul className="price-card__feats">
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                월 50회 치환 처리
-              </li>
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                우선 처리 큐 (2배 빠름)
-              </li>
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                4K · 60분 · 5GB
-              </li>
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                SNS 정기 자동 스캔 (v2)
-              </li>
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                결과 영상 90일 보관
-              </li>
-              <li className="muted">
-                <span className="material-icons">
-                  schedule
-                </span>
-                v1 정식 출시 후
-              </li>
-            </ul>
-            <button className="mui-btn mui-btn--outlined mui-btn--block" disabled>
-              v1 정식 출시 예정
-            </button>
-          </div>
-        </div>
-        <div style={{ maxWidth: "1100px", margin: "24px auto 0", textAlign: "center" }}>
-          <span className="caption-k">
-            팀·크리에이터 그룹은
-            <a href="mailto:sales@garim.kr" style={{ color: "#1976d2" }}>
-              Studio·Enterprise 문의
-            </a>
-            를 보내주세요.
-          </span>
+          ))}
         </div>
       </section>
+
       <section className="compare-section" style={{ background: "#fafafa" }}>
-        <h2 style={{ textAlign: "center", font: "500 32px var(--font-sans)", margin: "0 0 32px" }}>
-          기능 비교
+        <h2
+          style={{
+            textAlign: "center",
+            font: "500 32px var(--font-sans)",
+            margin: "0 0 32px",
+          }}
+        >
+          플랜 비교
         </h2>
         <table className="compare">
           <thead>
             <tr>
-              <th>
-              </th>
-              <th>
-                Free
-                <span className="caption-k">
-                  (MVP1 현재)
-                </span>
-              </th>
-              <th>
-                1회권
-              </th>
-              <th>
-                Pro
-              </th>
+              <th></th>
+              {plans.map((plan) => (
+                <th key={plan.key}>{plan.name}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            <tr className="row-head">
-              <td colSpan="4">
-                검출
-              </td>
+            <tr className="row-head"><td colSpan="4">결제 정책</td></tr>
+            <tr>
+              <td>제공 크레딧</td>
+              {plans.map((plan) => <td key={plan.key}>{formatQuota(plan.payment.credits, "개")}</td>)}
             </tr>
             <tr>
-              <td>
-                월 검출 횟수
-              </td>
-              <td>
-                무제한
-              </td>
-              <td>
-                —
-              </td>
-              <td>
-                무제한
-              </td>
+              <td>금액</td>
+              {plans.map((plan) => <td key={plan.key}>{formatPrice(plan.payment.price)}원</td>)}
+            </tr>
+            <tr className="row-head"><td colSpan="4">파일 처리 정책</td></tr>
+            <tr>
+              <td>월 처리 한도</td>
+              {plans.map((plan) => <td key={plan.key}>{formatQuota(plan.file.monthlyQuota)}</td>)}
             </tr>
             <tr>
-              <td>
-                한국어 음성·텍스트 검출
-              </td>
-              <td className="check">
-                ●
-              </td>
-              <td className="check">
-                ●
-              </td>
-              <td className="check">
-                ●
-              </td>
+              <td>동시 처리 최대 건수</td>
+              {plans.map((plan) => <td key={plan.key}>{formatQuota(plan.file.maxJobs)}</td>)}
             </tr>
             <tr>
-              <td>
-                EXIF 메타데이터 분석
-              </td>
-              <td className="check">
-                ●
-              </td>
-              <td className="check">
-                ●
-              </td>
-              <td className="check">
-                ●
-              </td>
-            </tr>
-            <tr className="row-head">
-              <td colSpan="4">
-                치환
-              </td>
+              <td>최대 파일 크기</td>
+              {plans.map((plan) => <td key={plan.key}>{formatFileSize(plan.file.fileSizeLimit)}</td>)}
             </tr>
             <tr>
-              <td>
-                월 치환 처리 횟수
-              </td>
-              <td>
-                5회
-              </td>
-              <td>
-                1회
-              </td>
-              <td>
-                50회
-              </td>
+              <td>결과 파일 보관 기간</td>
+              {plans.map((plan) => <td key={plan.key}>{formatQuota(plan.file.resultRetention, "일")}</td>)}
+            </tr>
+            <tr className="row-head"><td colSpan="4">데이터 보존 정책</td></tr>
+            <tr>
+              <td>원본 파일 자동 삭제</td>
+              {plans.map((plan) => (
+                <td key={plan.key}>처리 후 {formatQuota(plan.retention.autoDeleteOriginalHours, "시간")}</td>
+              ))}
             </tr>
             <tr>
-              <td>
-                처리 결과 워터마크
-              </td>
-              <td>
-                포함
-              </td>
-              <td className="x">
-                없음
-              </td>
-              <td className="x">
-                없음
-              </td>
-            </tr>
-            <tr>
-              <td>
-                최대 해상도
-              </td>
-              <td>
-                1080p
-              </td>
-              <td>
-                4K
-              </td>
-              <td>
-                4K
-              </td>
-            </tr>
-            <tr>
-              <td>
-                최대 길이
-              </td>
-              <td>
-                30분
-              </td>
-              <td>
-                60분
-              </td>
-              <td>
-                60분
-              </td>
-            </tr>
-            <tr>
-              <td>
-                처리 큐 우선순위
-              </td>
-              <td>
-                표준
-              </td>
-              <td>
-                표준
-              </td>
-              <td className="check">
-                우선
-              </td>
-            </tr>
-            <tr className="row-head">
-              <td colSpan="4">
-                SNS·기타
-              </td>
-            </tr>
-            <tr>
-              <td>
-                Instagram 셀프 점검
-              </td>
-              <td className="check">
-                ●
-              </td>
-              <td>
-                —
-              </td>
-              <td className="check">
-                ●
-              </td>
-            </tr>
-            <tr>
-              <td>
-                정기 자동 스캔 (v2)
-              </td>
-              <td className="x">
-                —
-              </td>
-              <td className="x">
-                —
-              </td>
-              <td className="check">
-                ●
-              </td>
-            </tr>
-            <tr>
-              <td>
-                결과 영상 보관 기간
-              </td>
-              <td>
-                7일
-              </td>
-              <td>
-                30일
-              </td>
-              <td>
-                90일
-              </td>
+              <td>처리 메타데이터 보존</td>
+              {plans.map((plan) => <td key={plan.key}>{formatQuota(plan.retention.metadataRetentionDays, "일")}</td>)}
             </tr>
           </tbody>
         </table>
       </section>
-      <section className="faq-short">
-        <h2>
-          자주 묻는 질문
-        </h2>
-        <div className="faq-item">
-          <h4>
-            MVP1 단계는 정말 모두 무료인가요?
-          </h4>
-          <p>
-            네. 검출·치환·SNS 점검·다운로드 모두 무료입니다. 결과물에는 식별 워터마크가 포함됩니다. 결제 시스템은 v1 정식 출시 시점에 도입됩니다.
-          </p>
+
+      {selectedPlan && (
+        <div className="modal-backdrop" onClick={closePaymentPopup}>
+          <div
+            className="modal payment-modal"
+            role="dialog"
+            aria-modal="true"
+            style={{ "--payment-frame-height": `${paymentFrameHeight}px` }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="payment-modal__head">
+              <strong>{selectedPlan.name} 결제</strong>
+              <button
+                type="button"
+                className="gh__icon"
+                aria-label="결제 팝업 닫기"
+                onClick={closePaymentPopup}
+              >
+                <span className="material-icons">close</span>
+              </button>
+            </div>
+            <iframe
+              ref={paymentFrameRef}
+              className="payment-modal__frame"
+              title={`${selectedPlan.name} 결제 페이지`}
+              onLoad={resizePaymentFrame}
+              src={`/payment?embed=1&plan=${selectedPlan.key}&price=${selectedPlan.payment.price ?? ""}&credits=${selectedPlan.payment.credits ?? ""}`}
+            />
+          </div>
         </div>
-        <div className="faq-item">
-          <h4>
-            처리한 영상은 얼마나 보관되나요?
-          </h4>
-          <p>
-            플랜별로 다릅니다. Free 7일, 1회권 30일, Pro 90일 후 자동 삭제됩니다. 원본 영상은 처리 완료 후 12시간 내에 모두 삭제됩니다 (B-1 정책).
-          </p>
-        </div>
-        <div className="faq-item">
-          <h4>
-            한국어 음성 속 이름·전화번호도 잡나요?
-          </h4>
-          <p>
-            네. Whisper로 음성을 텍스트로 변환한 후 자체 학습한 KoELECTRA 모델이 이름·주소·연락처·계좌번호 등을 검출합니다. 호칭("○○야"), 친밀어("○○이") 포함.
-          </p>
-        </div>
-        <div className="faq-item">
-          <h4>
-            환불 정책은 어떻게 되나요?
-          </h4>
-          <p>
-            MVP1 단계에서는 결제가 없어 해당사항 없습니다. v1 정식 출시 후: 1회권은 처리 시작 전 100% 환불 가능, 구독은 다음 결제일까지 사용 후 갱신 중단.
-          </p>
-        </div>
-      </section>
+      )}
     </GarimPage>
   );
 }

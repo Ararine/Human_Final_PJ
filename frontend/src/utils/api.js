@@ -62,6 +62,40 @@ export async function getAdminUsers(params = {}) {
   return requestJson(`/admin/users${qs ? "?" + qs : ""}`);
 }
 
+export async function getAdminPolicySettings() {
+  return requestJson("/admin/policy");
+}
+
+export async function updateAdminPolicySettings(policies) {
+  return requestJson("/admin/policy", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ policies }),
+  });
+}
+
+export async function createPaymentTempOrder(order) {
+  return requestJson("/payment/temp-order", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(order),
+  });
+}
+
+export async function confirmPayment(payment) {
+  return requestJson("/payment/confirm", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payment),
+  });
+}
+
 export async function initUpload(meta) {
   return requestJson("/uploads/init", {
     method: "POST",

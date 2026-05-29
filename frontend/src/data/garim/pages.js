@@ -12,6 +12,8 @@ import SnsConnect from "../../pages/garim/SnsConnect";
 import SnsResults from "../../pages/garim/SnsResults";
 import PaymentGate from "../../pages/garim/PaymentGate";
 import Payment from "../../pages/garim/Payment";
+import PaymentSuccess from "../../pages/garim/PaymentSuccess";
+import PaymentFail from "../../pages/garim/PaymentFail";
 import ReplaceOptions from "../../pages/garim/ReplaceOptions";
 import Preview from "../../pages/garim/Preview";
 import Processing from "../../pages/garim/Processing";
@@ -44,6 +46,8 @@ export const garimPages = [
   { path: "/sns-results", name: "SnsResults", component: SnsResults, file: "12-sns-results.html", layout: "app", current: "sns" },
   { path: "/payment-gate", name: "PaymentGate", component: PaymentGate, file: "13-payment-gate.html", layout: "app", current: "pricing" },
   { path: "/payment", name: "Payment", component: Payment, file: "14-payment.html", layout: "app", current: "pricing" },
+  { path: "/payment/success", name: "PaymentSuccess", component: PaymentSuccess, file: "14-payment-success.html", layout: "app", current: "pricing" },
+  { path: "/payment/fail", name: "PaymentFail", component: PaymentFail, file: "14-payment-fail.html", layout: "app", current: "pricing" },
   { path: "/replace-options", name: "ReplaceOptions", component: ReplaceOptions, file: "15-replace-options.html", layout: "app", current: "detect" },
   { path: "/preview", name: "Preview", component: Preview, file: "16-preview.html", layout: "app", current: "detect" },
   { path: "/processing", name: "Processing", component: Processing, file: "17-processing.html", layout: "app", current: "detect" },

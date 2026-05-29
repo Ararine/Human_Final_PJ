@@ -1,10 +1,13 @@
 import uvicorn,os,logging
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().with_name(".env"))
+
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from routes import payment
-from dotenv import load_dotenv
-load_dotenv()
 
 from core.logger import setup_logging
 from routes import oauth, post, setting, uploads, admin, analysis, worker
