@@ -13,7 +13,6 @@ TOSS_SECRET_KEY = os.getenv(
     "TOSS_SECRET_KEY"
 )
 
-
 async def create_temp_order(
     db: Session,
     user_id: str,
@@ -46,27 +45,7 @@ async def create_temp_order(
     if plan["price_amount"] != amount:
         raise ValueError("요청 금액이 요금제 가격과 일치하지 않습니다.")
 
-    subscription_query = text("""
-        INSERT INTO subscriptions (
-            user_id,
-            plan_id,
-            status,
-            started_at,
-            remaining_quota,
-            created_at,
-            updated_at
-        )
-        VALUES (
-            :user_id,
-            :plan_id,
-            'pending',
-            NOW(),
-            0,
-            NOW(),
-            NOW()
-        )
-        RETURNING subscription_id
-    """)
+    _restore_free_plan_for_expired_subscriptions(db, user_id)
 
     insert_query = text("""
         INSERT INTO payments (
@@ -75,6 +54,7 @@ async def create_temp_order(
             amount,
             status,
             pg_provider,
+            order_name,
             created_at
         )
         VALUES (
@@ -83,26 +63,23 @@ async def create_temp_order(
             :amount,
             'ready',
             'toss',
+            :plan_code,
             NOW()
         )
         RETURNING payment_id, amount, subscription_id
     """)
 
     try:
-        subscription_inserted = db.execute(
-            subscription_query,
-            {
-                "user_id": user_id,
-                "plan_id": plan["plan_id"],
-            }
-        ).fetchone()
-        subscription = subscription_inserted._mapping
+        subscription = _get_user_subscription(db, user_id)
+        if not subscription:
+            raise ValueError("사용자 구독 정보를 찾을 수 없습니다.")
         inserted = db.execute(
             insert_query,
             {
                 "user_id": user_id,
                 "subscription_id": subscription["subscription_id"],
                 "amount": amount,
+                "plan_code": plan_code_lower,
             }
         ).fetchone()
         db.commit()
@@ -140,14 +117,17 @@ async def confirm_payment(
                 p.payment_method,
                 p.receipt_url,
                 p.approved_at,
+                p.user_id,
                 p.subscription_id,
+                pl.plan_id,
                 pl.credits,
-                pl.monthly_quota
+                pl.monthly_quota,
+                pl.plan_code
             FROM payments p
             LEFT JOIN subscriptions s
                 ON s.subscription_id = p.subscription_id
             LEFT JOIN plans pl
-                ON pl.plan_id = s.plan_id
+                ON LOWER(pl.plan_code) = LOWER(p.order_name)
             WHERE p.payment_id = CAST(:order_id AS uuid)
         """),
         {"order_id": order_id},
@@ -226,25 +206,28 @@ async def confirm_payment(
         )
         subscription_id = payment.get("subscription_id")
         if subscription_id:
-            remaining_quota = payment.get("credits")
-            if remaining_quota is None:
-                remaining_quota = payment.get("monthly_quota")
+            user_id = payment.get("user_id")
+            _restore_free_plan_for_expired_subscriptions(db, user_id)
+            carried_credits = _get_subscription_credits(db, subscription_id)
+            remaining_credits = carried_credits + _get_plan_credits(payment)
 
             db.execute(
                 text("""
                     UPDATE subscriptions
                     SET
+                        plan_id = :plan_id,
                         status = 'active',
                         started_at = NOW(),
-                        ended_at = NULL,
-                        renew_at = NOW() + INTERVAL '1 month',
-                        remaining_quota = :remaining_quota,
+                        ended_at = NOW() + INTERVAL '30 days',
+                        renew_at = NOW() + INTERVAL '30 days',
+                        remaining_credits = :remaining_credits,
                         updated_at = NOW()
                     WHERE subscription_id = :subscription_id
                 """),
                 {
                     "subscription_id": subscription_id,
-                    "remaining_quota": remaining_quota,
+                    "plan_id": payment.get("plan_id"),
+                    "remaining_credits": remaining_credits,
                 },
             )
         db.commit()
@@ -261,6 +244,73 @@ def _validate_toss_result(toss_result: dict, order_id: str, amount: int):
     total_amount = toss_result.get("totalAmount")
     if total_amount is not None and total_amount != amount:
         raise ValueError("Toss totalAmount does not match the requested amount.")
+
+
+def _get_plan_credits(payment):
+    credits = payment.get("credits")
+    if credits is None:
+        credits = payment.get("monthly_quota")
+    return int(credits or 0)
+
+
+def _get_user_subscription(db: Session, user_id):
+    row = db.execute(
+        text("""
+            SELECT subscription_id, remaining_credits
+            FROM subscriptions
+            WHERE user_id = :user_id
+            ORDER BY
+                CASE WHEN status = 'active' THEN 0 ELSE 1 END,
+                created_at ASC
+            LIMIT 1
+        """),
+        {"user_id": user_id},
+    ).fetchone()
+    return row._mapping if hasattr(row, "_mapping") else row
+
+
+def _get_subscription_credits(db: Session, subscription_id):
+    row = db.execute(
+        text("""
+            SELECT COALESCE(remaining_credits, 0) AS credits
+            FROM subscriptions
+            WHERE subscription_id = :subscription_id
+        """),
+        {"subscription_id": subscription_id},
+    ).fetchone()
+    mapping = row._mapping if hasattr(row, "_mapping") else row
+    return int((mapping or {}).get("credits") or 0)
+
+
+def _restore_free_plan_for_expired_subscriptions(db: Session, user_id):
+    if not user_id:
+        return
+
+    db.execute(
+        text("""
+            UPDATE subscriptions
+            SET
+                plan_id = free_plan.plan_id,
+                status = 'active',
+                started_at = NOW(),
+                ended_at = NULL,
+                renew_at = NOW() + INTERVAL '30 days',
+                remaining_credits = COALESCE(free_plan.credits, free_plan.monthly_quota, 0),
+                updated_at = NOW()
+            FROM (
+                SELECT plan_id, credits, monthly_quota
+                FROM plans
+                WHERE LOWER(plan_code) = 'free'
+                  AND is_active = TRUE
+                LIMIT 1
+            ) AS free_plan
+            WHERE subscriptions.user_id = :user_id
+              AND status = 'active'
+              AND ended_at IS NOT NULL
+              AND ended_at <= NOW()
+        """),
+        {"user_id": user_id},
+    )
 
 
 def _public_payment_response(toss_result: dict):

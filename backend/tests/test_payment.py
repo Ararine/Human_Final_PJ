@@ -137,7 +137,9 @@ async def test_service_create_temp_order_success():
     subscription_result.fetchone.return_value = subscription_mock_row
     payment_result = MagicMock()
     payment_result.fetchone.return_value = payment_mock_row
-    db_mock.execute.side_effect = [plan_result, subscription_result, payment_result]
+    restore_result = MagicMock()
+    restore_result.fetchone.return_value = None
+    db_mock.execute.side_effect = [plan_result, restore_result, subscription_result, payment_result]
 
     result = await payment_service.create_temp_order(
         db=db_mock,
@@ -152,7 +154,15 @@ async def test_service_create_temp_order_success():
     assert result["plan_code"] == "pro"
     assert result["subscription_id"] == "subscription-uuid-1234"
 
-    assert db_mock.execute.call_count == 3
+    assert db_mock.execute.call_count == 4
+    executed_sql = "\n".join(str(call.args[0]) for call in db_mock.execute.call_args_list)
+    payment_insert_sql = str(db_mock.execute.call_args_list[3].args[0])
+    payment_insert_params = db_mock.execute.call_args_list[3].args[1]
+    assert "INSERT INTO subscriptions" not in executed_sql
+    assert "INSERT INTO payments" in payment_insert_sql
+    assert "order_name" in payment_insert_sql
+    assert payment_insert_params["subscription_id"] == "subscription-uuid-1234"
+    assert payment_insert_params["plan_code"] == "pro"
     db_mock.commit.assert_called_once()
 
 
@@ -224,11 +234,27 @@ async def test_service_confirm_payment_saves_only_allowed_toss_fields(monkeypatc
         "status": "ready",
         "pg_transaction_id": None,
         "paid_at": None,
+        "user_id": "user-uuid-3",
         "subscription_id": "subscription-uuid-3",
+        "plan_id": "plan-uuid-pro",
         "credits": 50,
         "monthly_quota": 50,
     }
-    db_mock.execute.return_value.fetchone.return_value = payment_row
+    restore_result = MagicMock()
+    restore_result.fetchone.return_value = None
+    carryover_row = MagicMock()
+    carryover_row._mapping = {"credits": 12}
+    carryover_result = MagicMock()
+    carryover_result.fetchone.return_value = carryover_row
+    payment_select_result = MagicMock()
+    payment_select_result.fetchone.return_value = payment_row
+    db_mock.execute.side_effect = [
+        payment_select_result,
+        MagicMock(),
+        restore_result,
+        carryover_result,
+        MagicMock(),
+    ]
 
     async def fake_toss_confirm(payment_key, order_id, amount):
         return {
@@ -277,8 +303,10 @@ async def test_service_confirm_payment_saves_only_allowed_toss_fields(monkeypatc
     assert "checkout" not in result
     assert "secret" not in result
     assert "version" not in result
-    assert db_mock.execute.call_count == 3
+    assert db_mock.execute.call_count == 5
     payment_update_params = db_mock.execute.call_args_list[1].args[1]
+    subscription_update_sql = str(db_mock.execute.call_args_list[4].args[0])
+    subscription_update_params = db_mock.execute.call_args_list[4].args[1]
     assert payment_update_params["last_transaction_key"] == "tx-key-3"
     assert payment_update_params["order_name"] == "Garim Pro"
     assert payment_update_params["payment_method"] == "card"
@@ -295,6 +323,13 @@ async def test_service_confirm_payment_saves_only_allowed_toss_fields(monkeypatc
     assert "raw_response" not in payment_update_params
     assert "secret" not in payment_update_params
     assert "version" not in payment_update_params
+    assert "plan_id = :plan_id" in subscription_update_sql
+    assert "ended_at = NOW() + INTERVAL '30 days'" in subscription_update_sql
+    assert "renew_at = NOW() + INTERVAL '30 days'" in subscription_update_sql
+    assert "remaining_credits = :remaining_credits" in subscription_update_sql
+    assert "remaining_quota" not in subscription_update_sql
+    assert subscription_update_params["plan_id"] == "plan-uuid-pro"
+    assert subscription_update_params["remaining_credits"] == 62
     db_mock.commit.assert_called_once()
 
 

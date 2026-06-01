@@ -48,7 +48,6 @@ export default function PaymentSuccess() {
   const orderId = searchParams.get("orderId") || "";
   const requestedAmount = Number(searchParams.get("amount") || 0);
   const displayAmount = Number(result?.amount || requestedAmount || 0);
-  const receiptUrl = result?.receiptUrl || "";
 
   useEffect(() => {
     async function runConfirm() {
@@ -128,25 +127,6 @@ export default function PaymentSuccess() {
                 <span className="v">{displayAmount ? `${displayAmount.toLocaleString("ko-KR")}원` : "-"}</span>
               </div>
             </div>
-
-            {result && (
-              <div className="pay-disabled payment-success-actions">
-                <p>
-                  승인 상태: {result.status || "-"}
-                  {result.idempotent ? " · 중복 요청 보호됨" : ""}
-                </p>
-                {receiptUrl && (
-                  <a
-                    className="mui-btn mui-btn--outlined mui-btn--lg"
-                    href={receiptUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    영수증 보기
-                  </a>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </main>

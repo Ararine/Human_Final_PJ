@@ -70,6 +70,9 @@ def create_oauth_user_query(conn, oauth_user, role, status):
         },
     ).fetchone()
     user_id = created_user._mapping["user_id"] if hasattr(created_user, "_mapping") else created_user["user_id"]
+    free_subscription = create_free_subscription_query(conn, user_id)
+    if not free_subscription:
+        raise RuntimeError("Active free plan is required to create a new user subscription.")
     conn.execute(
         text(
             """
@@ -107,6 +110,39 @@ def create_oauth_user_query(conn, oauth_user, role, status):
         oauth_user["provider_user_id"],
         oauth_user.get("email"),
     )
+
+
+def create_free_subscription_query(conn, user_id):
+    return conn.execute(
+        text(
+            """
+            INSERT INTO subscriptions (
+                user_id,
+                plan_id,
+                status,
+                started_at,
+                renew_at,
+                remaining_credits,
+                created_at,
+                updated_at
+            )
+            SELECT
+                :user_id,
+                plan_id,
+                'active',
+                NOW(),
+                NOW() + INTERVAL '30 days',
+                COALESCE(credits, monthly_quota, 0),
+                NOW(),
+                NOW()
+            FROM plans
+            WHERE LOWER(plan_code) = 'free'
+              AND is_active = TRUE
+            RETURNING subscription_id
+            """
+        ),
+        {"user_id": user_id},
+    ).fetchone()
 
 
 def get_user_by_id_query(conn, user_id):

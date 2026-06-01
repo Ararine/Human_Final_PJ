@@ -17,6 +17,8 @@ class FakeConn:
         self.calls.append((str(statement), params or {}))
         if "RETURNING user_id, email, display_name" in str(statement):
             return FakeResult({"user_id": "user-1"})
+        if "RETURNING subscription_id" in str(statement):
+            return FakeResult({"subscription_id": "subscription-1"})
         return FakeResult()
 
 
@@ -57,14 +59,24 @@ def test_create_oauth_user_inserts_users_then_oauth_accounts():
     )
 
     insert_user_sql, insert_user_params = conn.calls[0]
-    insert_account_sql, insert_account_params = conn.calls[1]
-    lookup_sql, lookup_params = conn.calls[2]
+    insert_subscription_sql, insert_subscription_params = conn.calls[1]
+    insert_account_sql, insert_account_params = conn.calls[2]
+    lookup_sql, lookup_params = conn.calls[3]
 
     assert "INSERT INTO users" in insert_user_sql
     assert "display_name" in insert_user_sql
     assert "provider_user_id" not in insert_user_sql
     assert insert_user_params["role"] == "user"
     assert insert_user_params["status"] == "active"
+
+    assert "INSERT INTO subscriptions" in insert_subscription_sql
+    assert "remaining_credits" in insert_subscription_sql
+    assert "remaining_quota" not in insert_subscription_sql
+    assert "LOWER(plan_code) = 'free'" in insert_subscription_sql
+    assert "'active'" in insert_subscription_sql
+    assert "NOW() + INTERVAL '30 days'" in insert_subscription_sql
+    assert "COALESCE(credits, monthly_quota, 0)" in insert_subscription_sql
+    assert insert_subscription_params["user_id"] == "user-1"
 
     assert "INSERT INTO oauth_accounts" in insert_account_sql
     assert insert_account_params["user_id"] == "user-1"

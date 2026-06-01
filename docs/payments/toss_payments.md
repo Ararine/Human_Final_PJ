@@ -20,7 +20,7 @@
 
 - **결제 이력 기록**: `payments` 테이블에 상태(`success`), 결제 정보(`paid_at`), Toss 측 트랜잭션 키(`pg_transaction_id`에 Toss `paymentKey` 저장) 반영
 - **구독 상태 설정**: `subscriptions` 테이블에 유저의 구독/이용권 시작일(`started_at`), 종료일(`ended_at`), 구독 상태(`status = 'active'`) 최신화
-- **쿼터/크레딧 지급**: 이번에 갱신한 `plans` 테이블의 `credits`(제공 크레딧) 및 `monthly_quota`(월 처리 한도) 컬럼 값을 바탕으로 유저의 구독 잔여 한도(`subscriptions.remaining_quota`)를 충전 및 지급
+- **쿼터/크레딧 지급**: 이번에 갱신한 `plans` 테이블의 `credits`(제공 크레딧) 및 `monthly_quota`(월 처리 한도) 컬럼 값을 바탕으로 유저의 구독 잔여 한도(`subscriptions.remaining_credits`)를 충전 및 지급
 
 ## 4. 결제 유실 방지를 위한 웹훅(Webhook) 구성
 
@@ -30,4 +30,4 @@
 ## 5. 취소 및 환불 프로세스 연동
 
 - **취소 이력 업데이트**: 사용자가 결제 취소 또는 환불을 요청하는 경우 백엔드는 토스페이먼츠 환불 API를 호출해야 합니다. 승인 성공을 수신하면 `payments.status`를 `cancelled`로 업데이트하고 `refunded_at`을 기록합니다.
-- **구독 및 한도 회수**: 환불 승인 즉시 해당 결제 건과 묶여 있는 구독 정보(`subscriptions`)의 상태를 비활성화(`expired` 또는 `cancelled`)하고, 유저에게 부여했던 잔여 쿼터/크레딧(`subscriptions.remaining_quota`)을 회수하는 환불 정책 비즈니스 로직을 적용해야 합니다.
+- **구독 및 한도 회수**: 환불 승인 즉시 해당 결제 건과 묶여 있는 구독 정보(`subscriptions`)의 상태를 비활성화(`expired` 또는 `cancelled`)하고, 유저에게 부여했던 잔여 쿼터/크레딧(`subscriptions.remaining_credits`)을 회수하는 환불 정책 비즈니스 로직을 적용해야 합니다.

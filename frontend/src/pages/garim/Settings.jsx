@@ -309,10 +309,10 @@ export default function Settings() {
               <div className="login-list">
                 <div className="row">
                   <span style={{ flex: "1" }}>방금 전 · Chrome / macOS</span>
-                  <span className="ip">211.123.***.***</span>
                   <span className="mui-chip mui-chip--soft-success">
                     현재 세션
                   </span>
+                  <span className="ip">211.123.***.***</span>
                 </div>
                 <div className="row">
                   <span style={{ flex: "1" }}>
