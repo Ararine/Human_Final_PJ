@@ -1,4 +1,4 @@
-const DEFAULT_API_PORT = "8000";
+const DEFAULT_API_PORT = "8001";
 
 export function getApiBaseUrl() {
   if (import.meta.env.VITE_API_BASE_URL) {

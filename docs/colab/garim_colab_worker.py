@@ -1,14 +1,14 @@
 # %% [markdown]
 # # Garim Colab Worker
 #
-# 백엔드 ngrok URL의 `/worker/*` API를 polling해 job을 처리하는 worker 클라이언트.
+# Cloudflare Tunnel로 공개된 백엔드 URL의 `/worker/*` API를 polling해 job을 처리하는 worker 클라이언트.
 #
 # **실행 순서**
 # 1. `[설치]` 셀 실행
 # 2. `[Config]` 셀에서 BACKEND_URL / WORKER_SECRET 설정
 # 3. `[API 헬퍼]` 셀 실행
 # 4. `[Heartbeat 스레드]` 셀 실행
-# 5. `garim_pipeline.py` 의 셀 순서대로 실행 (설치 → Config → 인터페이스 → Analyzer → Registry)
+# 5. Drive의 `garim_colab` 폴더에 `garim_pipeline.py`, `garim_visual_pii_ocr_pipeline.py` 업로드
 # 6. `[파이프라인 연동]` 셀 실행
 # 7. `[Worker Loop]` 셀 실행
 # 8. `[실행]` 셀에서 `run_once()` 또는 `run_loop()` 실행
@@ -27,7 +27,7 @@ subprocess.run(["pip", "install", "-q", "requests"], check=True)
 #
 # | 변수 | 설명 |
 # |---|---|
-# | `BACKEND_URL` | 로컬 백엔드의 ngrok 공개 URL (매번 갱신 필요) |
+# | `BACKEND_URL` | Cloudflare Tunnel로 공개된 백엔드 URL (새 URL을 입력) |
 # | `WORKER_SECRET` | 백엔드 `.env`의 `WORKER_SECRET`과 동일한 값 |
 # | `WORKER_ID` | 이 Colab 인스턴스를 식별하는 임의 이름 |
 
@@ -36,7 +36,7 @@ import os, time, threading, logging
 import requests
 
 # ===== 여기만 수정 =====
-BACKEND_URL                = "https://xxxx.ngrok-free.app"  # ngrok URL (슬래시 없이)
+BACKEND_URL                = "https://xxxx.trycloudflare.com"  # Cloudflare Tunnel URL (슬래시 없이)
 WORKER_SECRET              = "change-me-worker-secret"
 WORKER_ID                  = "colab-worker-01"
 POLL_INTERVAL_SECONDS      = 10   # job이 없을 때 재polling 간격 (초)
@@ -385,7 +385,7 @@ log.info("HeartbeatThread 로드 완료")
 # %% [markdown]
 # ## 5. 파이프라인 연동
 #
-# `garim_pipeline.py` 의 셀을 모두 실행한 뒤 이 셀을 실행한다.
+# Drive에 분석 파이프라인 파일을 업로드한 뒤 이 셀을 실행한다.
 # 파이프라인이 로드되지 않았으면 dry-run 모드로 동작한다.
 
 # %%
@@ -411,7 +411,8 @@ if not os.path.exists(pipeline_path):
     _PIPELINE_AVAILABLE = False
     log.warning(
         f"{PIPELINE_FILENAME} 없음: {pipeline_path} — "
-        "Drive의 garim_colab 폴더에 garim_pipeline.py를 넣으면 실제 파이프라인으로 실행됩니다. "
+        "Drive의 garim_colab 폴더에 garim_pipeline.py와 "
+        "garim_visual_pii_ocr_pipeline.py를 넣으면 실제 파이프라인으로 실행됩니다. "
         "현재는 dry-run 모드로 실행합니다."
     )
 else:
@@ -441,19 +442,21 @@ else:
 # | phase | stage | total_progress |
 # |---|---|---|
 # | worker | file_download | 0 → 10 |
-# | pipeline | audio_extract | 10 → 20 |
-# | pipeline | stt | 20 → 55 |
-# | pipeline | pii_detect | 55 → 75 |
-# | pipeline | beep_render | 75 → 90 |
+# | pipeline | visual_ocr | 10 → 40 |
+# | pipeline | audio_extract | 40 → 48 |
+# | pipeline | stt | 48 → 68 |
+# | pipeline | pii_detect | 68 → 78 |
+# | pipeline | beep_render | 78 → 90 |
 # | worker | result_upload | 90 → 98 |
 # | worker | completed | 100 |
 
 # %%
 # dry-run 에서 파이프라인 구간만 통과 (result_upload 는 Phase 3 에서 별도 처리)
 _DRY_RUN_STAGES = [
-    ("audio_extract", 20),
-    ("stt",           55),
-    ("pii_detect",    75),
+    ("visual_ocr",    40),
+    ("audio_extract", 48),
+    ("stt",           68),
+    ("pii_detect",    78),
     ("beep_render",   90),
 ]
 
@@ -509,6 +512,7 @@ def run_once() -> bool:
                 job_id=job_id,
                 upload_id=upload_id,
                 file_path=file_path,
+                media_type=job.get("media_type"),
                 progress_fn=report_progress,
                 cancel_fn=check_cancel,
             )
@@ -567,6 +571,35 @@ def run_once() -> bool:
                     log.info(f"beep 결과물 저장 완료: {beep['output_path']}")
                 except Exception as e:
                     log.warning(f"beep 결과물 저장 실패 (무시): {e}")
+
+            visual_ocr = ctx.results.get("visual_ocr", {})
+            visual_metadata = {
+                "scene_count": visual_ocr.get("scene_count", 0),
+                "sampled_frame_count": visual_ocr.get("sampled_frame_count", 0),
+                "ocr_hit_count": visual_ocr.get("ocr_hit_count", 0),
+                "detection_count": visual_ocr.get("detection_count", 0),
+                "review_thumbnail_count": len(visual_ocr.get("review_thumbnails", [])),
+            }
+            for artifact_type, content_type, path_key in (
+                ("visual_ocr_json", "application/json", "json"),
+                ("visual_ocr_csv", "text/csv", "csv"),
+            ):
+                stored_path = visual_ocr.get("result_paths", {}).get(path_key)
+                if not stored_path:
+                    continue
+                try:
+                    fsize = os.path.getsize(stored_path) if os.path.exists(stored_path) else None
+                    submit_artifact(
+                        job_id,
+                        artifact_type,
+                        stored_path,
+                        content_type,
+                        fsize,
+                        visual_metadata,
+                    )
+                    log.info(f"시각 OCR 결과물 저장 완료: {stored_path}")
+                except Exception as e:
+                    log.warning(f"시각 OCR 결과물 저장 실패 (무시): {e}")
 
         report_progress(job_id, "result_upload", 100, 98, "결과 저장 완료")
         hb.update("result_upload", 98)

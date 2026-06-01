@@ -21,7 +21,8 @@
 import subprocess, sys
 subprocess.run(
     [sys.executable, "-m", "pip", "install", "-q",
-     "faster-whisper", "transformers", "accelerate", "pydub"],
+     "faster-whisper", "transformers", "accelerate", "pydub",
+     "paddlepaddle", "paddleocr", "scenedetect[opencv]", "pandas"],
     check=True,
 )
 subprocess.run(["apt-get", "install", "-y", "-q", "ffmpeg"], check=True)
@@ -47,15 +48,17 @@ from difflib import SequenceMatcher
 from typing import Callable
 
 # ===== 여기만 수정 =====
-WHISPER_MODEL_SIZE = "large"   # base / small / medium / large
+WHISPER_MODEL_SIZE = "small"   # base / small / medium / large
 NER_MODEL_NAME     = "YakuzaNeko/kr-dlp-ner-roberta-large"
 AUDIO_DIR          = "/content/garim_audio"
+VISUAL_OCR_DIR     = "/content/garim_visual_pii"
 BEEP_FREQ          = 1000       # Hz
 BEEP_GAIN_DB       = -8        # dB
 PAD_SEC            = 0.08      # 구간 앞뒤 여유
 # ======================
 
 os.makedirs(AUDIO_DIR, exist_ok=True)
+os.makedirs(VISUAL_OCR_DIR, exist_ok=True)
 print(f"Pipeline Config 로드 | 모델: {WHISPER_MODEL_SIZE} | NER: {NER_MODEL_NAME}")
 
 # %% [markdown]
@@ -70,6 +73,7 @@ class PipelineContext:
     job_id: str
     upload_id: str
     file_path: str
+    media_type: str | None = None
     results: dict = field(default_factory=dict)
     progress_fn: Callable | None = None   # report_progress(job_id, stage, s_pct, t_pct, msg)
     cancel_fn:   Callable | None = None   # check_cancel(job_id) -> bool
@@ -238,18 +242,51 @@ print("PII 탐지 헬퍼 로드 완료")
 #
 # | Analyzer | stage | total_progress |
 # |---|---|---|
-# | AudioExtractAnalyzer | audio_extract | 10 → 20 |
-# | STTAnalyzer | stt | 20 → 55 |
-# | PIIDetectAnalyzer | pii_detect | 55 → 75 |
-# | BeepRenderAnalyzer | beep_render | 75 → 90 |
+# | VisualOCRAnalyzer | visual_ocr | 10 → 40 |
+# | AudioExtractAnalyzer | audio_extract | 40 → 48 |
+# | STTAnalyzer | stt | 48 → 68 |
+# | PIIDetectAnalyzer | pii_detect | 68 → 78 |
+# | BeepRenderAnalyzer | beep_render | 78 → 90 |
+
+# %%
+class VisualOCRAnalyzer(Analyzer):
+    """Split video scenes, sample frames, and pass them to PaddleOCR."""
+
+    stage_name  = "visual_ocr"
+    total_start = 10
+    total_end   = 40
+
+    def run(self, input_path: str, ctx: PipelineContext) -> dict:
+        if ctx.media_type and ctx.media_type != "video":
+            ctx.report(self.stage_name, 100, self.total_end, "영상 파일 아님 - 시각 OCR 건너뜀")
+            return {"detection_count": 0, "detections": [], "result_paths": {}, "review_thumbnails": []}
+
+        ctx.report(self.stage_name, 0, self.total_start, "장면 분할 및 시각 OCR 시작")
+        from garim_visual_pii_ocr_pipeline import run_visual_pii_pipeline
+
+        output_dir = os.path.join(VISUAL_OCR_DIR, ctx.upload_id)
+        result = run_visual_pii_pipeline(
+            video_path=input_path,
+            upload_id=ctx.upload_id,
+            output_dir=output_dir,
+        )
+        result["detection_count"] = len(result.get("detections", []))
+        ctx.report(
+            self.stage_name,
+            100,
+            self.total_end,
+            f"시각 OCR 완료 - {result['detection_count']}건",
+        )
+        return result
+
 
 # %%
 class AudioExtractAnalyzer(Analyzer):
     """ffmpeg 로 영상에서 16kHz 모노 WAV 추출 (STT 입력용)"""
 
     stage_name  = "audio_extract"
-    total_start = 10
-    total_end   = 20
+    total_start = 40
+    total_end   = 48
 
     def run(self, input_path: str, ctx: PipelineContext) -> dict:
         ctx.report(self.stage_name, 0, self.total_start, "오디오 추출 시작")
@@ -285,8 +322,8 @@ class STTAnalyzer(Analyzer):
     """faster-whisper 음성 인식 — word timestamps 포함 (PII 탐지에 필요)"""
 
     stage_name  = "stt"
-    total_start = 20
-    total_end   = 55
+    total_start = 48
+    total_end   = 68
 
     def __init__(self):
         self._model = None
@@ -363,8 +400,8 @@ class PIIDetectAnalyzer(Analyzer):
     """
 
     stage_name  = "pii_detect"
-    total_start = 55
-    total_end   = 75
+    total_start = 68
+    total_end   = 78
 
     _BEEP_TYPES = {"name", "phone", "address"}
 
@@ -483,7 +520,7 @@ class BeepRenderAnalyzer(Analyzer):
     """
 
     stage_name  = "beep_render"
-    total_start = 75
+    total_start = 78
     total_end   = 90
 
     def run(self, input_path: str, ctx: PipelineContext) -> dict:
@@ -576,12 +613,18 @@ print("Analyzer 클래스 로드 완료 (AudioExtract / STT / PIIDetect / BeepRe
 # ```
 
 # %%
+VISUAL_OCR_ONLY = os.getenv("GARIM_VISUAL_OCR_ONLY", "").lower() in ("1", "true", "yes")
+
 PIPELINE_REGISTRY: list[Analyzer] = [
-    AudioExtractAnalyzer(),
-    STTAnalyzer(),
-    PIIDetectAnalyzer(),
-    BeepRenderAnalyzer(),
+    VisualOCRAnalyzer(),
 ]
+if not VISUAL_OCR_ONLY:
+    PIPELINE_REGISTRY.extend([
+        AudioExtractAnalyzer(),
+        STTAnalyzer(),
+        PIIDetectAnalyzer(),
+        BeepRenderAnalyzer(),
+    ])
 
 
 def run_pipeline(ctx: PipelineContext) -> dict:
@@ -600,7 +643,10 @@ def run_pipeline(ctx: PipelineContext) -> dict:
         result = analyzer.run(ctx.file_path, ctx)
         ctx.results[analyzer.stage_name] = result
 
-    detection_count = ctx.results.get("pii_detect", {}).get("pii_count", 0)
+    detection_count = (
+        ctx.results.get("pii_detect", {}).get("pii_count", 0)
+        + ctx.results.get("visual_ocr", {}).get("detection_count", 0)
+    )
     return {"detection_count": detection_count, "results": ctx.results}
 
 

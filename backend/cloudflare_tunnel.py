@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 CLOUDFLARED_PATH = str(Path(__file__).parent / "tools" / "cloudflared-windows-amd64.exe")
-LOCAL_URL = "http://localhost:8000"
+LOCAL_URL = "http://localhost:8001"
 
 def start_cloudflare_tunnel():
     cmd = [
