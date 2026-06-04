@@ -6,13 +6,13 @@
 
 ## 사전 준비
 
-| 항목 | 버전/조건 |
-|---|---|
-| Docker Desktop | 실행 중 |
-| Python 3.10+ | 백엔드 가상환경 |
-| Node.js 18+ | 프론트 dev server |
+| 항목              | 버전/조건                    |
+| ----------------- | ---------------------------- |
+| Docker Desktop    | 실행 중                      |
+| Python 3.10+      | 백엔드 가상환경              |
+| Node.js 18+       | 프론트 dev server            |
 | Cloudflare Tunnel | `cloudflared` 실행 가능 환경 |
-| Google Colab | GPU 런타임 권장 (STT 속도) |
+| Google Colab      | GPU 런타임 권장 (STT 속도)   |
 
 ---
 
@@ -52,7 +52,7 @@ REDIS_URL=redis://localhost:6379/0
 
 # 백엔드 서버
 HOST=0.0.0.0
-PORT=8001
+PORT=8000
 
 # Colab Worker 인증 시크릿 — Worker 와 반드시 동일한 값 사용
 WORKER_SECRET=여기에_긴_임의_문자열_입력
@@ -73,18 +73,18 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```bash
 cd backend
 pip install -r requirements.txt   # 최초 1회
-uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 서버 정상 확인:
 
 ```
-http://localhost:8001/docs
+http://localhost:8000/docs
 ```
 
 ---
 
-## 4단계: Cloudflare Tunnel로 8001 포트 공개
+## 4단계: Cloudflare Tunnel로 8000 포트 공개
 
 **방법 A — 백엔드 스크립트 사용 (권장)**
 
@@ -103,7 +103,7 @@ Colab garim_colab_worker.py 의 BACKEND_URL 에 위 URL 을 입력하세요.
 **방법 B — cloudflared 직접 실행**
 
 ```bash
-cloudflared tunnel --url http://localhost:8001
+cloudflared tunnel --url http://localhost:8000
 ```
 
 > Cloudflare Tunnel 세션이 종료되면 URL이 바뀐다. 새 URL을 Colab 에 다시 입력해야 한다.
@@ -183,11 +183,11 @@ Colab 콘솔에서도 아래와 같은 로그가 출력되어야 한다:
 
 ### 로그
 
-| 위치 | 확인 방법 |
-|---|---|
-| 백엔드 콘솔 | `uvicorn` 터미널 — HTTP 요청/응답, 오류 스택 |
-| Colab 셀 출력 | `[ERROR]` 또는 `[WARNING]` 라인 |
-| Cloudflare 터미널 로그 | 터널 URL 출력 및 연결 로그 |
+| 위치                   | 확인 방법                                    |
+| ---------------------- | -------------------------------------------- |
+| 백엔드 콘솔            | `uvicorn` 터미널 — HTTP 요청/응답, 오류 스택 |
+| Colab 셀 출력          | `[ERROR]` 또는 `[WARNING]` 라인              |
+| Cloudflare 터미널 로그 | 터널 URL 출력 및 연결 로그                   |
 
 ### DB 테이블
 
@@ -224,10 +224,10 @@ WHERE job_id = '<job_id>';
 
 ### 자주 발생하는 오류
 
-| 오류 | 원인 | 해결 |
-|---|---|---|
-| `401 Unauthorized` | WORKER_SECRET 불일치 | 백엔드 `.env` 와 Colab Config 셀의 `WORKER_SECRET` 비교 |
-| `Connection refused` | Cloudflare Tunnel URL 만료 또는 백엔드 미실행 | Cloudflare Tunnel URL 재발급 후 Colab Config 셀 재실행 |
-| `파일이 아직 준비되지 않았습니다` | 업로드 status 가 `uploaded` 아님 | `uploads` 테이블 status 컬럼 확인 |
-| `대기 중인 작업 없음` | job이 큐에 없음 | `analysis_jobs` 테이블 status=`queued` 확인 |
-| STT 매우 느림 | Colab CPU 런타임 | GPU 런타임으로 변경, 또는 `WHISPER_MODEL_SIZE=base` 로 축소 |
+| 오류                              | 원인                                          | 해결                                                        |
+| --------------------------------- | --------------------------------------------- | ----------------------------------------------------------- |
+| `401 Unauthorized`                | WORKER_SECRET 불일치                          | 백엔드 `.env` 와 Colab Config 셀의 `WORKER_SECRET` 비교     |
+| `Connection refused`              | Cloudflare Tunnel URL 만료 또는 백엔드 미실행 | Cloudflare Tunnel URL 재발급 후 Colab Config 셀 재실행      |
+| `파일이 아직 준비되지 않았습니다` | 업로드 status 가 `uploaded` 아님              | `uploads` 테이블 status 컬럼 확인                           |
+| `대기 중인 작업 없음`             | job이 큐에 없음                               | `analysis_jobs` 테이블 status=`queued` 확인                 |
+| STT 매우 느림                     | Colab CPU 런타임                              | GPU 런타임으로 변경, 또는 `WHISPER_MODEL_SIZE=base` 로 축소 |

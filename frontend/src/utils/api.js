@@ -1,4 +1,4 @@
-const DEFAULT_API_PORT = "8001";
+const DEFAULT_API_PORT = "8000";
 
 export function getApiBaseUrl() {
   if (import.meta.env.VITE_API_BASE_URL) {
@@ -54,9 +54,9 @@ export async function updateUserSettings(settings) {
 
 export async function getAdminUsers(params = {}) {
   const query = new URLSearchParams();
-  if (params.page)   query.set("page",   params.page);
-  if (params.limit)  query.set("limit",  params.limit);
-  if (params.role)   query.set("role",   params.role);
+  if (params.page) query.set("page", params.page);
+  if (params.limit) query.set("limit", params.limit);
+  if (params.role) query.set("role", params.role);
   if (params.status) query.set("status", params.status);
   const qs = query.toString();
   return requestJson(`/admin/users${qs ? "?" + qs : ""}`);
@@ -104,7 +104,12 @@ export async function initUpload(meta) {
   });
 }
 
-export async function uploadChunk(uploadId, chunkIndex, blob, chunkHash = null) {
+export async function uploadChunk(
+  uploadId,
+  chunkIndex,
+  blob,
+  chunkHash = null,
+) {
   const formData = new FormData();
   formData.append("file", blob);
 
@@ -118,13 +123,15 @@ export async function uploadChunk(uploadId, chunkIndex, blob, chunkHash = null) 
       credentials: "include",
       headers,
       body: formData,
-    }
+    },
   );
 
   const body = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(body.message || `chunk ${chunkIndex} 업로드에 실패했습니다.`);
+    throw new Error(
+      body.message || `chunk ${chunkIndex} 업로드에 실패했습니다.`,
+    );
   }
 
   return body;

@@ -33,6 +33,7 @@
    ex) Colab BACKEND_URL 에 아래 주소를 넣으세요:
    https://href-dui-marketplace-facilities.trycloudflare.com
 4. BACKEND_URL 부분에 복사한 주소 붙여넣기
+5. .env 파일 내 WORKER_SECRET 키 붙여넣기
 
 ## 깃 사용법
 

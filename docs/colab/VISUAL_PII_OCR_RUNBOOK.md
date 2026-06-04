@@ -21,13 +21,13 @@
 
 현재 기본 샘플링 값:
 
-| 구분 | 기본값 |
-|---|---:|
-| 일반 구간 | `0.5 fps` |
-| 장면 경계 앞뒤 `0.5초` | `2 fps` |
-| 모션 또는 텍스트 집중 구간 | `4 fps` |
-| 모션 후보 검사 | `1 fps` |
-| OCR 인식 배치 크기 | `16` |
+| 구분                       |    기본값 |
+| -------------------------- | --------: |
+| 일반 구간                  | `0.5 fps` |
+| 장면 경계 앞뒤 `0.5초`     |   `2 fps` |
+| 모션 또는 텍스트 집중 구간 |   `4 fps` |
+| 모션 후보 검사             |   `1 fps` |
+| OCR 인식 배치 크기         |      `16` |
 
 처음 테스트할 때는 이 값을 유지한다. 빠르게 지나가는 텍스트를 놓치는 경우에만 FPS를
 단계적으로 높인다.
@@ -112,12 +112,12 @@ review_thumbnails/
 
 결과 요약에서 아래 값을 확인한다.
 
-| 항목 | 의미 |
-|---|---|
-| `scene_count` | 탐지된 장면 수 |
-| `sampled_frame_count` | OCR에 전달한 프레임 수 |
-| `ocr_hit_count` | OCR로 읽은 문자열 수 |
-| `detection_count` | 개인정보 패턴으로 분류된 탐지 수 |
+| 항목                  | 의미                             |
+| --------------------- | -------------------------------- |
+| `scene_count`         | 탐지된 장면 수                   |
+| `sampled_frame_count` | OCR에 전달한 프레임 수           |
+| `ocr_hit_count`       | OCR로 읽은 문자열 수             |
+| `detection_count`     | 개인정보 패턴으로 분류된 탐지 수 |
 
 판단 기준:
 
@@ -223,7 +223,7 @@ docker ps
 
 ```powershell
 cd Human_Final_PJ\backend
-uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 팀원 PC의 `.env` 설정을 사용한다. `.env`와 실제 secret은 Git에 올리지 않는다.
