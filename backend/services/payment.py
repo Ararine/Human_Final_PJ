@@ -383,3 +383,56 @@ async def _confirm_toss_payment(
             return json.loads(error_body)
         except json.JSONDecodeError:
             raise Exception(error_body) from exc
+
+def get_my_payment_info(db: Session, user_id: str):
+    # 1. 유저의 현재 활성화된 구독 플랜 조회
+    plan_row = db.execute(
+        text("""
+            SELECT pl.plan_name, pl.plan_code
+            FROM subscriptions s
+            JOIN plans pl ON s.plan_id = pl.plan_id
+            WHERE s.user_id = :user_id AND s.status = 'active'
+            ORDER BY s.updated_at DESC
+            LIMIT 1
+        """),
+        {"user_id": user_id}
+    ).fetchone()
+
+    plan_code = "free"
+    if plan_row:
+        plan_code = plan_row._mapping["plan_code"].lower()
+
+    # 2. 유저의 가장 최근 성공 결제 내역 조회 (영수증 모달용)
+    payment_row = db.execute(
+        text("""
+            SELECT 
+                payment_id,
+                order_name,
+                payment_method,
+                total_amount,
+                approved_at,
+                receipt_url
+            FROM payments
+            WHERE user_id = :user_id AND status = 'success'
+            ORDER BY approved_at DESC
+            LIMIT 1
+        """),
+        {"user_id": user_id}
+    ).fetchone()
+
+    payment_info = None
+    if payment_row:
+        p = payment_row._mapping
+        payment_info = {
+            "orderId": str(p["payment_id"]),
+            "orderName": p["order_name"],
+            "method": p["payment_method"],
+            "amount": p["total_amount"],
+            "approvedAt": p["approved_at"].isoformat() if p["approved_at"] else None,
+            "receiptUrl": p["receipt_url"]
+        }
+
+    return {
+        "is_premium": plan_code != "free",
+        "payment_info": payment_info
+    }

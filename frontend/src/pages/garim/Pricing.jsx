@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { useAuthStatus } from "../../hooks/useAuthStatus";
@@ -12,9 +12,24 @@ const PLAN_KEYS = ["free", "pro", "studio"];
 const DEFAULT_POLICY = {
   file_processing: {
     plans: {
-      free: { fileSizeLimit: 50, maxJobs: 3, monthlyQuota: 5, resultRetention: 3 },
-      pro: { fileSizeLimit: 500, maxJobs: 10, monthlyQuota: 50, resultRetention: 7 },
-      studio: { fileSizeLimit: 2048, maxJobs: 30, monthlyQuota: null, resultRetention: 30 },
+      free: {
+        fileSizeLimit: 50,
+        maxJobs: 3,
+        monthlyQuota: 5,
+        resultRetention: 3,
+      },
+      pro: {
+        fileSizeLimit: 500,
+        maxJobs: 10,
+        monthlyQuota: 50,
+        resultRetention: 7,
+      },
+      studio: {
+        fileSizeLimit: 2048,
+        maxJobs: 30,
+        monthlyQuota: null,
+        resultRetention: 30,
+      },
     },
     allowedFormats: ["jpg", "jpeg", "png", "webp", "mp4", "mov"],
   },
@@ -90,18 +105,12 @@ function mergePolicy(base, incoming) {
     payment: {
       ...base.payment,
       ...(incoming.payment || {}),
-      plans: {
-        ...base.payment.plans,
-        ...(incoming.payment?.plans || {}),
-      },
+      plans: { ...base.payment.plans, ...(incoming.payment?.plans || {}) },
     },
     retention: {
       ...base.retention,
       ...(incoming.retention || {}),
-      plans: {
-        ...base.retention.plans,
-        ...(incoming.retention?.plans || {}),
-      },
+      plans: { ...base.retention.plans, ...(incoming.retention?.plans || {}) },
     },
   };
 }
@@ -112,9 +121,6 @@ export default function Pricing() {
   const navigate = useNavigate();
   const startHref = isAuthed ? "/upload" : "/login";
   const [policy, setPolicy] = useState(DEFAULT_POLICY);
-  const [selectedPlan, setSelectedPlan] = useState(null);
-  const paymentFrameRef = useRef(null);
-  const [paymentFrameHeight, setPaymentFrameHeight] = useState(820);
 
   useEffect(() => {
     let cancelled = false;
@@ -140,9 +146,12 @@ export default function Pricing() {
       PLAN_KEYS.map((key) => ({
         key,
         ...PLAN_META[key],
-        file: policy.file_processing.plans[key] || DEFAULT_POLICY.file_processing.plans[key],
+        file:
+          policy.file_processing.plans[key] ||
+          DEFAULT_POLICY.file_processing.plans[key],
         payment: policy.payment.plans[key] || DEFAULT_POLICY.payment.plans[key],
-        retention: policy.retention.plans[key] || DEFAULT_POLICY.retention.plans[key],
+        retention:
+          policy.retention.plans[key] || DEFAULT_POLICY.retention.plans[key],
       })),
     [policy],
   );
@@ -156,52 +165,21 @@ export default function Pricing() {
       navigate("/login");
       return;
     }
-
     const params = new URLSearchParams({
       plan: plan.key,
       price: String(plan.payment.price ?? ""),
       credits: String(plan.payment.credits ?? ""),
     });
-
     navigate(`/payment?${params.toString()}`);
   }
-
-  function resizePaymentFrame() {
-    const frame = paymentFrameRef.current;
-    if (!frame?.contentWindow?.document) return;
-
-    const doc = frame.contentWindow.document;
-    const shell = doc.querySelector(".pay-shell");
-    const contentHeight = shell 
-      ? shell.offsetHeight 
-      : Math.max(doc.documentElement?.scrollHeight || 0, doc.body?.scrollHeight || 0);
-
-    const viewportLimit = Math.max(360, window.innerHeight - 88);
-    const nextHeight = Math.min(Math.max(contentHeight, 820), viewportLimit);
-
-    setPaymentFrameHeight(nextHeight);
-  }
-
-  useEffect(() => {
-    if (!selectedPlan) return undefined;
-
-    const handleResize = () => resizePaymentFrame();
-    window.addEventListener("resize", handleResize);
-    const timer = window.setTimeout(handleResize, 80);
-
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      window.clearTimeout(timer);
-    };
-  }, [selectedPlan]);
 
   return (
     <GarimPage bodyClass="page-public" screenLabel="02 Pricing">
       <section className="page-head">
         <h1>필요한 만큼 선택하는 요금제</h1>
         <p>
-          관리자 정책에서 설정한 크레딧, 금액, 파일 처리 한도, 데이터 보존 기간을
-          기준으로 플랜 정보를 표시합니다.
+          관리자 정책에서 설정한 크레딧, 금액, 파일 처리 한도, 데이터 보존
+          기간을 기준으로 플랜 정보를 표시합니다.
         </p>
         <div className="billing-toggle">
           <button className="active">월 결제</button>
@@ -231,16 +209,41 @@ export default function Pricing() {
                 {plan.description}
               </p>
               <ul className="price-card__feats">
-                <li><span className="material-icons">check</span>크레딧 {formatQuota(plan.payment.credits, "개")}</li>
-                <li><span className="material-icons">check</span>월 처리 한도 {formatQuota(plan.file.monthlyQuota)}</li>
-                <li><span className="material-icons">check</span>최대 파일 크기 {formatFileSize(plan.file.fileSizeLimit)}</li>
-                <li><span className="material-icons">check</span>동시 처리 최대 {formatQuota(plan.file.maxJobs)}</li>
-                <li><span className="material-icons">check</span>결과 파일 {formatQuota(plan.file.resultRetention, "일")} 보관</li>
-                <li><span className="material-icons">check</span>원본 파일 {formatQuota(plan.retention.autoDeleteOriginalHours, "시간")} 후 삭제</li>
-                <li><span className="material-icons">check</span>메타데이터 {formatQuota(plan.retention.metadataRetentionDays, "일")} 보존</li>
+                <li>
+                  <span className="material-icons">check</span>크레딧{" "}
+                  {formatQuota(plan.payment.credits, "개")}
+                </li>
+                <li>
+                  <span className="material-icons">check</span>월 처리 한도{" "}
+                  {formatQuota(plan.file.monthlyQuota)}
+                </li>
+                <li>
+                  <span className="material-icons">check</span>최대 파일 크기{" "}
+                  {formatFileSize(plan.file.fileSizeLimit)}
+                </li>
+                <li>
+                  <span className="material-icons">check</span>동시 처리 최대{" "}
+                  {formatQuota(plan.file.maxJobs)}
+                </li>
+                <li>
+                  <span className="material-icons">check</span>결과 파일{" "}
+                  {formatQuota(plan.file.resultRetention, "일")} 보관
+                </li>
+                <li>
+                  <span className="material-icons">check</span>원본 파일{" "}
+                  {formatQuota(plan.retention.autoDeleteOriginalHours, "시간")}{" "}
+                  후 삭제
+                </li>
+                <li>
+                  <span className="material-icons">check</span>메타데이터{" "}
+                  {formatQuota(plan.retention.metadataRetentionDays, "일")} 보존
+                </li>
               </ul>
               {plan.key === "free" ? (
-                <a href={startHref} className="mui-btn mui-btn--contained mui-btn--block">
+                <a
+                  href={startHref}
+                  className="mui-btn mui-btn--contained mui-btn--block"
+                >
                   {plan.cta}
                 </a>
               ) : (
@@ -254,6 +257,199 @@ export default function Pricing() {
               )}
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* 크레딧 추가 구매 섹션 */}
+      <section className="credit-section" style={{ padding: "0 32px 64px" }}>
+        <div style={{ textAlign: "center", marginBottom: "40px" }}>
+          <h2 style={{ fontSize: "28px", fontWeight: "600" }}>크레딧 충전</h2>
+          <p style={{ color: "var(--fg-2)", marginTop: "8px" }}>
+            플랜 변경 없이 부족한 크레딧만 필요한 만큼 충전하세요.
+          </p>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            gap: "24px",
+            flexWrap: "wrap",
+          }}
+        >
+          {/* 100 크레딧 */}
+          <div
+            style={{
+              width: "320px",
+              textAlign: "center",
+              border: "2px solid #1976d2",
+              padding: "32px 24px",
+              borderRadius: "16px",
+              background: "#fff",
+              position: "relative",
+              boxShadow: "0 8px 24px rgba(25,118,210,0.12)",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                top: "-14px",
+                left: "50%",
+                transform: "translateX(-50%)",
+                background: "#1976d2",
+                color: "#fff",
+                padding: "6px 16px",
+                borderRadius: "20px",
+                fontSize: "12px",
+                fontWeight: "bold",
+                letterSpacing: "0.5px",
+              }}
+            >
+              가장 인기
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: "6px",
+                marginBottom: "8px",
+              }}
+            >
+              <span
+                className="material-icons"
+                style={{ color: "#1976d2", fontSize: "24px" }}
+              >
+                toll
+              </span>
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: "20px",
+                  color: "#1976d2",
+                  fontWeight: "600",
+                }}
+              >
+                100 크레딧
+              </h3>
+            </div>
+            <div
+              style={{ fontSize: "32px", fontWeight: "bold", margin: "16px 0" }}
+            >
+              5,000
+              <span
+                style={{
+                  fontSize: "16px",
+                  color: "var(--fg-2)",
+                  fontWeight: "normal",
+                }}
+              >
+                원
+              </span>
+            </div>
+            <p
+              style={{
+                color: "var(--fg-2)",
+                fontSize: "13px",
+                marginBottom: "24px",
+                flex: "1",
+              }}
+            >
+              가벼운 단건 처리 및 테스트에 적합한 기본 크레딧 패키지입니다.
+            </p>
+            <button
+              onClick={() =>
+                handlePayClick({
+                  key: "credit_100",
+                  payment: { price: 5000, credits: 100 },
+                })
+              }
+              className="mui-btn mui-btn--contained mui-btn--block"
+              style={{ padding: "12px" }}
+            >
+              충전하기
+            </button>
+          </div>
+
+          {/* 500 크레딧 */}
+          <div
+            style={{
+              width: "320px",
+              textAlign: "center",
+              border: "1px solid var(--mui-divider)",
+              padding: "32px 24px",
+              borderRadius: "16px",
+              background: "#fff",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: "6px",
+                marginBottom: "8px",
+              }}
+            >
+              <span
+                className="material-icons"
+                style={{ color: "var(--fg-2)", fontSize: "24px" }}
+              >
+                toll
+              </span>
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: "20px",
+                  color: "var(--fg-1)",
+                  fontWeight: "600",
+                }}
+              >
+                500 크레딧
+              </h3>
+            </div>
+            <div
+              style={{ fontSize: "32px", fontWeight: "bold", margin: "16px 0" }}
+            >
+              20,000
+              <span
+                style={{
+                  fontSize: "16px",
+                  color: "var(--fg-2)",
+                  fontWeight: "normal",
+                }}
+              >
+                원
+              </span>
+            </div>
+            <p
+              style={{
+                color: "var(--fg-2)",
+                fontSize: "13px",
+                marginBottom: "24px",
+                flex: "1",
+              }}
+            >
+              대량 처리를 위한 넉넉한 크레딧 팩입니다. <br />
+              (20% 할인 효과)
+            </p>
+            <button
+              onClick={() =>
+                handlePayClick({
+                  key: "credit_500",
+                  payment: { price: 20000, credits: 500 },
+                })
+              }
+              className="mui-btn mui-btn--outlined mui-btn--block"
+              style={{ padding: "12px" }}
+            >
+              충전하기
+            </button>
+          </div>
         </div>
       </section>
 
@@ -277,77 +473,77 @@ export default function Pricing() {
             </tr>
           </thead>
           <tbody>
-            <tr className="row-head"><td colSpan="4">결제 정책</td></tr>
+            <tr className="row-head">
+              <td colSpan="4">결제 정책</td>
+            </tr>
             <tr>
               <td>제공 크레딧</td>
-              {plans.map((plan) => <td key={plan.key}>{formatQuota(plan.payment.credits, "개")}</td>)}
+              {plans.map((plan) => (
+                <td key={plan.key}>
+                  {formatQuota(plan.payment.credits, "개")}
+                </td>
+              ))}
             </tr>
             <tr>
               <td>금액</td>
-              {plans.map((plan) => <td key={plan.key}>{formatPrice(plan.payment.price)}원</td>)}
+              {plans.map((plan) => (
+                <td key={plan.key}>{formatPrice(plan.payment.price)}원</td>
+              ))}
             </tr>
-            <tr className="row-head"><td colSpan="4">파일 처리 정책</td></tr>
+            <tr className="row-head">
+              <td colSpan="4">파일 처리 정책</td>
+            </tr>
             <tr>
               <td>월 처리 한도</td>
-              {plans.map((plan) => <td key={plan.key}>{formatQuota(plan.file.monthlyQuota)}</td>)}
+              {plans.map((plan) => (
+                <td key={plan.key}>{formatQuota(plan.file.monthlyQuota)}</td>
+              ))}
             </tr>
             <tr>
               <td>동시 처리 최대 건수</td>
-              {plans.map((plan) => <td key={plan.key}>{formatQuota(plan.file.maxJobs)}</td>)}
+              {plans.map((plan) => (
+                <td key={plan.key}>{formatQuota(plan.file.maxJobs)}</td>
+              ))}
             </tr>
             <tr>
               <td>최대 파일 크기</td>
-              {plans.map((plan) => <td key={plan.key}>{formatFileSize(plan.file.fileSizeLimit)}</td>)}
+              {plans.map((plan) => (
+                <td key={plan.key}>
+                  {formatFileSize(plan.file.fileSizeLimit)}
+                </td>
+              ))}
             </tr>
             <tr>
               <td>결과 파일 보관 기간</td>
-              {plans.map((plan) => <td key={plan.key}>{formatQuota(plan.file.resultRetention, "일")}</td>)}
+              {plans.map((plan) => (
+                <td key={plan.key}>
+                  {formatQuota(plan.file.resultRetention, "일")}
+                </td>
+              ))}
             </tr>
-            <tr className="row-head"><td colSpan="4">데이터 보존 정책</td></tr>
+            <tr className="row-head">
+              <td colSpan="4">데이터 보존 정책</td>
+            </tr>
             <tr>
               <td>원본 파일 자동 삭제</td>
               {plans.map((plan) => (
-                <td key={plan.key}>처리 후 {formatQuota(plan.retention.autoDeleteOriginalHours, "시간")}</td>
+                <td key={plan.key}>
+                  처리 후{" "}
+                  {formatQuota(plan.retention.autoDeleteOriginalHours, "시간")}
+                </td>
               ))}
             </tr>
             <tr>
               <td>처리 메타데이터 보존</td>
-              {plans.map((plan) => <td key={plan.key}>{formatQuota(plan.retention.metadataRetentionDays, "일")}</td>)}
+              {plans.map((plan) => (
+                <td key={plan.key}>
+                  {formatQuota(plan.retention.metadataRetentionDays, "일")}
+                </td>
+              ))}
             </tr>
           </tbody>
         </table>
       </section>
-
-      {selectedPlan && (
-        <div className="modal-backdrop" onClick={closePaymentPopup}>
-          <div
-            className="modal payment-modal"
-            role="dialog"
-            aria-modal="true"
-            style={{ "--payment-frame-height": `${paymentFrameHeight}px` }}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="payment-modal__head">
-              <strong>{selectedPlan.name} 결제</strong>
-              <button
-                type="button"
-                className="gh__icon"
-                aria-label="결제 팝업 닫기"
-                onClick={closePaymentPopup}
-              >
-                <span className="material-icons">close</span>
-              </button>
-            </div>
-            <iframe
-              ref={paymentFrameRef}
-              className="payment-modal__frame"
-              title={`${selectedPlan.name} 결제 페이지`}
-              onLoad={resizePaymentFrame}
-              src={`/payment?embed=1&plan=${selectedPlan.key}&price=${selectedPlan.payment.price ?? ""}&credits=${selectedPlan.payment.credits ?? ""}`}
-            />
-          </div>
-        </div>
-      )}
     </GarimPage>
   );
 }

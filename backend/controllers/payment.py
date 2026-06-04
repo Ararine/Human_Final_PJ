@@ -59,3 +59,16 @@ async def confirm_payment(
             status_code=500,
             detail=str(e)
         )
+
+def get_my_payment_info(current_user: dict, db: Session):
+    try:
+        # services/payment.py의 함수 호출
+        return payment.get_my_payment_info(
+            db=db,
+            user_id=current_user["id"]
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )

@@ -20,8 +20,17 @@ const PLAN_PAYMENT = {
     defaultCredits: 500,
     defaultAmount: 49500,
   },
+  credit_100: {
+    label: "100 Credits",
+    defaultCredits: 100,
+    defaultAmount: 5000,
+  },
+  credit_500: {
+    label: "500 Credits",
+    defaultCredits: 500,
+    defaultAmount: 20000,
+  },
 };
-
 function numberFromQuery(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -37,8 +46,14 @@ export default function Payment() {
   const planKey = (searchParams.get("plan") || "pro").toLowerCase();
   const isEmbed = searchParams.get("embed") === "1";
   const basePlan = PLAN_PAYMENT[planKey] || PLAN_PAYMENT.pro;
-  const credits = numberFromQuery(searchParams.get("credits"), basePlan.defaultCredits);
-  const amount = numberFromQuery(searchParams.get("price"), basePlan.defaultAmount);
+  const credits = numberFromQuery(
+    searchParams.get("credits"),
+    basePlan.defaultCredits,
+  );
+  const amount = numberFromQuery(
+    searchParams.get("price"),
+    basePlan.defaultAmount,
+  );
   const plan = {
     label: basePlan.label,
     itemName: `${basePlan.label} 플랜`,
@@ -90,7 +105,9 @@ export default function Payment() {
 
         <div className="summary">
           <div className="row">
-            <span>{plan.itemName} ({plan.description})</span>
+            <span>
+              {plan.itemName} ({plan.description})
+            </span>
             <span className="v">{formatPrice(plan.amount)}원</span>
           </div>
 
@@ -103,12 +120,16 @@ export default function Payment() {
         <div className="pay-disabled">
           <div className="pay-visual" aria-hidden="true">
             <span className="material-icons pay-visual__card">credit_card</span>
-            <span className="material-icons pay-visual__shield">verified_user</span>
+            <span className="material-icons pay-visual__shield">
+              verified_user
+            </span>
           </div>
 
           <h2>테스트 결제</h2>
 
-          <p className="pay-guide">결제 버튼을 누르면 백엔드 임시 주문 생성 후 Toss 결제창이 열립니다.</p>
+          <p className="pay-guide">
+            결제 버튼을 누르면 백엔드 임시 주문 생성 후 Toss 결제창이 열립니다.
+          </p>
 
           <button
             type="button"
@@ -117,9 +138,7 @@ export default function Payment() {
             disabled={isSubmitting}
           >
             {isSubmitting ? "주문 생성 중" : "결제하기"}
-            <span className="material-icons">
-              arrow_forward
-            </span>
+            <span className="material-icons">arrow_forward</span>
           </button>
         </div>
 

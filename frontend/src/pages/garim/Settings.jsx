@@ -7,6 +7,7 @@ import {
   logout as requestLogout,
   updateUserSettings,
   deleteAccount,
+  getMyPaymentInfo, // 백엔드 결제 조회 API 함수 임포트
 } from "../../utils/api";
 import "../../css/garim-pages/Settings.css";
 
@@ -17,6 +18,40 @@ const DEFAULT_SETTINGS = {
   browser_notification: true,
   data_usage_consent: true,
 };
+
+// --- 한국 시간(KST) 변환 유틸리티 함수 ---
+function formatToKST(dateString, isDateOnly = false) {
+  if (!dateString) return "-";
+
+  // 백엔드에서 온 데이터에 타임존 표시(Z나 +)가 없다면 UTC로 간주하여 'Z'를 붙여줍니다.
+  let safeString = dateString;
+  if (!safeString.includes("Z") && !safeString.includes("+")) {
+    safeString += "Z";
+  }
+
+  const date = new Date(safeString);
+
+  if (isDateOnly) {
+    return new Intl.DateTimeFormat("ko-KR", {
+      timeZone: "Asia/Seoul",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(date);
+  }
+
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+// ----------------------------------------
 
 export default function Settings() {
   useDocumentTitle("프로필·환경 설정 · Garim");
@@ -31,6 +66,12 @@ export default function Settings() {
   const [savingField, setSavingField] = useState("");
   const userEmail = user?.email || "";
 
+  // 유료 결제 내역 및 모달 상태
+  const [paymentHistory, setPaymentHistory] = useState([]);
+  const [planInfo, setPlanInfo] = useState({ name: "무료 플랜", date: null });
+  const [isPremium, setIsPremium] = useState(false);
+  const [selectedReceipt, setSelectedReceipt] = useState(null);
+
   useEffect(() => {
     const syncActiveSection = () => {
       setActiveSection(window.location.hash.replace("#", "") || "profile");
@@ -44,6 +85,7 @@ export default function Settings() {
   useEffect(() => {
     let isMounted = true;
 
+    // 설정 정보 가져오기
     getUserSettings()
       .then((result) => {
         if (!isMounted) return;
@@ -57,6 +99,21 @@ export default function Settings() {
         console.error("Failed to load user settings", error);
       });
 
+    // 백엔드 API로부터 플랜 및 결제 내역 리스트 조회
+    getMyPaymentInfo()
+      .then((data) => {
+        if (!isMounted) return;
+        if (data) {
+          setIsPremium(data.is_premium);
+          setPlanInfo({
+            name: data.plan_name || "무료 플랜",
+            date: data.plan_date,
+          });
+          setPaymentHistory(data.payment_history || []);
+        }
+      })
+      .catch((error) => console.error("결제 정보 로드 실패", error));
+
     return () => {
       isMounted = false;
     };
@@ -68,12 +125,13 @@ export default function Settings() {
   const handleNavClick = (e, section) => {
     e.preventDefault();
     setActiveSection(section);
-    document.getElementById(section)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document
+      .getElementById(section)
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const handleLogout = async () => {
     if (isLoggingOut) return;
-
     try {
       setIsLoggingOut(true);
       await requestLogout();
@@ -86,7 +144,6 @@ export default function Settings() {
 
   const handleDeleteAccount = async () => {
     if (isDeletingAccount) return;
-
     try {
       setIsDeletingAccount(true);
       await deleteAccount();
@@ -109,16 +166,10 @@ export default function Settings() {
 
   const handleToggleSetting = async (field) => {
     if (savingField) return;
-
-    const nextSettings = {
-      ...settings,
-      [field]: !settings[field],
-    };
+    const nextSettings = { ...settings, [field]: !settings[field] };
     const previousSettings = settings;
-
     setSettings(nextSettings);
     setSavingField(field);
-
     try {
       const result = await updateUserSettings(nextSettings);
       setSettings({
@@ -160,6 +211,14 @@ export default function Settings() {
           >
             <span className="material-icons">person</span>
             프로필
+          </a>
+          <a
+            href="#plan"
+            className={getNavClassName("plan")}
+            onClick={(e) => handleNavClick(e, "plan")}
+          >
+            <span className="material-icons">card_membership</span>
+            플랜
           </a>
           <a
             href="#notif"
@@ -219,16 +278,169 @@ export default function Settings() {
               <label>이메일</label>
               <input value={userEmail} readOnly />
             </div>
-            {/* <div className="set-field">
-              <label>
-                표시명 (닉네임)
-              </label>
-              <input value="민지" />
-              <div className="helper">
-                선택 항목. 처리 이력·SNS 진단 결과 등에 표시됩니다.
-              </div>
-            </div> */}
           </div>
+
+          <div className="set-section" id="plan">
+            <h3>플랜</h3>
+            <p className="sub">
+              현재 이용 중인 요금제와 결제 내역을 확인합니다.
+            </p>
+
+            {/* 현재 이용 중인 플랜 박스 */}
+            <div
+              style={{
+                marginTop: "24px",
+                padding: "16px",
+                border: "1px solid var(--mui-divider)",
+                borderRadius: "8px",
+                background: isPremium ? "#fafafa" : "#fff",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <div>
+                  <strong
+                    style={{
+                      fontSize: "16px",
+                      color: isPremium ? "#1976d2" : "inherit",
+                    }}
+                  >
+                    {/* 크레딧 글자 필터링 부분 */}
+                    {planInfo.name.includes("크레딧")
+                      ? paymentHistory.find(
+                          (pay) => !pay.orderName.includes("크레딧"),
+                        )?.orderName || "무료 플랜"
+                      : planInfo.name}
+                  </strong>
+                  <span
+                    style={{
+                      marginLeft: "8px",
+                      fontSize: "13px",
+                      color: "var(--fg-2)",
+                    }}
+                  >
+                    사용 중
+                  </span>
+
+                  {planInfo.date && (
+                    <div
+                      style={{
+                        fontSize: "13px",
+                        color: "var(--fg-3)",
+                        marginTop: "6px",
+                      }}
+                    >
+                      구독 시작일: {formatToKST(planInfo.date, true)}
+                    </div>
+                  )}
+                </div>
+                {isPremium ? (
+                  <span className="mui-chip mui-chip--soft-success">
+                    Active
+                  </span>
+                ) : (
+                  <a
+                    href="/pricing"
+                    className="mui-btn mui-btn--contained mui-btn--sm"
+                  >
+                    업그레이드
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {/* 결제 내역 박스 */}
+            <div style={{ marginTop: "32px" }}>
+              <h4 style={{ fontSize: "15px", marginBottom: "12px" }}>
+                결제 내역
+              </h4>
+              <div
+                style={{
+                  border: "1px solid var(--mui-divider)",
+                  borderRadius: "8px",
+                  padding: "0 16px",
+                }}
+              >
+                {paymentHistory.length > 0 ? (
+                  paymentHistory.map((pay, index) => (
+                    <div
+                      key={pay.orderId}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "16px 0",
+                        borderBottom:
+                          index < paymentHistory.length - 1
+                            ? "1px dashed var(--mui-divider)"
+                            : "none",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          flex: 1,
+                        }}
+                      >
+                        <div
+                          style={{
+                            minWidth: "120px",
+                            fontWeight: "500",
+                            fontSize: "14px",
+                          }}
+                        >
+                          {pay.orderName}
+                        </div>
+                        <div
+                          style={{
+                            flex: 1,
+                            borderBottom: "1px dotted #ccc",
+                            margin: "0 16px",
+                            transform: "translateY(4px)",
+                          }}
+                        ></div>
+                        <div
+                          style={{
+                            color: "var(--fg-3)",
+                            fontSize: "13px",
+                            minWidth: "90px",
+                            textAlign: "right",
+                            marginRight: "16px",
+                          }}
+                        >
+                          {formatToKST(pay.approvedAt, true)}
+                        </div>
+                      </div>
+                      <button
+                        className="mui-btn mui-btn--outlined mui-btn--sm"
+                        onClick={() => setSelectedReceipt(pay)}
+                      >
+                        결제 영수증 확인
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <div
+                    style={{
+                      padding: "24px 0",
+                      textAlign: "center",
+                      color: "var(--fg-3)",
+                      fontSize: "13px",
+                    }}
+                  >
+                    결제 내역이 없습니다.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="set-section" id="notif">
             <h3>알림</h3>
             <p className="sub">
@@ -248,51 +460,8 @@ export default function Settings() {
               </div>
               {renderSwitch("browser_notification", "처리 완료 브라우저 푸시")}
             </div>
-            {/* <div className="row-toggle">
-              <div className="text">
-                <div className="t">자동 삭제 임박 알림</div>
-                <div className="s">
-                  결과 파일이 24시간 후 삭제될 때 이메일 발송
-                </div>
-              </div>
-              {renderSwitch("data_usage_consent", "AI 학습 데이터 활용 동의")}
-            </div>
-            <div className="row-toggle">
-              <div className="text">
-                <div className="t">
-                  마케팅 정보 수신
-                  <span className="caption-k" style={{ fontSize: "11px" }}>
-                    (가입 시 동의 분리)
-                  </span>
-                </div>
-                <div className="s">새 기능·할인 이벤트 안내</div>
-              </div>
-              <div className="switch">
-                <div className="knob"></div>
-              </div>
-            </div>
-            <div className="row-toggle" style={{ opacity: "0.5" }}>
-              <div className="text">
-                <div className="t">
-                  정기 SNS 스캔 알림
-                  <span
-                    className="mui-chip"
-                    style={{
-                      marginLeft: "4px",
-                      height: "18px",
-                      fontSize: "10px",
-                    }}
-                  >
-                    v2
-                  </span>
-                </div>
-                <div className="s">자동 스캔 결과 안내</div>
-              </div>
-              <div className="switch">
-                <div className="knob"></div>
-              </div>
-            </div> */}
           </div>
+
           <div className="set-section" id="security">
             <h3>보안</h3>
             <p className="sub">로그인 이력 관리</p>
@@ -314,45 +483,10 @@ export default function Settings() {
                   </span>
                   <span className="ip">211.123.***.***</span>
                 </div>
-                <div className="row">
-                  <span style={{ flex: "1" }}>
-                    2026.05.13 21:04 · Safari / iOS
-                  </span>
-                  <span className="ip">211.123.***.***</span>
-                </div>
-                <div className="row">
-                  <span style={{ flex: "1" }}>
-                    2026.05.11 09:42 · Chrome / macOS
-                  </span>
-                  <span className="ip">211.123.***.***</span>
-                </div>
               </div>
             </div>
-            {/* <div
-              className="row-toggle"
-              style={{ marginTop: "24px", opacity: "0.5" }}
-            >
-              <div className="text">
-                <div className="t">
-                  2단계 인증 (2FA)
-                  <span
-                    className="mui-chip"
-                    style={{
-                      marginLeft: "4px",
-                      height: "18px",
-                      fontSize: "10px",
-                    }}
-                  >
-                    v2
-                  </span>
-                </div>
-                <div className="s">로그인 시 SMS 또는 앱 인증 추가</div>
-              </div>
-              <div className="switch">
-                <div className="knob"></div>
-              </div>
-            </div> */}
           </div>
+
           <div className="set-section" id="data">
             <h3>데이터</h3>
             <p className="sub">처리 데이터 활용·자동 삭제·내려받기 설정.</p>
@@ -370,53 +504,6 @@ export default function Settings() {
               </div>
               {renderSwitch("data_usage_consent", "AI 학습 데이터 활용 동의")}
             </div>
-            {/* <a
-              href="/face-whitelist"
-              style={{
-                display: "flex",
-                gap: "16px",
-                alignItems: "center",
-                padding: "14px 0",
-                borderBottom: "1px solid var(--mui-divider)",
-                textDecoration: "none",
-                color: "inherit",
-                opacity: "0.6",
-              }}
-            >
-              <div className="text">
-                <div className="t">
-                  본인 얼굴 화이트리스트
-                  <span
-                    className="mui-chip"
-                    style={{
-                      marginLeft: "4px",
-                      height: "18px",
-                      fontSize: "10px",
-                    }}
-                  >
-                    v2
-                  </span>
-                </div>
-                <div className="s">본인 얼굴은 자동 마스킹에서 제외</div>
-              </div>
-              <span className="mui-chip">v2 예정</span>
-            </a>
-            <div
-              style={{
-                display: "flex",
-                gap: "16px",
-                alignItems: "center",
-                padding: "14px 0",
-              }}
-            >
-              <div className="text">
-                <div className="t">내 데이터 내려받기</div>
-                <div className="s">처리 이력·동의 이력 JSON 파일로 받기</div>
-              </div>
-              <button className="mui-btn mui-btn--outlined mui-btn--sm">
-                받기
-              </button>
-            </div> */}
             <div
               style={{
                 marginTop: "16px",
@@ -485,6 +572,77 @@ export default function Settings() {
                 }
               >
                 {isDeletingAccount ? "처리 중…" : "삭제"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 결제 영수증 모달 */}
+      {selectedReceipt && (
+        <div
+          className="receipt-modal-overlay"
+          onClick={() => setSelectedReceipt(null)}
+        >
+          <div className="receipt-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="receipt-modal-head">
+              <span
+                className="material-icons"
+                style={{
+                  color: "#2e7d32",
+                  fontSize: "36px",
+                  marginBottom: "8px",
+                }}
+              >
+                check_circle
+              </span>
+              <h3>결제 승인이 완료되었습니다.</h3>
+              <p className="success-text">결제 성공</p>
+            </div>
+            <div className="receipt-modal-body">
+              <div className="row">
+                <span className="lbl">결제 일시</span>
+                <span className="val">
+                  {formatToKST(selectedReceipt.approvedAt, false)}
+                </span>
+              </div>
+              <div className="row">
+                <span className="lbl">주문명</span>
+                <span className="val" style={{ fontWeight: "600" }}>
+                  {selectedReceipt.orderName}
+                </span>
+              </div>
+              <div className="row">
+                <span className="lbl">주문번호</span>
+                <span
+                  className="val"
+                  style={{
+                    fontSize: "12px",
+                    color: "var(--fg-2)",
+                    wordBreak: "break-all",
+                  }}
+                >
+                  {selectedReceipt.orderId}
+                </span>
+              </div>
+              <div className="row">
+                <span className="lbl">결제 수단</span>
+                <span className="val">{selectedReceipt.method}</span>
+              </div>
+              <div className="row total">
+                <span className="lbl">결제 금액</span>
+                <span className="val price">
+                  {Number(selectedReceipt.amount).toLocaleString()}원
+                </span>
+              </div>
+            </div>
+            <div className="receipt-modal-actions">
+              <button
+                className="mui-btn mui-btn--contained mui-btn--block"
+                style={{ width: "100%" }}
+                onClick={() => setSelectedReceipt(null)}
+              >
+                확인
               </button>
             </div>
           </div>

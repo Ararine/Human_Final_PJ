@@ -22,6 +22,10 @@ export async function getAuthStatus() {
   return requestJson("/auth/status");
 }
 
+export async function getMyPaymentInfo() {
+  return requestJson("/payment/me");
+}
+
 export async function getCurrentUser() {
   return requestJson("/auth/me");
 }
