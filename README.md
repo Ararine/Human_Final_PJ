@@ -63,23 +63,37 @@ cd Human_Final_PJ
 
 ```
 
-### frontend 실행
+## 실행설명서
 
-```bash
-# 폴더 이동
-cd frontend
-# 프로젝트 실행
-npm run dev
-```
+1. **[사전 준비]**
+   - Anaconda(또는 Miniconda) 및 Docker Desktop 설치 확인
 
-### backend 실행
+2. **[백엔드 실행 방법]**
+   - **Step 1: Python 3.10 가상환경 구축 & 패키지 설치**
+     - conda create -n final python==3.10 -y
+     - conda activate final
+     - cd backend
+     - pip install -r requirement.txt
+     - uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
-```bash
-# 폴더 이동
-cd backend
-# 프로젝트 실행
-python main.py
-```
+   - **Step 2: DB 및 Redis 환경 구축 (Docker)**
+     - Docker Desktop 실행 확인
+     - cd docker
+     - docker compose up -d (docker 폴더 내에서 실행)
+     - docker ps 명령어를 통해 포트 `5432` (PostgreSQL) 및 `6379` (Redis) 정상 실행 상태 확인
+
+   - **Step 3: 코랩(Colab) 연동을 위한 터널 생성**
+     - python cloudflare_tunnel.py 실행
+     - 생성된 터널 주소(`https://xxxx.trycloudflare.com`)를 복사하여 Colab의 `BACKEND_URL` 설정에 반영
+
+3. **[프론트엔드 실행 방법]**
+   - **Step 4: 프론트엔드 패키지 설치 및 구동**
+     - cd frontend
+     - npm install
+     - npm run dev:lan
+     - 로컬 접속 주소(`http://localhost:3000/`)
+
+---
 
 ### 개발 관련 가이드라인
 
@@ -105,7 +119,9 @@ python main.py
 - [김용민](aokiuru@gmail.com)
 - [고관홍](socool.kh2@gmail.com)
 - [김민영](miny007708@gmail.com)
-- [오세덕]()
+- [오세덕](younadme0112@gmail.com)
 - [임정은](jlu4688@gmail.com)
 - [이은우](zx110500@gmail.com)
 - [남태우]()
+
+---
