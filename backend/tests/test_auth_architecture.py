@@ -92,7 +92,7 @@ def test_oauth_callback_issues_jwt_cookies_and_stores_session(monkeypatch, fake_
     response = client.get(f"/auth/google/callback?code=sample-code&state={state}")
 
     assert response.status_code == 307
-    assert response.headers["location"] == "http://localhost:3000/dashboard"
+    assert response.headers["location"] == "http://localhost:3000/"
     set_cookie = response.headers.get_list("set-cookie")
     assert any(cookie.startswith("access_token=") and "HttpOnly" in cookie for cookie in set_cookie)
     assert any(cookie.startswith("refresh_token=") and "HttpOnly" in cookie for cookie in set_cookie)

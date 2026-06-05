@@ -171,10 +171,96 @@ def test_oauth_callback_sets_auth_cookie_and_redirects(monkeypatch):
     response = client.get(f"/auth/google/callback?code=sample-code&state={state}")
 
     assert response.status_code == 307
-    assert response.headers["location"] == "http://localhost:3000/dashboard"
+    assert response.headers["location"] == "http://localhost:3000/"
     cookies = response.headers.get_list("set-cookie")
     assert any(cookie.startswith("access_token=") for cookie in cookies)
     assert any(cookie.startswith("refresh_token=") for cookie in cookies)
+
+
+def test_oauth_callback_redirects_to_safe_next_path(monkeypatch):
+    monkeypatch.setenv("FRONTEND_BASE_URL", "http://localhost:3000")
+    monkeypatch.setenv("AUTH_COOKIE_SECRET", "test-secret")
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    fake_redis = FakeRedis()
+    monkeypatch.setattr(redis_store, "get_redis_client", lambda: fake_redis)
+
+    state = oauth.create_oauth_state("google", next_path="/payment?plan=pro&price=2900")
+    monkeypatch.setattr(oauth, "exchange_code_for_user", lambda provider, code, state_value: (
+        {
+            "provider": provider,
+            "provider_user_id": "google-user-1",
+            "email": "user@example.com",
+            "name": "Garim User",
+        },
+        oauth.consume_oauth_state(provider, state_value),
+        "provider-token",
+    ))
+    monkeypatch.setattr(users, "get_or_create_oauth_user", lambda oauth_user: {
+        "id": 1,
+        "provider": "google",
+        "provider_user_id": "google-user-1",
+        "email": "user@example.com",
+        "name": "Garim User",
+        "profile_image_url": None,
+        "role": "USER",
+        "status": "ACTIVE",
+    })
+
+    response = client.get(f"/auth/google/callback?code=sample-code&state={state}")
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "http://localhost:3000/payment?plan=pro&price=2900"
+
+
+def test_oauth_callback_rejects_external_next_path(monkeypatch):
+    monkeypatch.setenv("FRONTEND_BASE_URL", "http://localhost:3000")
+    monkeypatch.setenv("AUTH_COOKIE_SECRET", "test-secret")
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    fake_redis = FakeRedis()
+    monkeypatch.setattr(redis_store, "get_redis_client", lambda: fake_redis)
+
+    state = oauth.create_oauth_state("google", next_path="https://evil.example/upload")
+    monkeypatch.setattr(oauth, "exchange_code_for_user", lambda provider, code, state_value: (
+        {
+            "provider": provider,
+            "provider_user_id": "google-user-1",
+            "email": "user@example.com",
+            "name": "Garim User",
+        },
+        oauth.consume_oauth_state(provider, state_value),
+        "provider-token",
+    ))
+    monkeypatch.setattr(users, "get_or_create_oauth_user", lambda oauth_user: {
+        "id": 1,
+        "provider": "google",
+        "provider_user_id": "google-user-1",
+        "email": "user@example.com",
+        "name": "Garim User",
+        "profile_image_url": None,
+        "role": "USER",
+        "status": "ACTIVE",
+    })
+
+    response = client.get(f"/auth/google/callback?code=sample-code&state={state}")
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "http://localhost:3000/"
+
+
+def test_oauth_callback_failure_ignores_next_path_and_redirects_home(monkeypatch):
+    monkeypatch.setenv("FRONTEND_BASE_URL", "http://localhost:3000")
+    state = oauth.create_oauth_state("google", next_path="/upload")
+
+    def fail_exchange(provider, code, state_value):
+        oauth.consume_oauth_state(provider, state_value)
+        raise oauth.OAuthExchangeError("provider login failed")
+
+    monkeypatch.setattr(oauth, "exchange_code_for_user", fail_exchange)
+
+    response = client.get(f"/auth/google/callback?code=sample-code&state={state}")
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "http://localhost:3000/"
 
 
 def test_oauth_me_reads_access_cookie(monkeypatch):

@@ -112,13 +112,14 @@ def get_provider_config(provider):
     return provider_config, config
 
 
-def create_oauth_state(provider, reregister=False):
+def create_oauth_state(provider, reregister=False, next_path="/"):
     state = token_urlsafe(32)
     code_verifier = token_urlsafe(64) if provider == "x" else None
     _oauth_states[state] = {
         "provider": provider,
         "code_verifier": code_verifier,
         "reregister": reregister,
+        "next_path": next_path,
         "expires_at": time.time() + STATE_TTL_SECONDS,
     }
     return state
@@ -135,9 +136,9 @@ def consume_oauth_state(provider, state):
     return state_data
 
 
-def build_authorization_url(provider, force_consent=False):
+def build_authorization_url(provider, force_consent=False, next_path="/"):
     provider_config, config = get_provider_config(provider)
-    state = create_oauth_state(provider, reregister=force_consent)
+    state = create_oauth_state(provider, reregister=force_consent, next_path=next_path)
     state_data = _oauth_states[state]
     params = {
         "client_id": config["client_id"],

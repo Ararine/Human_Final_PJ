@@ -1,5 +1,11 @@
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { useAuthStatus } from "../../hooks/useAuthStatus";
+import {
+  formatFileSize,
+  formatPrice,
+  formatQuota,
+  usePricingPlans,
+} from "../../hooks/usePricingPlans";
 import "../../css/garim-pages/Landing.css";
 
 import GarimPage from "../../components/garim/GarimPage";
@@ -7,7 +13,10 @@ import GarimPage from "../../components/garim/GarimPage";
 export default function Landing() {
   useDocumentTitle("Garim — 영상 속 개인정보, 자연스럽게 가립니다");
   const isAuthed = useAuthStatus();
-  const startHref = isAuthed ? "/upload" : "/login";
+  const startHref = isAuthed
+    ? "/upload"
+    : `/login?next=${encodeURIComponent("/upload")}`;
+  const plans = usePricingPlans();
 
   return (
     <GarimPage bodyClass="page-public" screenLabel="01 Landing">
@@ -264,141 +273,70 @@ export default function Landing() {
           요금제
         </h2>
         <p className="lead">
-          MVP1 단계에서는 모든 기능이 무료입니다. v1 정식 출시 후 결제가 시작됩니다.
+          관리자 정책에서 설정한 크레딧, 금액, 파일 처리 한도, 데이터 보존 기간을 기준으로 표시합니다.
         </p>
         <div className="pricing-grid">
-          <div className="price-card price-card--featured">
-            <span className="mui-chip mui-chip--primary price-card__badge">
-              현재 — MVP1 무료
-            </span>
-            <span className="overline-k">
-              Free
-            </span>
-            <div className="price-card__price">
-              0
-              <small>
-                원
-              </small>
+          {plans.map((plan) => (
+            <div
+              key={plan.key}
+              className={`price-card${plan.featured ? " price-card--featured" : ""}`}
+            >
+              <span className={`mui-chip ${plan.badgeClass} price-card__badge`}>
+                {plan.badge}
+              </span>
+              <span className="overline-k">{plan.name}</span>
+              <div className="price-card__price">
+                {formatPrice(plan.payment.price)}
+                <small>원</small>
+              </div>
+              <p className="caption-k" style={{ fontSize: "13px" }}>
+                {plan.description}
+              </p>
+              <ul className="price-card__feats">
+                <li>
+                  <span className="material-icons">check</span>크레딧{" "}
+                  {formatQuota(plan.payment.credits, "개")}
+                </li>
+                <li>
+                  <span className="material-icons">check</span>월 처리 한도{" "}
+                  {formatQuota(plan.file.monthlyQuota)}
+                </li>
+                <li>
+                  <span className="material-icons">check</span>최대 파일 크기{" "}
+                  {formatFileSize(plan.file.fileSizeLimit)}
+                </li>
+                <li>
+                  <span className="material-icons">check</span>동시 처리 최대{" "}
+                  {formatQuota(plan.file.maxJobs)}
+                </li>
+                <li>
+                  <span className="material-icons">check</span>결과 파일{" "}
+                  {formatQuota(plan.file.resultRetention, "일")} 보관
+                </li>
+                <li>
+                  <span className="material-icons">check</span>원본 파일{" "}
+                  {formatQuota(plan.retention.autoDeleteOriginalHours, "시간")}{" "}
+                  후 삭제
+                </li>
+                <li>
+                  <span className="material-icons">check</span>메타데이터{" "}
+                  {formatQuota(plan.retention.metadataRetentionDays, "일")} 보존
+                </li>
+              </ul>
+              {plan.key === "free" ? (
+                <a
+                  href={startHref}
+                  className="mui-btn mui-btn--contained mui-btn--block"
+                >
+                  {plan.cta}
+                </a>
+              ) : (
+                <a href="/pricing" className="mui-btn mui-btn--outlined mui-btn--block">
+                  자세히 보기
+                </a>
+              )}
             </div>
-            <p className="caption-k" style={{ fontSize: "13px", color: "var(--fg-2)" }}>
-              검출·치환·SNS 점검·다운로드 전부 포함. 결과물에 워터마크.
-            </p>
-            <ul className="price-card__feats">
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                월 무제한 검출
-              </li>
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                월 5회 치환 처리
-              </li>
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                1080p / 30분까지
-              </li>
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                처리 결과 워터마크 포함
-              </li>
-            </ul>
-            <a href={startHref} className="mui-btn mui-btn--contained mui-btn--block">
-              무료로 시작
-            </a>
-          </div>
-          <div className="price-card">
-            <span className="overline-k">
-              1회권
-            </span>
-            <div className="price-card__price">
-              2,900
-              <small>
-                원
-              </small>
-            </div>
-            <p className="caption-k" style={{ fontSize: "13px", color: "var(--fg-2)" }}>
-              이번 영상만 깔끔하게 처리하고 싶을 때. 워터마크 없음.
-            </p>
-            <ul className="price-card__feats">
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                1회 처리 (영상 1편 또는 사진 10장)
-              </li>
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                워터마크 없음
-              </li>
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                4K / 60분까지
-              </li>
-              <li className="muted">
-                <span className="material-icons">
-                  schedule
-                </span>
-                v1 정식 출시 후 이용 가능
-              </li>
-            </ul>
-            <button className="mui-btn mui-btn--outlined mui-btn--block" disabled>
-              v1 정식 출시 예정
-            </button>
-          </div>
-          <div className="price-card">
-            <span className="overline-k">
-              Pro
-            </span>
-            <div className="price-card__price">
-              19,800
-              <small>
-                원/월
-              </small>
-            </div>
-            <p className="caption-k" style={{ fontSize: "13px", color: "var(--fg-2)" }}>
-              크리에이터·자영업자. 월 50회까지 처리.
-            </p>
-            <ul className="price-card__feats">
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                월 50회 치환 처리
-              </li>
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                우선 처리 큐
-              </li>
-              <li>
-                <span className="material-icons">
-                  check
-                </span>
-                4K / 60분까지
-              </li>
-              <li className="muted">
-                <span className="material-icons">
-                  schedule
-                </span>
-                v1 정식 출시 후 이용 가능
-              </li>
-            </ul>
-            <button className="mui-btn mui-btn--outlined mui-btn--block" disabled>
-              v1 정식 출시 예정
-            </button>
-          </div>
+          ))}
         </div>
       </section>
       <section className="closing-cta">

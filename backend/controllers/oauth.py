@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import urlparse
 
 from fastapi import Body, Cookie, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -8,9 +9,17 @@ from services import auth, oauth, redis_store, users
 logger = logging.getLogger(__name__)
 
 
-def start_oauth(provider: str, reregister: bool = Query(False)):
+def start_oauth(
+    provider: str,
+    reregister: bool = Query(False),
+    next: str | None = Query(default=None),
+):
     try:
-        authorization_url = oauth.build_authorization_url(provider, force_consent=reregister)
+        authorization_url = oauth.build_authorization_url(
+            provider,
+            force_consent=reregister,
+            next_path=safe_frontend_path(next),
+        )
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="지원하지 않는 OAuth 제공자입니다.") from exc
     except oauth.OAuthConfigError as exc:
@@ -31,10 +40,10 @@ def oauth_callback(
 
     if error:
         logger.warning("[oauth] provider=%s ip=%s provider_error=%s", provider, ip, error)
-        return redirect_to_frontend()
+        return redirect_after_login_failure()
     if not code or not state:
         logger.warning("[oauth] provider=%s ip=%s error=missing_code_or_state", provider, ip)
-        return redirect_to_frontend()
+        return redirect_after_login_failure()
 
     try:
         oauth_user, state_data, provider_token = oauth.exchange_code_for_user(provider, code, state)
@@ -57,20 +66,20 @@ def oauth_callback(
         )
     except (oauth.OAuthStateError, oauth.OAuthExchangeError) as exc:
         logger.error("[oauth] provider=%s ip=%s error=%s", provider, ip, exc, exc_info=True)
-        return redirect_to_frontend()
+        return redirect_after_login_failure()
     except (KeyError, oauth.OAuthConfigError) as exc:
         logger.error("[oauth] provider=%s ip=%s config_error=%s", provider, ip, exc, exc_info=True)
-        return redirect_to_frontend()
+        return redirect_after_login_failure()
     except HTTPException:
         logger.warning("[oauth] provider=%s email=%s ip=%s error=account_inactive", provider, oauth_user.get("email"), ip)
-        return redirect_to_frontend()
+        return redirect_after_login_failure()
     except Exception as exc:
         logger.error("[oauth] provider=%s ip=%s unhandled_error=%s", provider, ip, exc, exc_info=True)
-        return redirect_to_frontend()
+        return redirect_after_login_failure()
 
     role = user.get("role", users.USER)
     logger.info("[oauth] login_success provider=%s user_id=%s role=%s ip=%s", provider, user.get("id"), role, ip)
-    response = redirect_to_frontend(role=role)
+    response = redirect_to_frontend(role=role, next_path=state_data.get("next_path"))
     auth.set_auth_cookies(response, token_pair)
     return response
 
@@ -141,10 +150,25 @@ def delete_sessions(access_token: str | None = Cookie(default=None)):
     return response
 
 
-def redirect_to_frontend(role=None):
+def safe_frontend_path(path: str | None) -> str:
+    if not path:
+        return "/"
+    parsed = urlparse(path)
+    if parsed.scheme or parsed.netloc:
+        return "/"
+    if not path.startswith("/") or path.startswith("//"):
+        return "/"
+    return path
+
+
+def redirect_to_frontend(role=None, next_path=None):
     base_url = oauth.get_frontend_base_url()
-    path = "/admin/monitoring" if role == "admin" else "/dashboard"
+    path = "/admin/monitoring" if role == "admin" else safe_frontend_path(next_path)
     return RedirectResponse(f"{base_url}{path}", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
+
+def redirect_after_login_failure():
+    return redirect_to_frontend(next_path="/")
 
 
 def redirect_to_reregister(provider):

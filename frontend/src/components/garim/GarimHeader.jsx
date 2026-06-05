@@ -9,6 +9,10 @@ const publicNav = [
   { id: "help", label: "도움말", to: "/faq" },
 ];
 
+function buildLoginUrl(nextPath) {
+  return nextPath ? `/login?next=${encodeURIComponent(nextPath)}` : "/login";
+}
+
 export default function GarimHeader({ layout = "public", current = "" }) {
   const isAuthed = useAuthStatus();
 
@@ -48,7 +52,7 @@ export default function GarimHeader({ layout = "public", current = "" }) {
   if (layout === "auth") {
     return (
       <header className="gh gh--minimal">
-        <Link to={isAuthed ? "/dashboard" : "/"} className="gh__logo">
+        <Link to="/" className="gh__logo">
           <img src="/garim/logo.svg" alt="Garim" />
         </Link>
       </header>
@@ -59,14 +63,18 @@ export default function GarimHeader({ layout = "public", current = "" }) {
     <header
       className={`gh ${layout === "app" ? "gh--app" : ""} ${layout === "landing" || current === "landing" ? "gh--landing" : ""}`}
     >
-      <Link to={isAuthed ? "/dashboard" : "/"} className="gh__logo">
+      <Link to="/" className="gh__logo">
         <img src="/garim/logo.svg" alt="Garim" />
       </Link>
       <nav className="gh__nav">
         {publicNav.map((item) => (
           <Link
             key={item.id}
-            to={item.id === "detect" && !isAuthed ? "/login" : item.to}
+            to={
+              item.id === "detect" && !isAuthed
+                ? buildLoginUrl(item.to)
+                : item.to
+            }
             className={current === item.id ? "active" : ""}
           >
             {item.label}
@@ -108,7 +116,7 @@ export default function GarimHeader({ layout = "public", current = "" }) {
               로그인
             </Link>
             <Link
-              to={isAuthed ? "/upload" : "/login"}
+              to={isAuthed ? "/upload" : buildLoginUrl("/upload")}
               className="mui-btn mui-btn--contained mui-btn--sm"
             >
               무료 시작

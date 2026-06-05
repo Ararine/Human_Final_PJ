@@ -10,8 +10,11 @@ export function getApiBaseUrl() {
   return `${window.location.protocol}//${window.location.hostname}:${DEFAULT_API_PORT}`;
 }
 
-export function getOAuthStartUrl(provider) {
-  return `${getApiBaseUrl()}/auth/${provider}/start`;
+export function getOAuthStartUrl(provider, nextPath = "") {
+  const params = new URLSearchParams();
+  if (nextPath) params.set("next", nextPath);
+  const query = params.toString();
+  return `${getApiBaseUrl()}/auth/${provider}/start${query ? `?${query}` : ""}`;
 }
 
 export function getOAuthReregisterUrl(provider) {

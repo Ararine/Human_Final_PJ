@@ -50,9 +50,10 @@ export default function Login() {
   const [searchParams] = useSearchParams();
   const isReregister = searchParams.get("reregister") === "true";
   const reregisterProvider = searchParams.get("provider") || "";
+  const nextPath = searchParams.get("next") || "";
 
   const startOAuth = (provider) => {
-    window.location.assign(getOAuthStartUrl(provider));
+    window.location.assign(getOAuthStartUrl(provider, nextPath));
   };
 
   const startReregister = () => {
