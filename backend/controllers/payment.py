@@ -17,14 +17,16 @@ async def create_temp_order(
         result = await payment.create_temp_order(
             db=db,
             user_id=current_user["id"],
-            plan_code=body.plan_code,
+            product_type=body.product_type,
+            product_code=body.product_code,
             amount=body.amount
         )
         return {
             "orderId": result["payment_id"],
             "amount": result["amount"],
-            "orderName": result["plan_name"],
-            "planCode": result["plan_code"]
+            "orderName": result["order_name"],
+            "productType": result["product_type"],
+            "productCode": result["product_code"]
         }
     except ValueError as ve:
         raise HTTPException(
@@ -72,3 +74,13 @@ def get_my_payment_info(current_user: dict, db: Session):
             status_code=500,
             detail=str(e)
         )
+
+
+def get_my_credit_balance(current_user: dict, db: Session):
+    try:
+        return payment.get_my_credit_balance(
+            db=db,
+            user_id=current_user["id"],
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

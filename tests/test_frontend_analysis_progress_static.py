@@ -69,3 +69,16 @@ def test_login_next_paths_are_preserved_for_action_buttons():
     assert '`/login?next=${encodeURIComponent("/upload")}`' in landing
     assert "`/login?next=${encodeURIComponent(paymentPath)}`" in pricing
     assert "getOAuthStartUrl(provider, nextPath = \"\")" in api
+
+
+PAYMENT_PAGE = Path("frontend/src/pages/garim/Payment.jsx")
+
+
+def test_pricing_uses_product_type_url_params():
+    pricing = PRICING_PAGE.read_text(encoding="utf-8")
+    payment = PAYMENT_PAGE.read_text(encoding="utf-8")
+
+    assert "productType=subscription" in pricing or "productType: isCredit" in pricing
+    assert "productType=credit" in pricing or 'productType: "credit"' in pricing
+    assert "product_type" in payment
+    assert "product_code" in payment

@@ -43,9 +43,13 @@ function formatPrice(value) {
 export default function Payment() {
   const [searchParams] = useSearchParams();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const planKey = (searchParams.get("plan") || "pro").toLowerCase();
+
+  // 새 URL 파라미터: productType, productCode (구 plan 파라미터 fallback 지원)
+  const productType = (searchParams.get("productType") || "subscription").toLowerCase();
+  const productCode = (searchParams.get("productCode") || searchParams.get("plan") || "pro").toLowerCase();
   const isEmbed = searchParams.get("embed") === "1";
-  const basePlan = PLAN_PAYMENT[planKey] || PLAN_PAYMENT.pro;
+
+  const basePlan = PLAN_PAYMENT[productCode] || PLAN_PAYMENT.pro;
   const credits = numberFromQuery(
     searchParams.get("credits"),
     basePlan.defaultCredits,
@@ -54,9 +58,11 @@ export default function Payment() {
     searchParams.get("price"),
     basePlan.defaultAmount,
   );
+
+  const isCredit = productType === "credit";
   const plan = {
     label: basePlan.label,
-    itemName: `${basePlan.label} 플랜`,
+    itemName: isCredit ? `${basePlan.label} 충전` : `${basePlan.label} 플랜`,
     description: `크레딧 ${formatPrice(credits)}개`,
     amount,
   };
@@ -73,7 +79,8 @@ export default function Payment() {
     setIsSubmitting(true);
     try {
       const tempOrder = await createPaymentTempOrder({
-        plan_code: planKey,
+        product_type: productType,
+        product_code: productCode,
         amount: plan.amount,
       });
 

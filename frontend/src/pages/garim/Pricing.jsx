@@ -18,11 +18,13 @@ export default function Pricing() {
   const startHref = isAuthed
     ? "/upload"
     : `/login?next=${encodeURIComponent("/upload")}`;
-  const plans = usePricingPlans();
+  const { plans } = usePricingPlans();
 
   function handlePayClick(plan) {
+    const isCredit = plan.productType === "credit";
     const params = new URLSearchParams({
-      plan: plan.key,
+      productType: isCredit ? "credit" : "subscription",
+      productCode: plan.key,
       price: String(plan.payment.price ?? ""),
       credits: String(plan.payment.credits ?? ""),
     });
@@ -224,6 +226,7 @@ export default function Pricing() {
               onClick={() =>
                 handlePayClick({
                   key: "credit_100",
+                  productType: "credit",
                   payment: { price: 5000, credits: 100 },
                 })
               }
@@ -302,6 +305,7 @@ export default function Pricing() {
               onClick={() =>
                 handlePayClick({
                   key: "credit_500",
+                  productType: "credit",
                   payment: { price: 20000, credits: 500 },
                 })
               }

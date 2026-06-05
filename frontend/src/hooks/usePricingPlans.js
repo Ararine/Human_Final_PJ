@@ -33,6 +33,10 @@ export const DEFAULT_POLICY = {
       pro: { credits: 50, price: 2900 },
       studio: { credits: 500, price: 19800 },
     },
+    creditPlans: {
+      credit_100: { credits: 100, bonusCredits: 0, price: 5000 },
+      credit_500: { credits: 500, bonusCredits: 0, price: 20000 },
+    },
   },
   retention: {
     plans: {
@@ -100,6 +104,10 @@ export function mergePolicy(base, incoming = {}) {
       ...base.payment,
       ...(incoming.payment || {}),
       plans: { ...base.payment.plans, ...(incoming.payment?.plans || {}) },
+      creditPlans: {
+        ...(base.payment.creditPlans || {}),
+        ...(incoming.payment?.creditPlans || {}),
+      },
     },
     retention: {
       ...base.retention,
@@ -124,6 +132,8 @@ export function buildPricingPlans(policy) {
 
 export function usePricingPlans() {
   const [policy, setPolicy] = useState(DEFAULT_POLICY);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -133,8 +143,11 @@ export function usePricingPlans() {
         const response = await getAdminPolicySettings();
         if (cancelled) return;
         setPolicy(mergePolicy(DEFAULT_POLICY, response.data || {}));
-      } catch (error) {
-        console.error("Failed to load pricing policy", error);
+      } catch (err) {
+        console.error("Failed to load pricing policy", err);
+        if (!cancelled) setError(err);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     }
 
@@ -144,5 +157,8 @@ export function usePricingPlans() {
     };
   }, []);
 
-  return useMemo(() => buildPricingPlans(policy), [policy]);
+  const plans = useMemo(() => buildPricingPlans(policy), [policy]);
+  const creditPlans = useMemo(() => policy.payment.creditPlans || {}, [policy]);
+
+  return { plans, creditPlans, policy, loading, error };
 }

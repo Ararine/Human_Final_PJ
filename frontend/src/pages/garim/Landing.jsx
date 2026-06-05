@@ -16,7 +16,7 @@ export default function Landing() {
   const startHref = isAuthed
     ? "/upload"
     : `/login?next=${encodeURIComponent("/upload")}`;
-  const plans = usePricingPlans();
+  const { plans } = usePricingPlans();
 
   return (
     <GarimPage bodyClass="page-public" screenLabel="01 Landing">

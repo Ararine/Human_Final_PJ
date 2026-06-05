@@ -59,7 +59,7 @@
   - 결제 승인 완료 즉시 DB 트랜잭션을 시작하여 다음 3가지 항목 통합 처리:
     1. `payments` 테이블 상태 변경 (`status = 'success'`), 승인 시각(`paid_at`), 거래 번호(`pg_transaction_id`) 업데이트
     2. `subscriptions` 테이블 상태 변경 (`status = 'active'`), 구독 기한 계산 및 설정
-    3. `plans` 테이블에 기재된 스펙에 따라 유저의 잔여 처리 한도(`subscriptions.remaining_credits`) 가산/충전
+    3. `plans` 테이블(구독) 또는 `credit_plans` 테이블(크레딧 충전) 스펙에 따라 유저 잔액(`user_credit_balances.balance`) 충전 및 `credit_ledger` 기록
   - 트랜잭션 오류 발생 시 롤백 및 결제 망 취소 연동 처리
 * **검증 방법**:
   - 전체 시나리오 결제 수행 후, 유저의 구독 등급 및 잔여 크레딧이 DB와 화면에 정상 반영되는지 최종 확인

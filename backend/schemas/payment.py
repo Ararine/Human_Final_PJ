@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -8,7 +10,8 @@ class PaymentConfirmRequest(BaseModel):
 
 
 class TempOrderRequest(BaseModel):
-    plan_code: str
+    product_type: Literal["subscription", "credit"]
+    product_code: str
     amount: int
 
 
@@ -16,4 +19,5 @@ class TempOrderResponse(BaseModel):
     orderId: str
     amount: int
     orderName: str
-    planCode: str
+    productType: Literal["subscription", "credit"]
+    productCode: str

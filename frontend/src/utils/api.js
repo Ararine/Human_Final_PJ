@@ -29,6 +29,10 @@ export async function getMyPaymentInfo() {
   return requestJson("/payment/me");
 }
 
+export async function getMyCreditBalance() {
+  return requestJson("/payment/credits/me");
+}
+
 export async function getCurrentUser() {
   return requestJson("/auth/me");
 }

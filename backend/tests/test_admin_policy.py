@@ -14,7 +14,11 @@ def test_get_admin_policy_settings(monkeypatch):
                 "free": {"credits": 5, "price": 0},
                 "pro": {"credits": 50, "price": 2900},
                 "studio": {"credits": 500, "price": 19800},
-            }
+            },
+            "creditPlans": {
+                "credit_100": {"credits": 100, "bonusCredits": 0, "price": 5000},
+                "credit_500": {"credits": 500, "bonusCredits": 0, "price": 20000},
+            },
         },
         "retention": {
             "plans": {
@@ -32,6 +36,8 @@ def test_get_admin_policy_settings(monkeypatch):
     assert response.json()["data"]["payment"]["plans"]["pro"]["price"] == 2900
     assert response.json()["data"]["payment"]["plans"]["studio"]["price"] == 19800
     assert response.json()["data"]["retention"]["plans"]["free"]["metadataRetentionDays"] == 90
+    assert response.json()["data"]["payment"]["creditPlans"]["credit_100"]["credits"] == 100
+    assert response.json()["data"]["payment"]["creditPlans"]["credit_500"]["price"] == 20000
 
 
 def test_update_admin_policy_settings(monkeypatch):

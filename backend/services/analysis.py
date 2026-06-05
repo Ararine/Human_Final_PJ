@@ -3,6 +3,7 @@ from uuid import uuid4
 from sqlalchemy import text
 
 from utils.database import SessionLocal
+from services.payment import _spend_user_credits
 
 
 def create_analysis_job(upload_id: str, user_id: str) -> dict:
@@ -86,6 +87,16 @@ def create_analysis_job(upload_id: str, user_id: str) -> dict:
                 "message": message,
             },
         )
+
+        # 크레딧 차감: 분석 작업 승인 시점에 1크레딧 차감
+        _spend_user_credits(
+            db=db,
+            user_id=user_id,
+            amount=1,
+            source_id=job_id,
+            description="AI 분석 작업 크레딧 사용",
+        )
+
         db.commit()
 
         return {

@@ -61,7 +61,9 @@ def test_create_oauth_user_inserts_users_then_oauth_accounts():
     insert_user_sql, insert_user_params = conn.calls[0]
     insert_subscription_sql, insert_subscription_params = conn.calls[1]
     insert_account_sql, insert_account_params = conn.calls[2]
-    lookup_sql, lookup_params = conn.calls[3]
+    insert_balance_sql, insert_balance_params = conn.calls[3]
+    insert_ledger_sql, insert_ledger_params = conn.calls[4]
+    lookup_sql, lookup_params = conn.calls[5]
 
     assert "INSERT INTO users" in insert_user_sql
     assert "display_name" in insert_user_sql
@@ -70,18 +72,23 @@ def test_create_oauth_user_inserts_users_then_oauth_accounts():
     assert insert_user_params["status"] == "active"
 
     assert "INSERT INTO subscriptions" in insert_subscription_sql
-    assert "remaining_credits" in insert_subscription_sql
+    assert "remaining_credits" not in insert_subscription_sql
     assert "remaining_quota" not in insert_subscription_sql
     assert "LOWER(plan_code) = 'free'" in insert_subscription_sql
     assert "'active'" in insert_subscription_sql
     assert "NOW() + INTERVAL '30 days'" in insert_subscription_sql
-    assert "COALESCE(credits, monthly_quota, 0)" in insert_subscription_sql
     assert insert_subscription_params["user_id"] == "user-1"
 
     assert "INSERT INTO oauth_accounts" in insert_account_sql
     assert insert_account_params["user_id"] == "user-1"
     assert insert_account_params["provider"] == "google"
     assert insert_account_params["provider_user_id"] == "google-user-1"
+
+    assert "INSERT INTO user_credit_balances" in insert_balance_sql
+    assert insert_balance_params["user_id"] == "user-1"
+
+    assert "INSERT INTO credit_ledger" in insert_ledger_sql
+    assert insert_ledger_params["user_id"] == "user-1"
 
     assert "FROM oauth_accounts oa" in lookup_sql
     assert lookup_params == {

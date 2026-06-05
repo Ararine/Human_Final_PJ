@@ -19,6 +19,10 @@ DEFAULT_ADMIN_POLICIES = {
             "pro":    {"credits": 50,  "price": 2900},
             "studio": {"credits": 500, "price": 19800},
         },
+        "creditPlans": {
+            "credit_100": {"credits": 100, "bonusCredits": 0, "price": 5000},
+            "credit_500": {"credits": 500, "bonusCredits": 0, "price": 20000},
+        },
     },
     "retention": {
         "plans": {
@@ -171,6 +175,28 @@ def get_admin_policies():
                     "autoDeleteOriginalHours": pm["auto_delete_original_hours"],
                     "metadataRetentionDays": pm["metadata_retention_days"]
                 }
+
+        # 4. Query credit_plans table to populate creditPlans
+        credit_plan_rows = db.execute(
+            text("""
+                SELECT credit_plan_code, base_credits, bonus_credits, price_amount
+                FROM credit_plans
+                WHERE is_active = TRUE
+                ORDER BY sort_order
+            """)
+        ).fetchall()
+
+        credit_plans_map = {}
+        for crow in credit_plan_rows:
+            cm = crow._mapping
+            credit_plans_map[cm["credit_plan_code"]] = {
+                "credits": cm["base_credits"],
+                "bonusCredits": cm["bonus_credits"],
+                "price": cm["price_amount"],
+            }
+
+        if credit_plans_map:
+            policies["payment"]["creditPlans"] = credit_plans_map
 
         return policies
     finally:

@@ -92,3 +92,12 @@ async def confirm_payment(
         body,
         db
     )
+
+
+@router.get("/credits/me")
+def get_my_credit_balance(
+    access_token: str | None = Cookie(default=None),
+    db: Session = Depends(get_db)
+):
+    current_user = auth.authenticate_access_token(access_token)
+    return payment.get_my_credit_balance(current_user, db)

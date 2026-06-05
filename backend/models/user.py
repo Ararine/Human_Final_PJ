@@ -104,6 +104,46 @@ def create_oauth_user_query(conn, oauth_user, role, status):
             "provider_name": oauth_user.get("name"),
         },
     )
+
+    # 초기 환영 크레딧 지급
+    conn.execute(
+        text(
+            """
+            INSERT INTO user_credit_balances (user_id, balance, updated_at)
+            VALUES (:user_id, 10, NOW())
+            """
+        ),
+        {"user_id": user_id},
+    )
+
+    conn.execute(
+        text(
+            """
+            INSERT INTO credit_ledger (
+                user_id,
+                amount,
+                balance_after,
+                entry_type,
+                source_type,
+                source_id,
+                description,
+                created_at
+            )
+            VALUES (
+                :user_id,
+                10,
+                10,
+                'first_login',
+                'oauth',
+                :source_id,
+                '가입 환영 크레딧 지급',
+                NOW()
+            )
+            """
+        ),
+        {"user_id": user_id, "source_id": str(user_id)},
+    )
+
     return get_user_by_provider_query(
         conn,
         oauth_user["provider"],
@@ -122,7 +162,6 @@ def create_free_subscription_query(conn, user_id):
                 status,
                 started_at,
                 renew_at,
-                remaining_credits,
                 created_at,
                 updated_at
             )
@@ -132,7 +171,6 @@ def create_free_subscription_query(conn, user_id):
                 'active',
                 NOW(),
                 NOW() + INTERVAL '30 days',
-                COALESCE(credits, monthly_quota, 0),
                 NOW(),
                 NOW()
             FROM plans
