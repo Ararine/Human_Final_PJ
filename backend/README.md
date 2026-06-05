@@ -70,4 +70,4 @@ backend/
 │
 ├── README.md # Backend 가이드
 │
-└── requirement.txt # Python 패키지 목록
+└── requirements.txt # Python 패키지 목록

@@ -73,7 +73,7 @@ cd Human_Final_PJ
      - conda create -n final python==3.10 -y
      - conda activate final
      - cd backend
-     - pip install -r requirement.txt
+     - pip install -r requirements.txt
      - uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
    - **Step 2: DB 및 Redis 환경 구축 (Docker)**
