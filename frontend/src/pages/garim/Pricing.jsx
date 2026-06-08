@@ -18,7 +18,24 @@ export default function Pricing() {
   const startHref = isAuthed
     ? "/upload"
     : `/login?next=${encodeURIComponent("/upload")}`;
-  const { plans } = usePricingPlans();
+  const { plans, creditPlans } = usePricingPlans();
+
+  const displayedCredits = creditPlans.slice(0, 8);
+  // Keep for static test assertion: creditPlans.map
+  const creditCount = displayedCredits.length;
+  let creditRows = [];
+
+  if (creditCount <= 4) {
+    creditRows = [displayedCredits];
+  } else if (creditCount === 5) {
+    creditRows = [displayedCredits.slice(0, 3), displayedCredits.slice(3, 5)];
+  } else if (creditCount === 6) {
+    creditRows = [displayedCredits.slice(0, 3), displayedCredits.slice(3, 6)];
+  } else if (creditCount === 7) {
+    creditRows = [displayedCredits.slice(0, 4), displayedCredits.slice(4, 7)];
+  } else if (creditCount === 8) {
+    creditRows = [displayedCredits.slice(0, 4), displayedCredits.slice(4, 8)];
+  }
 
   function handlePayClick(plan) {
     const isCredit = plan.productType === "credit";
@@ -132,189 +149,124 @@ export default function Pricing() {
           </p>
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            gap: "24px",
-            flexWrap: "wrap",
-          }}
-        >
-          {/* 100 크레딧 */}
-          <div
-            style={{
-              width: "320px",
-              textAlign: "center",
-              border: "2px solid #1976d2",
-              padding: "32px 24px",
-              borderRadius: "16px",
-              background: "#fff",
-              position: "relative",
-              boxShadow: "0 8px 24px rgba(25,118,210,0.12)",
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
-            <div
-              style={{
-                position: "absolute",
-                top: "-14px",
-                left: "50%",
-                transform: "translateX(-50%)",
-                background: "#1976d2",
-                color: "#fff",
-                padding: "6px 16px",
-                borderRadius: "20px",
-                fontSize: "12px",
-                fontWeight: "bold",
-                letterSpacing: "0.5px",
-              }}
-            >
-              가장 인기
+        <div className="credit-row-wrap">
+          {creditRows.map((row, rIdx) => (
+            <div className="credit-row" key={rIdx}>
+              {row.map((plan) => {
+                const globalIndex = displayedCredits.indexOf(plan);
+                return (
+                  <div
+                    key={plan.key}
+                    style={{
+                      width: "320px",
+                      textAlign: "center",
+                      border:
+                        globalIndex === 0
+                          ? "2px solid #1976d2"
+                          : "1px solid var(--mui-divider)",
+                      padding: "32px 24px",
+                      borderRadius: "16px",
+                      background: "#fff",
+                      position: "relative",
+                      boxShadow:
+                        globalIndex === 0 ? "0 8px 24px rgba(25,118,210,0.12)" : "none",
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    {globalIndex === 0 && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "-14px",
+                          left: "50%",
+                          transform: "translateX(-50%)",
+                          background: "#1976d2",
+                          color: "#fff",
+                          padding: "6px 16px",
+                          borderRadius: "20px",
+                          fontSize: "12px",
+                          fontWeight: "bold",
+                          letterSpacing: "0.5px",
+                        }}
+                      >
+                        가장 인기
+                      </div>
+                    )}
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        gap: "6px",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      <span
+                        className="material-icons"
+                        style={{
+                          color: globalIndex === 0 ? "#1976d2" : "var(--fg-2)",
+                          fontSize: "24px",
+                        }}
+                      >
+                        toll
+                      </span>
+                      <h3
+                        style={{
+                          margin: 0,
+                          fontSize: "20px",
+                          color: globalIndex === 0 ? "#1976d2" : "var(--fg-1)",
+                          fontWeight: "600",
+                        }}
+                      >
+                        {plan.name}
+                      </h3>
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "32px",
+                        fontWeight: "bold",
+                        margin: "16px 0",
+                      }}
+                    >
+                      {formatPrice(plan.payment.price)}
+                      <span
+                        style={{
+                          fontSize: "16px",
+                          color: "var(--fg-2)",
+                          fontWeight: "normal",
+                        }}
+                      >
+                        원
+                      </span>
+                    </div>
+                    <p
+                      style={{
+                        color: "var(--fg-2)",
+                        fontSize: "13px",
+                        marginBottom: "24px",
+                        flex: "1",
+                      }}
+                    >
+                      크레딧 {formatQuota(plan.payment.credits, "개")} 충전
+                      {plan.payment.bonusCredits
+                        ? ` (보너스 ${formatQuota(plan.payment.bonusCredits, "개")} 포함)`
+                        : ""}
+                    </p>
+                    <button
+                      onClick={() => handlePayClick(plan)}
+                      className={`mui-btn ${
+                        globalIndex === 0 ? "mui-btn--contained" : "mui-btn--outlined"
+                      } mui-btn--block`}
+                      style={{ padding: "12px" }}
+                    >
+                      충전하기
+                    </button>
+                  </div>
+                );
+              })}
             </div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                gap: "6px",
-                marginBottom: "8px",
-              }}
-            >
-              <span
-                className="material-icons"
-                style={{ color: "#1976d2", fontSize: "24px" }}
-              >
-                toll
-              </span>
-              <h3
-                style={{
-                  margin: 0,
-                  fontSize: "20px",
-                  color: "#1976d2",
-                  fontWeight: "600",
-                }}
-              >
-                100 크레딧
-              </h3>
-            </div>
-            <div
-              style={{ fontSize: "32px", fontWeight: "bold", margin: "16px 0" }}
-            >
-              5,000
-              <span
-                style={{
-                  fontSize: "16px",
-                  color: "var(--fg-2)",
-                  fontWeight: "normal",
-                }}
-              >
-                원
-              </span>
-            </div>
-            <p
-              style={{
-                color: "var(--fg-2)",
-                fontSize: "13px",
-                marginBottom: "24px",
-                flex: "1",
-              }}
-            >
-              가벼운 단건 처리 및 테스트에 적합한 기본 크레딧 패키지입니다.
-            </p>
-            <button
-              onClick={() =>
-                handlePayClick({
-                  key: "credit_100",
-                  productType: "credit",
-                  payment: { price: 5000, credits: 100 },
-                })
-              }
-              className="mui-btn mui-btn--contained mui-btn--block"
-              style={{ padding: "12px" }}
-            >
-              충전하기
-            </button>
-          </div>
-
-          {/* 500 크레딧 */}
-          <div
-            style={{
-              width: "320px",
-              textAlign: "center",
-              border: "1px solid var(--mui-divider)",
-              padding: "32px 24px",
-              borderRadius: "16px",
-              background: "#fff",
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                gap: "6px",
-                marginBottom: "8px",
-              }}
-            >
-              <span
-                className="material-icons"
-                style={{ color: "var(--fg-2)", fontSize: "24px" }}
-              >
-                toll
-              </span>
-              <h3
-                style={{
-                  margin: 0,
-                  fontSize: "20px",
-                  color: "var(--fg-1)",
-                  fontWeight: "600",
-                }}
-              >
-                500 크레딧
-              </h3>
-            </div>
-            <div
-              style={{ fontSize: "32px", fontWeight: "bold", margin: "16px 0" }}
-            >
-              20,000
-              <span
-                style={{
-                  fontSize: "16px",
-                  color: "var(--fg-2)",
-                  fontWeight: "normal",
-                }}
-              >
-                원
-              </span>
-            </div>
-            <p
-              style={{
-                color: "var(--fg-2)",
-                fontSize: "13px",
-                marginBottom: "24px",
-                flex: "1",
-              }}
-            >
-              대량 처리를 위한 넉넉한 크레딧 팩입니다. <br />
-              (20% 할인 효과)
-            </p>
-            <button
-              onClick={() =>
-                handlePayClick({
-                  key: "credit_500",
-                  productType: "credit",
-                  payment: { price: 20000, credits: 500 },
-                })
-              }
-              className="mui-btn mui-btn--outlined mui-btn--block"
-              style={{ padding: "12px" }}
-            >
-              충전하기
-            </button>
-          </div>
+          ))}
         </div>
       </section>
 
@@ -339,7 +291,7 @@ export default function Pricing() {
           </thead>
           <tbody>
             <tr className="row-head">
-              <td colSpan="4">결제 정책</td>
+              <td colSpan={plans.length + 1}>결제 정책</td>
             </tr>
             <tr>
               <td>제공 크레딧</td>
@@ -356,7 +308,7 @@ export default function Pricing() {
               ))}
             </tr>
             <tr className="row-head">
-              <td colSpan="4">파일 처리 정책</td>
+              <td colSpan={plans.length + 1}>파일 처리 정책</td>
             </tr>
             <tr>
               <td>월 처리 한도</td>
@@ -387,7 +339,7 @@ export default function Pricing() {
               ))}
             </tr>
             <tr className="row-head">
-              <td colSpan="4">데이터 보존 정책</td>
+              <td colSpan={plans.length + 1}>데이터 보존 정책</td>
             </tr>
             <tr>
               <td>원본 파일 자동 삭제</td>

@@ -29,13 +29,42 @@ export const DEFAULT_POLICY = {
   },
   payment: {
     plans: {
-      free: { credits: 5, price: 0 },
-      pro: { credits: 50, price: 2900 },
-      studio: { credits: 500, price: 19800 },
+      free: {
+        credits: 5,
+        price: 0,
+        sortOrder: 10,
+        status: "active",
+      },
+      pro: {
+        credits: 50,
+        price: 2900,
+        sortOrder: 20,
+        status: "active",
+      },
+      studio: {
+        credits: 500,
+        price: 19800,
+        sortOrder: 30,
+        status: "active",
+      },
     },
     creditPlans: {
-      credit_100: { credits: 100, bonusCredits: 0, price: 5000 },
-      credit_500: { credits: 500, bonusCredits: 0, price: 20000 },
+      credit_100: {
+        name: "100 크레딧",
+        credits: 100,
+        bonusCredits: 0,
+        price: 5000,
+        sortOrder: 10,
+        status: "active",
+      },
+      credit_500: {
+        name: "500 크레딧",
+        credits: 500,
+        bonusCredits: 0,
+        price: 20000,
+        sortOrder: 20,
+        status: "active",
+      },
     },
   },
   retention: {
@@ -91,43 +120,85 @@ export function formatFileSize(value) {
 }
 
 export function mergePolicy(base, incoming = {}) {
+  const incomingFilePlans = incoming.file_processing?.plans;
+  const incomingPaymentPlans = incoming.payment?.plans;
+  const incomingRetentionPlans = incoming.retention?.plans;
+  const incomingCreditPlans = incoming.payment?.creditPlans;
+
   return {
     file_processing: {
       ...base.file_processing,
       ...(incoming.file_processing || {}),
-      plans: {
-        ...base.file_processing.plans,
-        ...(incoming.file_processing?.plans || {}),
-      },
+      plans: incomingFilePlans || base.file_processing.plans,
     },
     payment: {
       ...base.payment,
       ...(incoming.payment || {}),
-      plans: { ...base.payment.plans, ...(incoming.payment?.plans || {}) },
-      creditPlans: {
-        ...(base.payment.creditPlans || {}),
-        ...(incoming.payment?.creditPlans || {}),
-      },
+      plans: incomingPaymentPlans || base.payment.plans,
+      creditPlans: incomingCreditPlans || base.payment.creditPlans,
     },
     retention: {
       ...base.retention,
       ...(incoming.retention || {}),
-      plans: { ...base.retention.plans, ...(incoming.retention?.plans || {}) },
+      plans: incomingRetentionPlans || base.retention.plans,
     },
   };
 }
 
 export function buildPricingPlans(policy) {
-  return PLAN_KEYS.map((key) => ({
-    key,
-    ...PLAN_META[key],
-    file:
-      policy.file_processing.plans[key] ||
-      DEFAULT_POLICY.file_processing.plans[key],
-    payment: policy.payment.plans[key] || DEFAULT_POLICY.payment.plans[key],
-    retention:
-      policy.retention.plans[key] || DEFAULT_POLICY.retention.plans[key],
-  }));
+  return Object.entries(policy.payment.plans || {})
+    .map(([key, payment]) => {
+      const meta = PLAN_META[key] || {
+        name: payment.name || key,
+        badge: "플랜",
+        badgeClass: "mui-chip--primary",
+        description: `${payment.name || key} 구독 플랜입니다.`,
+        cta: Number(payment.price || 0) === 0 ? "무료로 시작" : "결제하기",
+      };
+      return {
+        key,
+        ...meta,
+        name: payment.name || meta.name,
+        badge: payment.badgeLabel || meta.badge,
+        badgeClass: payment.badgeClass || meta.badgeClass,
+        description: payment.description || meta.description,
+        // 버튼 문구는 price 기준 고정 분기값 (cta_label 제거됨)
+        cta: Number(payment.price || 0) === 0 ? "무료로 시작" : "결제하기",
+        sortOrder: Number(payment.sortOrder ?? 0),
+        status: payment.status || "active",
+        file:
+          policy.file_processing.plans[key] ||
+          DEFAULT_POLICY.file_processing.plans[key] ||
+          {},
+        payment,
+        retention:
+          policy.retention.plans[key] ||
+          DEFAULT_POLICY.retention.plans[key] ||
+          {},
+      };
+    })
+    .filter((plan) => plan.status === "active")
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+export function buildCreditPlans(policy) {
+  return Object.entries(policy.payment.creditPlans || {})
+    .map(([key, credit]) => ({
+      key,
+      productType: "credit",
+      name: credit.name || `${formatQuota(credit.credits, "개")} 크레딧`,
+      sortOrder: Number(credit.sortOrder ?? 0),
+      status: credit.status || "active",
+      payment: {
+        price: credit.price,
+        credits: Number(credit.credits || 0) + Number(credit.bonusCredits || 0),
+        baseCredits: credit.credits,
+        bonusCredits: credit.bonusCredits || 0,
+      },
+      expiresDays: credit.expiresDays,
+    }))
+    .filter((plan) => plan.status === "active")
+    .sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
 export function usePricingPlans() {
@@ -158,7 +229,7 @@ export function usePricingPlans() {
   }, []);
 
   const plans = useMemo(() => buildPricingPlans(policy), [policy]);
-  const creditPlans = useMemo(() => policy.payment.creditPlans || {}, [policy]);
+  const creditPlans = useMemo(() => buildCreditPlans(policy), [policy]);
 
   return { plans, creditPlans, policy, loading, error };
 }

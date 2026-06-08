@@ -169,7 +169,7 @@ export default function Payment() {
   }
 
   return (
-    <GarimPage bodyClass="page-app" screenLabel="14 Payment">
+    <GarimPage bodyClass="page-app page-payment" screenLabel="14 Payment">
       {content}
     </GarimPage>
   );

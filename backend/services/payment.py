@@ -30,7 +30,7 @@ async def create_temp_order(
                 plan_code AS product_code,
                 plan_name AS product_name,
                 price_amount,
-                is_active,
+                status,
                 credits
             FROM plans
             WHERE LOWER(plan_code) = :product_code
@@ -42,7 +42,7 @@ async def create_temp_order(
                 credit_plan_code AS product_code,
                 credit_plan_name AS product_name,
                 price_amount,
-                is_active,
+                status,
                 base_credits,
                 bonus_credits
             FROM credit_plans
@@ -58,7 +58,7 @@ async def create_temp_order(
 
     product = result._mapping
 
-    if not product["is_active"]:
+    if product["status"] != "active":
         raise ValueError("Inactive payment product.")
 
     if product["price_amount"] != amount:
@@ -511,7 +511,7 @@ def _restore_free_plan_for_expired_subscriptions(db: Session, user_id):
                 SELECT plan_id
                 FROM plans
                 WHERE LOWER(plan_code) = 'free'
-                  AND is_active = TRUE
+                  AND status = 'active'
                 LIMIT 1
             ) AS free_plan
             WHERE subscriptions.user_id = :user_id

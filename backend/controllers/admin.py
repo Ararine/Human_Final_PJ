@@ -5,6 +5,11 @@ from services import admin as admin_service
 from services import auth as auth_service
 
 
+def _json_error(error: Exception):
+    status_code = 400 if isinstance(error, ValueError) else 500
+    return JSONResponse({"message": str(error)}, status_code=status_code)
+
+
 def list_users(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
@@ -59,3 +64,115 @@ def update_policy_settings(payload: dict = Body(...), access_token: str | None =
             {"message": str(e)},
             status_code=500,
         )
+
+
+def list_subscription_plans(
+    q: str = Query(None),
+    include_deleted: bool = Query(False),
+    status: str = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+):
+    try:
+        result = admin_service.list_subscription_plans(q, include_deleted, status, page, limit)
+        return JSONResponse(
+            {
+                "data": result["data"],
+                "total": result["total"],
+                "page": result["page"],
+                "limit": result["limit"],
+                "message": "Subscription plans loaded.",
+            },
+            status_code=200,
+        )
+    except Exception as e:
+        return _json_error(e)
+
+
+def create_subscription_plan(payload: dict = Body(...)):
+    try:
+        data = admin_service.create_subscription_plan(payload)
+        return JSONResponse(
+            {"data": data, "message": "Subscription plan created."},
+            status_code=status.HTTP_201_CREATED,
+        )
+    except Exception as e:
+        return _json_error(e)
+
+
+def update_subscription_plan(plan_id: str, payload: dict = Body(...)):
+    try:
+        data = admin_service.update_subscription_plan(plan_id, payload)
+        return JSONResponse(
+            {"data": data, "message": "Subscription plan updated."},
+            status_code=200,
+        )
+    except Exception as e:
+        return _json_error(e)
+
+
+def delete_subscription_plan(plan_id: str):
+    try:
+        data = admin_service.delete_subscription_plan(plan_id)
+        return JSONResponse(
+            {"data": data, "message": "Subscription plan deleted."},
+            status_code=200,
+        )
+    except Exception as e:
+        return _json_error(e)
+
+
+def list_credit_plans(
+    q: str = Query(None),
+    include_deleted: bool = Query(False),
+    status: str = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+):
+    try:
+        result = admin_service.list_credit_plans(q, include_deleted, status, page, limit)
+        return JSONResponse(
+            {
+                "data": result["data"],
+                "total": result["total"],
+                "page": result["page"],
+                "limit": result["limit"],
+                "message": "Credit plans loaded.",
+            },
+            status_code=200,
+        )
+    except Exception as e:
+        return _json_error(e)
+
+
+def create_credit_plan(payload: dict = Body(...)):
+    try:
+        data = admin_service.create_credit_plan(payload)
+        return JSONResponse(
+            {"data": data, "message": "Credit plan created."},
+            status_code=status.HTTP_201_CREATED,
+        )
+    except Exception as e:
+        return _json_error(e)
+
+
+def update_credit_plan(credit_plan_id: str, payload: dict = Body(...)):
+    try:
+        data = admin_service.update_credit_plan(credit_plan_id, payload)
+        return JSONResponse(
+            {"data": data, "message": "Credit plan updated."},
+            status_code=200,
+        )
+    except Exception as e:
+        return _json_error(e)
+
+
+def delete_credit_plan(credit_plan_id: str):
+    try:
+        data = admin_service.delete_credit_plan(credit_plan_id)
+        return JSONResponse(
+            {"data": data, "message": "Credit plan deleted."},
+            status_code=200,
+        )
+    except Exception as e:
+        return _json_error(e)

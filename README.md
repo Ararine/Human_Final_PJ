@@ -122,6 +122,6 @@ cd Human_Final_PJ
 - [오세덕](younadme0112@gmail.com)
 - [임정은](jlu4688@gmail.com)
 - [이은우](zx110500@gmail.com)
-- [남태우]()
+- [남태우](namdoil495@gmail.com)
 
 ---

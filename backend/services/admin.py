@@ -39,6 +39,411 @@ DEFAULT_ADMIN_POLICIES = {
 }
 
 
+PLAN_FIELDS = {
+    "plan_code",
+    "plan_name",
+    "badge_label",
+    "badge_class",
+    "description",
+    "monthly_quota",
+    "result_retention_days",
+    "watermark_required",
+    "price_amount",
+    "sort_order",
+    "status",
+    "file_size_limit",
+    "max_jobs",
+    "auto_delete_original_hours",
+    "metadata_retention_days",
+    "credits",
+}
+
+CREDIT_PLAN_FIELDS = {
+    "credit_plan_code",
+    "credit_plan_name",
+    "price_amount",
+    "base_credits",
+    "bonus_credits",
+    "expires_days",
+    "sort_order",
+    "status",
+}
+
+VALID_MANAGEMENT_STATUSES = {"active", "inactive", "deleted"}
+PLAN_PAGE_LIMITS = {5, 10, 20, 50, 100}
+
+
+def _row_to_dict(row):
+    data = {}
+    for key, value in row._mapping.items():
+        if hasattr(value, "isoformat"):
+            data[key] = value.isoformat()
+        else:
+            data[key] = str(value) if key.endswith("_id") and value is not None else value
+    return data
+
+
+def _clean_payload(payload: dict, allowed_fields: set[str]):
+    cleaned = {key: value for key, value in payload.items() if key in allowed_fields}
+    if "status" in cleaned and cleaned["status"] not in VALID_MANAGEMENT_STATUSES:
+        raise ValueError("status must be one of active, inactive, deleted")
+    return cleaned
+
+
+def _build_filter_clause(code_column: str, name_column: str, q=None, include_deleted=False, status=None):
+    conditions = []
+    params = {}
+
+    if status:
+        conditions.append("status = :status_filter")
+        params["status_filter"] = status
+    elif not include_deleted:
+        conditions.append("status <> 'deleted'")
+    if q:
+        conditions.append(
+            f"(LOWER({code_column}) LIKE :q OR LOWER({name_column}) LIKE :q OR LOWER(status) LIKE :q)"
+        )
+        params["q"] = f"%{q.lower()}%"
+
+    return ("WHERE " + " AND ".join(conditions)) if conditions else "", params
+
+
+def _normalize_page_params(page: int = 1, limit: int = 20):
+    page = max(int(page or 1), 1)
+    limit = int(limit or 20)
+    if limit not in PLAN_PAGE_LIMITS:
+        limit = 20
+    return page, limit, (page - 1) * limit
+
+
+def list_subscription_plans(
+    q=None,
+    include_deleted: bool = False,
+    status: str = None,
+    page: int = 1,
+    limit: int = 20,
+):
+    db = SessionLocal()
+    try:
+        if status and status not in VALID_MANAGEMENT_STATUSES:
+            raise ValueError("status must be one of active, inactive, deleted")
+        page, limit, offset = _normalize_page_params(page, limit)
+        where, params = _build_filter_clause("plan_code", "plan_name", q, include_deleted, status)
+        total = db.execute(
+            text(f"""
+                SELECT COUNT(*)
+                FROM plans
+                {where}
+            """),
+            params,
+        ).scalar()
+        rows = db.execute(
+            text(f"""
+                SELECT
+                    plan_id,
+                    plan_code,
+                    plan_name,
+                    badge_label,
+                    badge_class,
+                    description,
+                    monthly_quota,
+                    result_retention_days,
+                    watermark_required,
+                    price_amount,
+                    sort_order,
+                    status,
+                    file_size_limit,
+                    max_jobs,
+                    auto_delete_original_hours,
+                    metadata_retention_days,
+                    credits,
+                    created_at,
+                    updated_at
+                FROM plans
+                {where}
+                ORDER BY sort_order ASC, created_at ASC
+                LIMIT :limit OFFSET :offset
+            """),
+            {**params, "limit": limit, "offset": offset},
+        ).fetchall()
+        return {
+            "data": [_row_to_dict(row) for row in rows],
+            "total": total or 0,
+            "page": page,
+            "limit": limit,
+        }
+    finally:
+        db.close()
+
+
+def create_subscription_plan(payload: dict):
+    data = _clean_payload(payload, PLAN_FIELDS)
+    required = {"plan_code", "plan_name", "result_retention_days"}
+    missing = [field for field in required if data.get(field) in (None, "")]
+    if missing:
+        raise ValueError(f"missing required fields: {', '.join(missing)}")
+
+    db = SessionLocal()
+    try:
+        if data.get("status") == "active":
+            active_count = db.execute(
+                text("SELECT COUNT(*) FROM plans WHERE status = 'active'")
+            ).scalar()
+            if active_count >= 4:
+                raise ValueError("활성화된 구독 플랜 카드는 최대 4개까지만 등록할 수 있습니다.")
+
+        columns = list(data.keys())
+        placeholders = [f":{column}" for column in columns]
+        row = db.execute(
+            text(f"""
+                INSERT INTO plans ({", ".join(columns)})
+                VALUES ({", ".join(placeholders)})
+                RETURNING
+                    plan_id,
+                    plan_code,
+                    plan_name,
+                    badge_label,
+                    badge_class,
+                    description,
+                    monthly_quota,
+                    result_retention_days,
+                    watermark_required,
+                    price_amount,
+                    sort_order,
+                    status,
+                    file_size_limit,
+                    max_jobs,
+                    auto_delete_original_hours,
+                    metadata_retention_days,
+                    credits,
+                    created_at,
+                    updated_at
+            """),
+            data,
+        ).fetchone()
+        db.commit()
+        return _row_to_dict(row)
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def update_subscription_plan(plan_id: str, payload: dict):
+    data = _clean_payload(payload, PLAN_FIELDS)
+    if not data:
+        raise ValueError("no updatable fields provided")
+
+    db = SessionLocal()
+    try:
+        if data.get("status") == "active":
+            active_count = db.execute(
+                text("SELECT COUNT(*) FROM plans WHERE status = 'active' AND plan_id <> CAST(:plan_id AS uuid)"),
+                {"plan_id": plan_id}
+            ).scalar()
+            if active_count >= 4:
+                raise ValueError("활성화된 구독 플랜 카드는 최대 4개까지만 등록할 수 있습니다.")
+
+        set_clause = ", ".join([f"{field} = :{field}" for field in data])
+        params = {**data, "plan_id": plan_id}
+        row = db.execute(
+            text(f"""
+                UPDATE plans
+                SET {set_clause},
+                    updated_at = NOW()
+                WHERE plan_id = CAST(:plan_id AS uuid)
+                RETURNING
+                    plan_id,
+                    plan_code,
+                    plan_name,
+                    badge_label,
+                    badge_class,
+                    description,
+                    monthly_quota,
+                    result_retention_days,
+                    watermark_required,
+                    price_amount,
+                    sort_order,
+                    status,
+                    file_size_limit,
+                    max_jobs,
+                    auto_delete_original_hours,
+                    metadata_retention_days,
+                    credits,
+                    created_at,
+                    updated_at
+            """),
+            params,
+        ).fetchone()
+        if not row:
+            raise ValueError("subscription plan not found")
+        db.commit()
+        return _row_to_dict(row)
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def delete_subscription_plan(plan_id: str):
+    return update_subscription_plan(plan_id, {"status": "deleted"})
+
+
+def list_credit_plans(
+    q=None,
+    include_deleted: bool = False,
+    status: str = None,
+    page: int = 1,
+    limit: int = 20,
+):
+    db = SessionLocal()
+    try:
+        if status and status not in VALID_MANAGEMENT_STATUSES:
+            raise ValueError("status must be one of active, inactive, deleted")
+        page, limit, offset = _normalize_page_params(page, limit)
+        where, params = _build_filter_clause(
+            "credit_plan_code", "credit_plan_name", q, include_deleted, status
+        )
+        total = db.execute(
+            text(f"""
+                SELECT COUNT(*)
+                FROM credit_plans
+                {where}
+            """),
+            params,
+        ).scalar()
+        rows = db.execute(
+            text(f"""
+                SELECT
+                    credit_plan_id,
+                    credit_plan_code,
+                    credit_plan_name,
+                    price_amount,
+                    base_credits,
+                    bonus_credits,
+                    expires_days,
+                    sort_order,
+                    status,
+                    created_at,
+                    updated_at
+                FROM credit_plans
+                {where}
+                ORDER BY sort_order ASC, created_at ASC
+                LIMIT :limit OFFSET :offset
+            """),
+            {**params, "limit": limit, "offset": offset},
+        ).fetchall()
+        return {
+            "data": [_row_to_dict(row) for row in rows],
+            "total": total or 0,
+            "page": page,
+            "limit": limit,
+        }
+    finally:
+        db.close()
+
+
+def create_credit_plan(payload: dict):
+    data = _clean_payload(payload, CREDIT_PLAN_FIELDS)
+    required = {"credit_plan_code", "credit_plan_name", "price_amount", "base_credits"}
+    missing = [field for field in required if data.get(field) in (None, "")]
+    if missing:
+        raise ValueError(f"missing required fields: {', '.join(missing)}")
+
+    db = SessionLocal()
+    try:
+        if data.get("status") == "active":
+            active_count = db.execute(
+                text("SELECT COUNT(*) FROM credit_plans WHERE status = 'active'")
+            ).scalar()
+            if active_count >= 8:
+                raise ValueError("활성화된 크레딧 플랜 카드는 최대 8개까지만 등록할 수 있습니다.")
+
+        columns = list(data.keys())
+        placeholders = [f":{column}" for column in columns]
+        row = db.execute(
+            text(f"""
+                INSERT INTO credit_plans ({", ".join(columns)})
+                VALUES ({", ".join(placeholders)})
+                RETURNING
+                    credit_plan_id,
+                    credit_plan_code,
+                    credit_plan_name,
+                    price_amount,
+                    base_credits,
+                    bonus_credits,
+                    expires_days,
+                    sort_order,
+                    status,
+                    created_at,
+                    updated_at
+            """),
+            data,
+        ).fetchone()
+        db.commit()
+        return _row_to_dict(row)
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def update_credit_plan(credit_plan_id: str, payload: dict):
+    data = _clean_payload(payload, CREDIT_PLAN_FIELDS)
+    if not data:
+        raise ValueError("no updatable fields provided")
+
+    db = SessionLocal()
+    try:
+        if data.get("status") == "active":
+            active_count = db.execute(
+                text("SELECT COUNT(*) FROM credit_plans WHERE status = 'active' AND credit_plan_id <> CAST(:credit_plan_id AS uuid)"),
+                {"credit_plan_id": credit_plan_id}
+            ).scalar()
+            if active_count >= 8:
+                raise ValueError("활성화된 크레딧 플랜 카드는 최대 8개까지만 등록할 수 있습니다.")
+
+        set_clause = ", ".join([f"{field} = :{field}" for field in data])
+        params = {**data, "credit_plan_id": credit_plan_id}
+        row = db.execute(
+            text(f"""
+                UPDATE credit_plans
+                SET {set_clause},
+                    updated_at = NOW()
+                WHERE credit_plan_id = CAST(:credit_plan_id AS uuid)
+                RETURNING
+                    credit_plan_id,
+                    credit_plan_code,
+                    credit_plan_name,
+                    price_amount,
+                    base_credits,
+                    bonus_credits,
+                    expires_days,
+                    sort_order,
+                    status,
+                    created_at,
+                    updated_at
+            """),
+            params,
+        ).fetchone()
+        if not row:
+            raise ValueError("credit plan not found")
+        db.commit()
+        return _row_to_dict(row)
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def delete_credit_plan(credit_plan_id: str):
+    return update_credit_plan(credit_plan_id, {"status": "deleted"})
+
+
 def get_users_list(page: int = 1, limit: int = 20, role: str = None, status_val: str = None):
     db = SessionLocal()
     try:
@@ -149,40 +554,74 @@ def get_admin_policies():
         # 3. Query plans table to populate plan-dependent policies
         plan_rows = db.execute(
             text("""
-                SELECT plan_code, file_size_limit, max_jobs, monthly_quota, 
-                       result_retention_days, price_amount, watermark_required, 
-                       auto_delete_original_hours, metadata_retention_days, credits
+                SELECT
+                    plan_code,
+                    plan_name,
+                    badge_label,
+                    badge_class,
+                    description,
+                    file_size_limit,
+                    max_jobs,
+                    monthly_quota,
+                    result_retention_days,
+                    price_amount,
+                    watermark_required,
+                    auto_delete_original_hours,
+                    metadata_retention_days,
+                    credits,
+                    status,
+                    sort_order
                 FROM plans
+                WHERE status = 'active'
+                ORDER BY sort_order ASC, created_at ASC
             """)
         ).fetchall()
 
         for prow in plan_rows:
             pm = prow._mapping
             pcode = pm["plan_code"].lower()
-            if pcode in ["free", "pro", "studio"]:
-                policies["file_processing"]["plans"][pcode] = {
-                    "fileSizeLimit": pm["file_size_limit"],
-                    "maxJobs": pm["max_jobs"],
-                    "monthlyQuota": pm["monthly_quota"],
-                    "resultRetention": pm["result_retention_days"],
-                    "watermarkRequired": pm["watermark_required"]
-                }
-                policies["payment"]["plans"][pcode] = {
-                    "credits": pm["credits"],
-                    "price": pm["price_amount"]
-                }
-                policies["retention"]["plans"][pcode] = {
-                    "autoDeleteOriginalHours": pm["auto_delete_original_hours"],
-                    "metadataRetentionDays": pm["metadata_retention_days"]
-                }
+            common = {
+                "name": pm["plan_name"],
+                "badgeLabel": pm["badge_label"],
+                "badgeClass": pm["badge_class"],
+                "description": pm["description"],
+                "sortOrder": pm["sort_order"],
+                "status": pm["status"],
+            }
+            policies["file_processing"]["plans"][pcode] = {
+                **common,
+                "fileSizeLimit": pm["file_size_limit"],
+                "maxJobs": pm["max_jobs"],
+                "monthlyQuota": pm["monthly_quota"],
+                "resultRetention": pm["result_retention_days"],
+                "watermarkRequired": pm["watermark_required"],
+            }
+            policies["payment"]["plans"][pcode] = {
+                **common,
+                "credits": pm["credits"],
+                "price": pm["price_amount"],
+            }
+            policies["retention"]["plans"][pcode] = {
+                **common,
+                "autoDeleteOriginalHours": pm["auto_delete_original_hours"],
+                "metadataRetentionDays": pm["metadata_retention_days"],
+            }
 
         # 4. Query credit_plans table to populate creditPlans
         credit_plan_rows = db.execute(
             text("""
-                SELECT credit_plan_code, base_credits, bonus_credits, price_amount
+                SELECT
+                    credit_plan_code,
+                    credit_plan_name,
+                    base_credits,
+                    bonus_credits,
+                    expires_days,
+                    price_amount,
+                    status,
+                    sort_order
                 FROM credit_plans
-                WHERE is_active = TRUE
-                ORDER BY sort_order
+                WHERE status = 'active'
+                ORDER BY sort_order ASC, created_at ASC
             """)
         ).fetchall()
 
@@ -190,9 +629,13 @@ def get_admin_policies():
         for crow in credit_plan_rows:
             cm = crow._mapping
             credit_plans_map[cm["credit_plan_code"]] = {
+                "name": cm["credit_plan_name"],
                 "credits": cm["base_credits"],
                 "bonusCredits": cm["bonus_credits"],
+                "expiresDays": cm["expires_days"],
                 "price": cm["price_amount"],
+                "status": cm["status"],
+                "sortOrder": cm["sort_order"],
             }
 
         if credit_plans_map:

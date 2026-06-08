@@ -49,3 +49,37 @@
   .faq-item { max-width: 760px; margin: 0 auto 12px; background: #fff; border: 1px solid var(--mui-border); border-radius: 4px; padding: 20px 24px; }
   .faq-item h4 { font: 500 16px var(--font-sans); margin: 0 0 8px; }
   .faq-item p { font: 400 14px/1.6 var(--font-sans); color: var(--fg-2); margin: 0; }
+
+.pricing-grid {
+  grid-template-columns: repeat(4, 1fr) !important;
+  max-width: 1280px !important;
+}
+
+@media (max-width: 1100px) {
+  .pricing-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .pricing-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+.credit-row-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  align-items: center;
+  width: 100%;
+}
+
+.credit-row {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+

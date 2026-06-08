@@ -159,7 +159,7 @@ async def test_service_create_temp_order_success():
         "product_code": "pro",
         "product_name": "Pro Plan",
         "price_amount": 2900,
-        "is_active": True,
+        "status": "active",
         "credits": 50,
     }
 
@@ -227,7 +227,7 @@ async def test_service_create_temp_order_uses_credit_plans_for_credit():
         "product_code": "credit_100",
         "product_name": "100 Credits",
         "price_amount": 5000,
-        "is_active": True,
+        "status": "active",
         "base_credits": 100,
         "bonus_credits": 0,
     }

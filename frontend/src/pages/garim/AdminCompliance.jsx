@@ -50,7 +50,7 @@ export default function AdminCompliance() {
             <span className="material-icons">
               tune
             </span>
-            정책 설정
+            정책 및 상품 관리
           </a>
         </aside>
         <main className="adm-main">

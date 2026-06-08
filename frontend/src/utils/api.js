@@ -87,6 +87,70 @@ export async function updateAdminPolicySettings(policies) {
   });
 }
 
+function buildAdminPlanQuery(params = {}) {
+  const query = new URLSearchParams();
+  if (params.page) query.set("page", params.page);
+  if (params.limit) query.set("limit", params.limit);
+  if (params.q) query.set("q", params.q);
+  if (params.status) query.set("status", params.status);
+  if (params.include_deleted !== undefined) {
+    query.set("include_deleted", params.include_deleted ? "true" : "false");
+  }
+
+  const qs = query.toString();
+  return qs ? `?${qs}` : "";
+}
+
+export async function getAdminPlans(params = {}) {
+  return requestJson(`/admin/plans${buildAdminPlanQuery(params)}`);
+}
+
+export async function createAdminPlan(plan) {
+  return requestJson("/admin/plans", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(plan),
+  });
+}
+
+export async function updateAdminPlan(planId, plan) {
+  return requestJson(`/admin/plans/${planId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(plan),
+  });
+}
+
+export async function deleteAdminPlan(planId) {
+  return requestJson(`/admin/plans/${planId}`, { method: "DELETE" });
+}
+
+export async function getAdminCreditPlans(params = {}) {
+  return requestJson(`/admin/credit-plans${buildAdminPlanQuery(params)}`);
+}
+
+export async function createAdminCreditPlan(plan) {
+  return requestJson("/admin/credit-plans", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(plan),
+  });
+}
+
+export async function updateAdminCreditPlan(creditPlanId, plan) {
+  return requestJson(`/admin/credit-plans/${creditPlanId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(plan),
+  });
+}
+
+export async function deleteAdminCreditPlan(creditPlanId) {
+  return requestJson(`/admin/credit-plans/${creditPlanId}`, {
+    method: "DELETE",
+  });
+}
+
 export async function createPaymentTempOrder(order) {
   return requestJson("/payment/temp-order", {
     method: "POST",

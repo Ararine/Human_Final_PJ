@@ -175,7 +175,7 @@ def create_free_subscription_query(conn, user_id):
                 NOW()
             FROM plans
             WHERE LOWER(plan_code) = 'free'
-              AND is_active = TRUE
+              AND status = 'active'
             RETURNING subscription_id
             """
         ),

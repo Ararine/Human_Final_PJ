@@ -316,35 +316,46 @@ CREATE TABLE IF NOT EXISTS plans (
     plan_id uuid NOT NULL DEFAULT gen_random_uuid(),
     plan_code varchar(30) NOT NULL,
     plan_name varchar(100) NOT NULL,
+    badge_label varchar(50),
+    badge_class varchar(50),
+    description text,
     monthly_quota integer,
     result_retention_days integer NOT NULL,
     watermark_required boolean NOT NULL DEFAULT true,
     price_amount integer NOT NULL DEFAULT 0,
-    is_active boolean NOT NULL DEFAULT true,
+    sort_order integer NOT NULL DEFAULT 0,
+    status varchar(20) NOT NULL DEFAULT 'active',
     file_size_limit integer NOT NULL DEFAULT 50,
     max_jobs integer NOT NULL DEFAULT 3,
     auto_delete_original_hours integer NOT NULL DEFAULT 12,
     metadata_retention_days integer NOT NULL DEFAULT 90,
     credits integer NOT NULL DEFAULT 0,
     created_at timestamp NOT NULL DEFAULT now(),
+    updated_at timestamp,
     CONSTRAINT pk_plans PRIMARY KEY (plan_id),
-    CONSTRAINT uq_plans_plan_code UNIQUE (plan_code)
+    CONSTRAINT uq_plans_plan_code UNIQUE (plan_code),
+    CONSTRAINT ck_plans_status CHECK (status IN ('active', 'inactive', 'deleted'))
 );
 COMMENT ON TABLE plans IS 'Free, 1회권, Pro 등 서비스 요금제 정책 테이블';
 COMMENT ON COLUMN plans.plan_id IS '요금제 ID - plans 테이블의 기본 식별자';
 COMMENT ON COLUMN plans.plan_code IS '요금제 코드 - 업무 규칙 또는 제약조건 관리: unique';
 COMMENT ON COLUMN plans.plan_name IS '요금제명 - 화면 표시 또는 관리자가 식별하기 위한 이름';
+COMMENT ON COLUMN plans.badge_label IS 'pricing 카드 배지 문구 - 기본, 추천, 팀/스튜디오 등';
+COMMENT ON COLUMN plans.badge_class IS 'pricing 카드 배지 스타일 클래스 - mui-chip 계열 클래스명';
+COMMENT ON COLUMN plans.description IS 'pricing 카드 설명 문구 - 가격 아래 노출되는 플랜 소개 문구';
 COMMENT ON COLUMN plans.monthly_quota IS '월 처리 한도 - 월 처리 한도 정보를 저장하는 컬럼';
 COMMENT ON COLUMN plans.result_retention_days IS '결과 보관 일수 - 결과 보관 일수 정보를 저장하는 컬럼';
 COMMENT ON COLUMN plans.watermark_required IS '워터마크 포함 여부 - 워터마크 포함 여부 정보를 저장하는 컬럼';
 COMMENT ON COLUMN plans.price_amount IS '가격 - 결제 또는 과금 계산에 사용하는 금액 값';
-COMMENT ON COLUMN plans.is_active IS '활성 여부 - 활성 여부 정보를 저장하는 컬럼';
+COMMENT ON COLUMN plans.sort_order IS '정렬 순서 - 요금제 화면 노출 순서';
+COMMENT ON COLUMN plans.status IS '관리 상태 - active(노출), inactive(비노출), deleted(소프트삭제)';
 COMMENT ON COLUMN plans.file_size_limit IS '최대 파일 크기 제한 - 업로드 가능한 파일의 최대 크기(MB)';
 COMMENT ON COLUMN plans.max_jobs IS '동시 처리 최대 건수 - 사용자가 동시에 실행 가능한 최대 분석 작업 개수';
 COMMENT ON COLUMN plans.auto_delete_original_hours IS '원본 파일 자동 삭제 대기 시간 - 원본 영상/음성이 보관되는 시간';
 COMMENT ON COLUMN plans.metadata_retention_days IS '처리 메타데이터 보존 일수 - 탐지 및 리포트 등의 메타데이터 보관 기간';
 COMMENT ON COLUMN plans.credits IS '제공 크레딧 - 요금제 구매 시 부여되는 사용 가능 크레딧 수';
 COMMENT ON COLUMN plans.created_at IS '등록 일시 - 레코드가 생성된 시각';
+COMMENT ON COLUMN plans.updated_at IS '수정 일시 - 레코드가 마지막으로 수정된 시각';
 
 CREATE TABLE IF NOT EXISTS subscriptions (
     subscription_id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -377,15 +388,16 @@ CREATE TABLE IF NOT EXISTS credit_plans (
     base_credits integer NOT NULL,
     bonus_credits integer NOT NULL DEFAULT 0,
     expires_days integer,
-    is_active boolean NOT NULL DEFAULT true,
     sort_order integer NOT NULL DEFAULT 0,
+    status varchar(20) NOT NULL DEFAULT 'active',
     created_at timestamp NOT NULL DEFAULT now(),
     updated_at timestamp,
     CONSTRAINT pk_credit_plans PRIMARY KEY (credit_plan_id),
     CONSTRAINT uq_credit_plans_code UNIQUE (credit_plan_code),
     CONSTRAINT ck_credit_plans_price_non_negative CHECK (price_amount >= 0),
     CONSTRAINT ck_credit_plans_base_positive CHECK (base_credits > 0),
-    CONSTRAINT ck_credit_plans_bonus_non_negative CHECK (bonus_credits >= 0)
+    CONSTRAINT ck_credit_plans_bonus_non_negative CHECK (bonus_credits >= 0),
+    CONSTRAINT ck_credit_plans_status CHECK (status IN ('active', 'inactive', 'deleted'))
 );
 COMMENT ON TABLE credit_plans IS 'Credit recharge product catalog';
 COMMENT ON COLUMN credit_plans.credit_plan_id IS 'Credit product ID';
@@ -395,8 +407,8 @@ COMMENT ON COLUMN credit_plans.price_amount IS 'Payment amount in KRW';
 COMMENT ON COLUMN credit_plans.base_credits IS 'Base credits granted by this product';
 COMMENT ON COLUMN credit_plans.bonus_credits IS 'Additional promotional credits';
 COMMENT ON COLUMN credit_plans.expires_days IS 'Credit expiration days; null means no expiration policy yet';
-COMMENT ON COLUMN credit_plans.is_active IS 'Whether the credit product can be purchased';
 COMMENT ON COLUMN credit_plans.sort_order IS 'Display ordering for pricing page';
+COMMENT ON COLUMN credit_plans.status IS 'Management status: active(visible), inactive(hidden), deleted(soft-deleted)';
 COMMENT ON COLUMN credit_plans.created_at IS 'Row creation timestamp';
 COMMENT ON COLUMN credit_plans.updated_at IS 'Last update timestamp';
 
@@ -860,8 +872,10 @@ COMMENT ON INDEX idx_processed_files_expires_at IS '업무 이벤트가 발생�
 -- SKIP idx_download_events_job_created_at: index design references columns not found in table definition: download_events(job_id, created_at desc), 최근 다운로드
 CREATE INDEX IF NOT EXISTS idx_subscriptions_user_status ON subscriptions (user_id, status);
 COMMENT ON INDEX idx_subscriptions_user_status IS '관련 테이블(users.user_id)과 연결하기 위한 외래 키';
-CREATE INDEX IF NOT EXISTS idx_credit_plans_active_sort ON credit_plans (is_active, sort_order);
-COMMENT ON INDEX idx_credit_plans_active_sort IS 'Active credit products ordered for pricing display';
+CREATE INDEX IF NOT EXISTS idx_plans_status_sort ON plans (status, sort_order);
+COMMENT ON INDEX idx_plans_status_sort IS 'Subscription products ordered for pricing display by status';
+CREATE INDEX IF NOT EXISTS idx_credit_plans_status_sort ON credit_plans (status, sort_order);
+COMMENT ON INDEX idx_credit_plans_status_sort IS 'Credit products ordered for pricing display by status';
 CREATE INDEX IF NOT EXISTS idx_credit_ledger_user_created_at ON credit_ledger (user_id, created_at DESC);
 COMMENT ON INDEX idx_credit_ledger_user_created_at IS 'Recent credit ledger entries by user';
 CREATE INDEX IF NOT EXISTS idx_payments_product_type_created_at ON payments (product_type, created_at DESC);
@@ -1150,37 +1164,94 @@ CREATE INDEX IF NOT EXISTS idx_admin_policy_settings_updated_at ON admin_policy_
 
 -- Seed default plans
 INSERT INTO plans (
-    plan_code, plan_name, monthly_quota, result_retention_days,
-    watermark_required, price_amount, is_active,
+    plan_code, plan_name, badge_label, badge_class, description,
+    monthly_quota, result_retention_days,
+    watermark_required, price_amount, sort_order, status,
     file_size_limit, max_jobs, auto_delete_original_hours,
     metadata_retention_days, credits
 )
 VALUES
-    ('free', 'Free', 5, 3, true, 0, true, 50, 3, 12, 90, 5),
-    ('pro', 'Pro', 50, 7, false, 2900, true, 500, 10, 12, 90, 50),
-    ('studio', 'Studio', null, 30, false, 19800, true, 2048, 30, 12, 90, 500)
+    (
+        'free',
+        'Free',
+        '기본',
+        'mui-chip--primary',
+        '개인 테스트와 가벼운 분석을 위한 무료 플랜입니다.',
+        5,
+        3,
+        true,
+        0,
+        10,
+        'active',
+        50,
+        3,
+        12,
+        90,
+        5
+    ),
+    (
+        'pro',
+        'Pro',
+        '추천',
+        'mui-chip--soft-warning',
+        '정기적으로 영상을 분석하는 개인 사용자에게 적합합니다.',
+        50,
+        7,
+        false,
+        2900,
+        20,
+        'active',
+        500,
+        10,
+        12,
+        90,
+        50
+    ),
+    (
+        'studio',
+        'Studio',
+        '팀/스튜디오',
+        'mui-chip--secondary',
+        '팀 단위 작업과 대량 분석을 위한 플랜입니다.',
+        null,
+        30,
+        false,
+        19800,
+        30,
+        'active',
+        2048,
+        30,
+        12,
+        90,
+        500
+    )
 ON CONFLICT (plan_code) DO UPDATE
 SET
     plan_name = EXCLUDED.plan_name,
+    badge_label = EXCLUDED.badge_label,
+    badge_class = EXCLUDED.badge_class,
+    description = EXCLUDED.description,
     monthly_quota = EXCLUDED.monthly_quota,
     result_retention_days = EXCLUDED.result_retention_days,
     watermark_required = EXCLUDED.watermark_required,
     price_amount = EXCLUDED.price_amount,
-    is_active = EXCLUDED.is_active,
+    sort_order = EXCLUDED.sort_order,
+    status = EXCLUDED.status,
     file_size_limit = EXCLUDED.file_size_limit,
     max_jobs = EXCLUDED.max_jobs,
     auto_delete_original_hours = EXCLUDED.auto_delete_original_hours,
     metadata_retention_days = EXCLUDED.metadata_retention_days,
-    credits = EXCLUDED.credits;
+    credits = EXCLUDED.credits,
+    updated_at = NOW();
 
 -- Seed default credit recharge products
 INSERT INTO credit_plans (
     credit_plan_code, credit_plan_name, price_amount, base_credits,
-    bonus_credits, expires_days, is_active, sort_order
+    bonus_credits, expires_days, sort_order, status
 )
 VALUES
-    ('credit_100', '100 Credits', 5000, 100, 0, NULL, true, 10),
-    ('credit_500', '500 Credits', 20000, 500, 0, NULL, true, 20)
+    ('credit_100', '100 Credits', 5000, 100, 0, NULL, 10, 'active'),
+    ('credit_500', '500 Credits', 20000, 500, 0, NULL, 20, 'active')
 ON CONFLICT (credit_plan_code) DO UPDATE
 SET
     credit_plan_name = EXCLUDED.credit_plan_name,
@@ -1188,9 +1259,112 @@ SET
     base_credits = EXCLUDED.base_credits,
     bonus_credits = EXCLUDED.bonus_credits,
     expires_days = EXCLUDED.expires_days,
-    is_active = EXCLUDED.is_active,
     sort_order = EXCLUDED.sort_order,
+    status = EXCLUDED.status,
     updated_at = NOW();
+
+
+-- =========================================================
+-- v9 추가 seed: plans / credit_plans expanded sample data
+-- 기존 기본 seed는 그대로 유지하고, 추가 데이터만 upsert한다.
+-- 목표:
+--   plans 총 20개 / active 총 4개
+--   credit_plans 총 20개 / active 총 8개
+-- 재실행 안전성:
+--   plan_code, credit_plan_code 기준 ON CONFLICT DO UPDATE 사용
+-- =========================================================
+
+INSERT INTO plans (
+    plan_code, plan_name, badge_label, badge_class, description,
+    monthly_quota, result_retention_days, watermark_required,
+    price_amount, sort_order, status, file_size_limit, max_jobs,
+    auto_delete_original_hours, metadata_retention_days, credits
+)
+VALUES
+    ('enterprise', 'Enterprise', '엔터프라이즈', 'mui-chip--success', '대규모 팀과 비즈니스를 위한 고급 기능 플랜입니다.', NULL, 90, false, 49000, 40, 'active', 10240, 100, 24, 365, 2000),
+    ('starter_light', 'Starter Light', '테스트', 'mui-chip--soft-info', '가벼운 테스트와 데모 환경 검증을 위한 비노출 플랜입니다.', 10, 3, true, 900, 50, 'inactive', 100, 3, 12, 90, 10),
+    ('starter_plus', 'Starter Plus', '테스트', 'mui-chip--soft-info', '소규모 개인 테스트를 위한 예비 플랜입니다.', 20, 5, true, 1900, 60, 'inactive', 200, 5, 12, 90, 20),
+    ('creator_basic', 'Creator Basic', '크리에이터', 'mui-chip--soft-primary', '개인 크리에이터의 정기 영상 분석을 위한 예비 플랜입니다.', 30, 7, false, 3900, 70, 'inactive', 300, 5, 12, 90, 35),
+    ('creator_plus', 'Creator Plus', '크리에이터', 'mui-chip--soft-primary', '영상 업로드가 잦은 크리에이터를 위한 예비 플랜입니다.', 60, 10, false, 5900, 80, 'inactive', 700, 8, 12, 120, 80),
+    ('creator_pro', 'Creator Pro', '크리에이터', 'mui-chip--soft-primary', '고빈도 영상 분석 사용자를 위한 예비 플랜입니다.', 100, 14, false, 8900, 90, 'inactive', 1024, 10, 12, 120, 120),
+    ('team_basic', 'Team Basic', '팀', 'mui-chip--secondary', '소규모 팀 단위 협업을 위한 예비 플랜입니다.', 150, 14, false, 12900, 100, 'inactive', 1536, 15, 12, 180, 180),
+    ('team_plus', 'Team Plus', '팀', 'mui-chip--secondary', '팀 단위 대량 분석을 위한 예비 플랜입니다.', 250, 21, false, 16900, 110, 'inactive', 2048, 20, 12, 180, 300),
+    ('team_pro', 'Team Pro', '팀', 'mui-chip--secondary', '전문 팀의 반복 분석 작업을 위한 예비 플랜입니다.', 400, 30, false, 24900, 120, 'inactive', 3072, 30, 24, 180, 500),
+    ('studio_plus', 'Studio Plus', '스튜디오', 'mui-chip--secondary', '스튜디오급 대용량 파일 처리를 위한 예비 플랜입니다.', NULL, 45, false, 29900, 130, 'inactive', 4096, 40, 24, 270, 800),
+    ('studio_max', 'Studio Max', '스튜디오', 'mui-chip--secondary', '고용량 영상과 다중 작업 처리를 위한 예비 플랜입니다.', NULL, 60, false, 39900, 140, 'inactive', 6144, 60, 24, 270, 1200),
+    ('business_light', 'Business Light', '비즈니스', 'mui-chip--success', '소규모 비즈니스 운영 검증을 위한 예비 플랜입니다.', 500, 45, false, 45900, 150, 'inactive', 5120, 50, 24, 365, 1500),
+    ('business_plus', 'Business Plus', '비즈니스', 'mui-chip--success', '비즈니스 팀의 안정적인 분석 운영을 위한 예비 플랜입니다.', 800, 60, false, 59000, 160, 'inactive', 8192, 80, 24, 365, 2500),
+    ('business_max', 'Business Max', '비즈니스', 'mui-chip--success', '고객사 단위 확장 운영을 위한 예비 플랜입니다.', NULL, 90, false, 79000, 170, 'inactive', 10240, 120, 24, 365, 4000),
+    ('edu_basic', 'Education Basic', '교육', 'mui-chip--soft-warning', '교육기관 테스트를 위한 예비 플랜입니다.', 80, 14, false, 4900, 180, 'inactive', 512, 10, 12, 180, 100),
+    ('edu_plus', 'Education Plus', '교육', 'mui-chip--soft-warning', '교육기관 수업 및 실습용 예비 플랜입니다.', 200, 30, false, 9900, 190, 'inactive', 1024, 20, 12, 180, 250),
+    ('admin_test', 'Admin Test', '관리자', 'mui-chip--default', '관리자 정책 검증을 위한 내부 테스트 플랜입니다.', 999, 7, false, 100, 200, 'inactive', 128, 3, 1, 30, 999)
+ON CONFLICT (plan_code) DO UPDATE
+SET
+    plan_name = EXCLUDED.plan_name,
+    badge_label = EXCLUDED.badge_label,
+    badge_class = EXCLUDED.badge_class,
+    description = EXCLUDED.description,
+    monthly_quota = EXCLUDED.monthly_quota,
+    result_retention_days = EXCLUDED.result_retention_days,
+    watermark_required = EXCLUDED.watermark_required,
+    price_amount = EXCLUDED.price_amount,
+    sort_order = EXCLUDED.sort_order,
+    status = EXCLUDED.status,
+    file_size_limit = EXCLUDED.file_size_limit,
+    max_jobs = EXCLUDED.max_jobs,
+    auto_delete_original_hours = EXCLUDED.auto_delete_original_hours,
+    metadata_retention_days = EXCLUDED.metadata_retention_days,
+    credits = EXCLUDED.credits,
+    updated_at = NOW();
+
+INSERT INTO credit_plans (
+    credit_plan_code, credit_plan_name, price_amount, base_credits,
+    bonus_credits, expires_days, sort_order, status
+)
+VALUES
+    ('credit_30', '30 Credits', 1900, 30, 0, NULL, 30, 'active'),
+    ('credit_50', '50 Credits', 2900, 50, 0, NULL, 40, 'active'),
+    ('credit_200', '200 Credits', 9000, 200, 20, NULL, 50, 'active'),
+    ('credit_300', '300 Credits', 12900, 300, 30, NULL, 60, 'active'),
+    ('credit_1000', '1,000 Credits', 35000, 1000, 150, NULL, 70, 'active'),
+    ('credit_2000', '2,000 Credits', 59000, 2000, 400, NULL, 80, 'active'),
+    ('credit_10_trial', '10 Trial Credits', 900, 10, 0, 30, 90, 'inactive'),
+    ('credit_20_trial', '20 Trial Credits', 1500, 20, 0, 30, 100, 'inactive'),
+    ('credit_75', '75 Credits', 3900, 75, 0, NULL, 110, 'inactive'),
+    ('credit_150', '150 Credits', 6900, 150, 10, NULL, 120, 'inactive'),
+    ('credit_250', '250 Credits', 10900, 250, 20, NULL, 130, 'inactive'),
+    ('credit_750', '750 Credits', 27900, 750, 100, NULL, 140, 'inactive'),
+    ('credit_1500', '1,500 Credits', 49000, 1500, 250, NULL, 150, 'inactive'),
+    ('credit_3000', '3,000 Credits', 89000, 3000, 600, NULL, 160, 'inactive'),
+    ('credit_5000', '5,000 Credits', 139000, 5000, 1200, NULL, 170, 'inactive'),
+    ('credit_event_100', 'Event 100 Credits', 0, 100, 0, 14, 180, 'inactive'),
+    ('credit_event_300', 'Event 300 Credits', 0, 300, 0, 14, 190, 'inactive'),
+    ('credit_admin_9999', 'Admin 9,999 Credits', 0, 9999, 0, NULL, 200, 'inactive')
+ON CONFLICT (credit_plan_code) DO UPDATE
+SET
+    credit_plan_name = EXCLUDED.credit_plan_name,
+    price_amount = EXCLUDED.price_amount,
+    base_credits = EXCLUDED.base_credits,
+    bonus_credits = EXCLUDED.bonus_credits,
+    expires_days = EXCLUDED.expires_days,
+    sort_order = EXCLUDED.sort_order,
+    status = EXCLUDED.status,
+    updated_at = NOW();
+
+-- Validation: expected plans total=20 active=4, credit_plans total=20 active=8
+SELECT
+    COUNT(*) AS total_plans,
+    COUNT(*) FILTER (WHERE status = 'active') AS active_plans,
+    COUNT(*) FILTER (WHERE status = 'inactive') AS inactive_plans,
+    COUNT(*) FILTER (WHERE status = 'deleted') AS deleted_plans
+FROM plans;
+
+SELECT
+    COUNT(*) AS total_credit_plans,
+    COUNT(*) FILTER (WHERE status = 'active') AS active_credit_plans,
+    COUNT(*) FILTER (WHERE status = 'inactive') AS inactive_credit_plans,
+    COUNT(*) FILTER (WHERE status = 'deleted') AS deleted_credit_plans
+FROM credit_plans;
 
 -- Remove old json policies that are now in plans table
 DELETE FROM admin_policy_settings WHERE policy_key IN ('payment', 'retention');
