@@ -6,6 +6,8 @@ import urllib.request
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from services import subscription as subscription_service
+from services.subscription import resolve_current_plan
 
 load_dotenv()
 
@@ -291,25 +293,45 @@ async def confirm_payment(
         product_type = str(payment.get("product_type") or "").lower()
 
         if product_type == "subscription":
-            subscription_id = payment.get("subscription_id")
             user_id = payment.get("user_id")
             _restore_free_plan_for_expired_subscriptions(db, user_id)
 
+            plan_change = subscription_service.classify_plan_change(
+                db=db,
+                user_id=user_id,
+                to_plan_id=str(payment.get("plan_id")),
+            )
+            if plan_change["change_type"] == "upgrade" and plan_change.get("current_subscription"):
+                subscription = subscription_service.apply_upgrade_with_carryover(
+                    db=db,
+                    user_id=user_id,
+                    from_subscription_id=(
+                        plan_change["current_subscription"].get("subscription_id")
+                        or payment.get("subscription_id")
+                    ),
+                    to_plan_id=payment.get("plan_id"),
+                    payment_id=payment.get("payment_id"),
+                )
+            else:
+                subscription = subscription_service.create_or_extend_subscription(
+                    db=db,
+                    user_id=user_id,
+                    plan_id=payment.get("plan_id"),
+                    payment_id=payment.get("payment_id"),
+                )
+            subscription_id = subscription["subscription_id"]
+
             db.execute(
                 text("""
-                    UPDATE subscriptions
+                    UPDATE payments
                     SET
-                        plan_id = :plan_id,
-                        status = 'active',
-                        started_at = NOW(),
-                        ended_at = NOW() + INTERVAL '30 days',
-                        renew_at = NOW() + INTERVAL '30 days',
+                        subscription_id = :subscription_id,
                         updated_at = NOW()
-                    WHERE subscription_id = :subscription_id
+                    WHERE payment_id = :payment_id
                 """),
                 {
                     "subscription_id": subscription_id,
-                    "plan_id": payment.get("plan_id"),
+                    "payment_id": payment.get("payment_id"),
                 },
             )
 
@@ -611,24 +633,91 @@ def get_my_credit_balance(db: Session, user_id: str):
 
 
 def get_my_payment_info(db: Session, user_id: str):
-    # 1. 유저의 현재 활성화된 구독 플랜 조회
-    plan_row = db.execute(
+    # 현재 플랜은 단일 subscription row가 아니라 유효 기간과 plan_rank로 계산한다.
+    current = resolve_current_plan(db, user_id)
+    current_plan = current["current_plan"]
+    current_subscription = current["current_subscription"]
+    plan_code = current_plan["plan_code"]
+    plan_name = current_plan["plan_name"]
+
+    carried_over_subscription = None
+    if current_subscription and current_subscription.get("subscription_id"):
+        carried_row = db.execute(
+            text("""
+                SELECT
+                    s.current_period_end,
+                    s.auto_renew,
+                    s.carried_over_days,
+                    p.plan_code,
+                    p.plan_name
+                FROM subscriptions s
+                JOIN plans p ON p.plan_id = s.plan_id
+                WHERE s.user_id = :user_id
+                  AND s.status = 'active'
+                  AND s.superseded_by_subscription_id = CAST(:subscription_id AS uuid)
+                  AND s.current_period_end > NOW()
+                ORDER BY s.current_period_end DESC
+                LIMIT 1
+            """),
+            {
+                "user_id": user_id,
+                "subscription_id": current_subscription["subscription_id"],
+            },
+        ).fetchone()
+        if carried_row:
+            carried = carried_row._mapping
+            carried_over_subscription = {
+                "plan_code": (carried.get("plan_code") or "").lower(),
+                "plan_name": carried.get("plan_name"),
+                "carried_over_days": int(carried.get("carried_over_days") or 0),
+                "current_period_end": (
+                    carried["current_period_end"].isoformat()
+                    if carried.get("current_period_end")
+                    else None
+                ),
+                "auto_renew": carried.get("auto_renew"),
+            }
+
+    scheduled_row = db.execute(
         text("""
-            SELECT pl.plan_name, pl.plan_code
-            FROM subscriptions s
-            JOIN plans pl ON s.plan_id = pl.plan_id
-            WHERE s.user_id = :user_id AND s.status = 'active'
-            ORDER BY s.updated_at DESC
+            SELECT
+                pc.plan_change_id,
+                pc.change_type,
+                pc.status,
+                pc.effective_at,
+                p.plan_id,
+                p.plan_code,
+                p.plan_name
+            FROM subscription_plan_changes pc
+            LEFT JOIN plans p ON p.plan_id = pc.to_plan_id
+            WHERE pc.user_id = :user_id
+              AND pc.status = 'scheduled'
+            ORDER BY pc.effective_at ASC, pc.created_at DESC
             LIMIT 1
         """),
-        {"user_id": user_id}
+        {"user_id": user_id},
     ).fetchone()
 
-    plan_code = "free"
-    plan_name = "Free"
-    if plan_row:
-        plan_code = plan_row._mapping["plan_code"].lower()
-        plan_name = plan_row._mapping["plan_name"]
+    scheduled_plan_change = None
+    if scheduled_row:
+        scheduled = scheduled_row._mapping
+        scheduled_plan_change = {
+            "plan_change_id": str(scheduled["plan_change_id"]),
+            "change_type": scheduled.get("change_type"),
+            "status": scheduled.get("status"),
+            "effective_at": (
+                scheduled["effective_at"].isoformat()
+                if scheduled.get("effective_at")
+                else None
+            ),
+            "to_plan_id": str(scheduled["plan_id"]) if scheduled.get("plan_id") else None,
+            "to_plan_code": (
+                (scheduled.get("plan_code") or "").lower()
+                if scheduled.get("plan_code")
+                else None
+            ),
+            "to_plan_name": scheduled.get("plan_name"),
+        }
 
     # 2. 유저의 가장 최근 성공 결제 내역 조회 (영수증 모달용)
     payment_row = db.execute(
@@ -660,9 +749,46 @@ def get_my_payment_info(db: Session, user_id: str):
             "receiptUrl": p["receipt_url"]
         }
 
+    payment_rows = db.execute(
+        text("""
+            SELECT
+                payment_id,
+                order_name,
+                pg_provider,
+                amount,
+                created_at
+            FROM payments
+            WHERE user_id = :user_id
+              AND status IN ('DONE', 'success')
+            ORDER BY created_at DESC
+        """),
+        {"user_id": user_id}
+    ).fetchall()
+
+    payment_history = []
+    for row in payment_rows:
+        p = row._mapping
+        payment_history.append({
+            "orderId": str(p["payment_id"]),
+            "orderName": p["order_name"],
+            "method": p.get("pg_provider") or "간편결제",
+            "amount": p["amount"],
+            "approvedAt": p["created_at"].isoformat() if p["created_at"] else None,
+        })
+
     return {
         "is_premium": plan_code != "free",
         "plan_code": plan_code,
         "plan_name": plan_name,
-        "payment_info": payment_info
+        "plan_date": (
+            current_subscription["current_period_start"]
+            if current_subscription
+            else None
+        ),
+        "current_plan": current_plan,
+        "current_subscription": current_subscription,
+        "carried_over_subscription": carried_over_subscription,
+        "scheduled_plan_change": scheduled_plan_change,
+        "payment_info": payment_info,
+        "payment_history": payment_history,
     }

@@ -33,6 +33,28 @@ export async function getMyCreditBalance() {
   return requestJson("/payment/credits/me");
 }
 
+export async function requestPlanChange(payload) {
+  return requestJson("/subscriptions/change-plan", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function resumeSubscription(subscriptionId) {
+  return requestJson(`/subscriptions/${subscriptionId}/resume`, {
+    method: "POST",
+  });
+}
+
+export async function cancelScheduledPlanChange(planChangeId) {
+  return requestJson(`/subscriptions/plan-changes/${planChangeId}/cancel`, {
+    method: "POST",
+  });
+}
+
 export async function getCurrentUser() {
   return requestJson("/auth/me");
 }
@@ -75,6 +97,26 @@ export async function getAdminUsers(params = {}) {
 
 export async function getAdminPolicySettings() {
   return requestJson("/admin/policy");
+}
+
+export async function getAdminSubscriptions(params = {}) {
+  const query = new URLSearchParams();
+  if (params.page) query.set("page", params.page);
+  if (params.limit) query.set("limit", params.limit);
+  if (params.q) query.set("q", params.q);
+  if (params.search_key) query.set("search_key", params.search_key);
+  if (params.plan_code) query.set("plan_code", params.plan_code);
+  if (params.subscription_status) query.set("subscription_status", params.subscription_status);
+  if (params.auto_renew !== undefined && params.auto_renew !== "") query.set("auto_renew", params.auto_renew);
+  if (params.cancel_scheduled !== undefined && params.cancel_scheduled !== "") query.set("cancel_scheduled", params.cancel_scheduled);
+  if (params.billing_failed !== undefined && params.billing_failed !== "") query.set("billing_failed", params.billing_failed);
+  if (params.scheduled_change !== undefined && params.scheduled_change !== "") query.set("scheduled_change", params.scheduled_change);
+  const qs = query.toString();
+  return requestJson(`/admin/subscriptions${qs ? "?" + qs : ""}`);
+}
+
+export async function getAdminSubscriptionDetail(userId) {
+  return requestJson(`/admin/subscriptions/${userId}`);
 }
 
 export async function updateAdminPolicySettings(policies) {

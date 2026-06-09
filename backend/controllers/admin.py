@@ -178,6 +178,59 @@ def delete_credit_plan(credit_plan_id: str):
         return _json_error(e)
 
 
+def list_admin_subscriptions(
+    q: str = Query(None),
+    search_key: str = Query("email"),
+    plan_code: str = Query(None),
+    subscription_status: str = Query(None),
+    auto_renew: str = Query(None),
+    cancel_scheduled: str = Query(None),
+    billing_failed: str = Query(None),
+    scheduled_change: str = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+):
+    try:
+        result = admin_service.get_admin_subscriptions_list(
+            q=q,
+            search_key=search_key,
+            plan_code=plan_code,
+            subscription_status=subscription_status,
+            auto_renew=auto_renew,
+            cancel_scheduled=cancel_scheduled,
+            billing_failed=billing_failed,
+            scheduled_change=scheduled_change,
+            page=page,
+            limit=limit,
+        )
+        return JSONResponse(
+            {
+                "data": result["data"],
+                "summary": result["summary"],
+                "total": result["total"],
+                "page": result["page"],
+                "limit": result["limit"],
+                "message": "Admin subscriptions loaded successfully.",
+            },
+            status_code=200,
+        )
+    except Exception as e:
+        return _json_error(e)
+
+
+def get_admin_subscription_detail(user_id: str):
+    try:
+        data = admin_service.get_admin_subscription_detail(user_id)
+        return JSONResponse(
+            {"data": data, "message": "Admin subscription detail loaded successfully."},
+            status_code=200,
+        )
+    except ValueError as ve:
+        return JSONResponse({"message": str(ve)}, status_code=404)
+    except Exception as e:
+        return _json_error(e)
+
+
 def list_payments(
     product_type: str = Query(None),
     status: str = Query(None),

@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class PaymentConfirmRequest(BaseModel):
@@ -21,3 +21,11 @@ class TempOrderResponse(BaseModel):
     orderName: str
     productType: Literal["subscription", "credit"]
     productCode: str
+
+
+class BillingKeyRegisterRequest(BaseModel):
+    billingKey: str = Field(..., min_length=1)
+    customerKey: str | None = None
+    cardCompany: str | None = None
+    maskedCardNumber: str | None = None
+    methodType: Literal["card", "easy_pay", "account", "unknown"] = "unknown"

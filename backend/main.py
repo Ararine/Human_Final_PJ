@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from routes import payment
 
 from core.logger import setup_logging
-from routes import oauth, post, setting, uploads, admin, analysis, worker
+from routes import oauth, post, setting, uploads, admin, analysis, worker, subscription
 
 ################## 초기 세팅 ######################
 ## 로거 기본 세팅
@@ -45,6 +45,7 @@ app.include_router(admin.router, prefix="/admin")
 app.include_router(analysis.router, prefix="/analysis")
 app.include_router(worker.router, prefix="/worker")
 app.include_router(payment.router, prefix="/payment")
+app.include_router(subscription.router, prefix="/subscriptions")
 
 if __name__ == "__main__":
     uvicorn.run(

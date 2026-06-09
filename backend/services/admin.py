@@ -116,6 +116,20 @@ def _normalize_page_params(page: int = 1, limit: int = 20):
     return page, limit, (page - 1) * limit
 
 
+def _parse_bool_filter(value):
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return value
+
+    normalized = str(value).strip().lower()
+    if normalized in {"true", "1", "yes", "y"}:
+        return True
+    if normalized in {"false", "0", "no", "n"}:
+        return False
+    raise ValueError("boolean filter must be true or false")
+
+
 def list_subscription_plans(
     q=None,
     include_deleted: bool = False,
@@ -442,6 +456,481 @@ def update_credit_plan(credit_plan_id: str, payload: dict):
 
 def delete_credit_plan(credit_plan_id: str):
     return update_credit_plan(credit_plan_id, {"status": "deleted"})
+
+
+def get_admin_subscriptions_list(
+    q=None,
+    search_key="email",
+    plan_code=None,
+    subscription_status=None,
+    auto_renew=None,
+    cancel_scheduled=None,
+    billing_failed=None,
+    scheduled_change=None,
+    page=1,
+    limit=10,
+):
+    page, limit, offset = _normalize_page_params(page, limit)
+    auto_renew = _parse_bool_filter(auto_renew)
+    cancel_scheduled = _parse_bool_filter(cancel_scheduled)
+    billing_failed = _parse_bool_filter(billing_failed)
+    scheduled_change = _parse_bool_filter(scheduled_change)
+
+    conditions = []
+    params = {}
+
+    if q:
+        params["q"] = f"%{q.lower()}%"
+        if search_key == "user_id":
+            conditions.append("LOWER(CAST(u.user_id AS text)) LIKE :q")
+        elif search_key == "all":
+            conditions.append("(LOWER(u.email) LIKE :q OR LOWER(CAST(u.user_id AS text)) LIKE :q)")
+        else:
+            conditions.append("LOWER(u.email) LIKE :q")
+
+    if plan_code:
+        conditions.append("COALESCE(current_plan.plan_code, free_plan.plan_code) = :plan_code")
+        params["plan_code"] = plan_code
+
+    if subscription_status:
+        if subscription_status == "free":
+            conditions.append("current_sub.subscription_id IS NULL")
+        else:
+            conditions.append("COALESCE(current_sub.status, 'free') = :subscription_status")
+            params["subscription_status"] = subscription_status
+
+    if auto_renew is not None:
+        if auto_renew:
+            conditions.append("current_sub.auto_renew IS TRUE")
+        else:
+            conditions.append("(current_sub.subscription_id IS NULL OR current_sub.auto_renew IS FALSE)")
+
+    if cancel_scheduled is not None:
+        if cancel_scheduled:
+            conditions.append("current_sub.cancel_at_period_end IS TRUE")
+        else:
+            conditions.append("(current_sub.subscription_id IS NULL OR current_sub.cancel_at_period_end IS FALSE)")
+
+    if billing_failed is not None:
+        if billing_failed:
+            conditions.append("COALESCE(current_sub.billing_status, '') IN ('failed', 'billing_key_missing')")
+        else:
+            conditions.append("COALESCE(current_sub.billing_status, '') NOT IN ('failed', 'billing_key_missing')")
+
+    if scheduled_change is not None:
+        if scheduled_change:
+            conditions.append("scheduled_change.plan_change_id IS NOT NULL")
+        else:
+            conditions.append("scheduled_change.plan_change_id IS NULL")
+
+    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+    base_from = f"""
+        FROM users u
+        LEFT JOIN LATERAL (
+            SELECT
+                s.subscription_id,
+                s.plan_id,
+                s.status,
+                s.current_period_start,
+                s.current_period_end,
+                s.next_billing_at,
+                s.auto_renew,
+                s.cancel_at_period_end,
+                s.cancelled_at,
+                s.billing_status,
+                s.carried_over_days,
+                s.superseded_by_subscription_id,
+                s.original_period_end,
+                s.upgraded_at,
+                p.plan_code,
+                p.plan_name,
+                p.plan_rank
+            FROM subscriptions s
+            JOIN plans p ON p.plan_id = s.plan_id
+            WHERE s.user_id = u.user_id
+              AND s.status = 'active'
+              AND (
+                  s.current_period_end IS NULL
+                  OR s.current_period_end > NOW()
+              )
+            ORDER BY p.plan_rank DESC, s.current_period_end DESC NULLS LAST, s.created_at DESC
+            LIMIT 1
+        ) current_sub ON TRUE
+        LEFT JOIN plans current_plan ON current_plan.plan_id = current_sub.plan_id
+        LEFT JOIN plans free_plan ON free_plan.plan_code = 'free' AND free_plan.status = 'active'
+        LEFT JOIN LATERAL (
+            SELECT
+                COUNT(*) AS active_subscription_count
+            FROM subscriptions s
+            WHERE s.user_id = u.user_id
+              AND s.status = 'active'
+              AND (
+                  s.current_period_end IS NULL
+                  OR s.current_period_end > NOW()
+              )
+        ) active_counts ON TRUE
+        LEFT JOIN LATERAL (
+            SELECT
+                pc.plan_change_id,
+                pc.change_type,
+                pc.status,
+                pc.effective_at,
+                pc.created_at,
+                tp.plan_code AS to_plan_code,
+                tp.plan_name AS to_plan_name
+            FROM subscription_plan_changes pc
+            LEFT JOIN plans tp ON tp.plan_id = pc.to_plan_id
+            WHERE pc.user_id = u.user_id
+              AND pc.status = 'scheduled'
+            ORDER BY pc.created_at DESC
+            LIMIT 1
+        ) scheduled_change ON TRUE
+        LEFT JOIN LATERAL (
+            SELECT
+                s.subscription_id,
+                p.plan_code,
+                p.plan_name,
+                s.current_period_end,
+                s.carried_over_days,
+                s.superseded_by_subscription_id
+            FROM subscriptions s
+            JOIN plans p ON p.plan_id = s.plan_id
+            WHERE s.user_id = u.user_id
+              AND current_sub.subscription_id IS NOT NULL
+              AND s.superseded_by_subscription_id = current_sub.subscription_id
+            ORDER BY s.current_period_end DESC NULLS LAST, s.created_at DESC
+            LIMIT 1
+        ) carried_over ON TRUE
+        LEFT JOIN LATERAL (
+            SELECT
+                attempted_at,
+                status,
+                attempt_type,
+                failure_message
+            FROM subscription_billing_attempts sba
+            WHERE sba.user_id = u.user_id
+            ORDER BY attempted_at DESC, created_at DESC
+            LIMIT 1
+        ) last_attempt ON TRUE
+        {where_clause}
+    """
+
+    db = SessionLocal()
+    try:
+        total = db.execute(text(f"SELECT COUNT(*) {base_from}"), params).scalar() or 0
+
+        list_query = f"""
+            SELECT
+                u.user_id,
+                u.email,
+                COALESCE(current_plan.plan_code, free_plan.plan_code, 'free') AS current_plan_code,
+                COALESCE(current_plan.plan_name, free_plan.plan_name, 'Free') AS current_plan_name,
+                current_sub.subscription_id,
+                current_sub.status AS subscription_status,
+                current_sub.current_period_start,
+                current_sub.current_period_end,
+                current_sub.next_billing_at,
+                current_sub.auto_renew,
+                current_sub.cancel_at_period_end,
+                current_sub.cancelled_at,
+                current_sub.billing_status,
+                COALESCE(active_counts.active_subscription_count, 0) AS active_subscription_count,
+                carried_over.subscription_id AS carried_over_subscription_id,
+                carried_over.plan_code AS carried_over_plan_code,
+                carried_over.plan_name AS carried_over_plan_name,
+                carried_over.current_period_end AS carried_over_period_end,
+                carried_over.carried_over_days,
+                scheduled_change.plan_change_id,
+                scheduled_change.change_type AS scheduled_change_type,
+                scheduled_change.status AS scheduled_change_status,
+                scheduled_change.effective_at AS scheduled_change_effective_at,
+                scheduled_change.to_plan_code AS scheduled_to_plan_code,
+                scheduled_change.to_plan_name AS scheduled_to_plan_name,
+                last_attempt.attempted_at AS last_attempted_at,
+                last_attempt.status AS last_attempt_status,
+                last_attempt.attempt_type AS last_attempt_type,
+                last_attempt.failure_message AS last_failure_reason
+            {base_from}
+            ORDER BY
+                CASE
+                    WHEN COALESCE(current_sub.billing_status, '') IN ('failed', 'billing_key_missing') THEN 0
+                    ELSE 1
+                END,
+                u.created_at DESC,
+                u.user_id DESC
+            LIMIT :limit OFFSET :offset
+        """
+        rows = db.execute(text(list_query), {**params, "limit": limit, "offset": offset}).fetchall()
+
+        summary_query = """
+            SELECT
+                COUNT(*) AS total_users,
+                COUNT(*) FILTER (WHERE current_sub.subscription_id IS NOT NULL) AS paid_users,
+                COUNT(*) FILTER (WHERE COALESCE(current_sub.billing_status, '') IN ('failed', 'billing_key_missing')) AS billing_failed_users,
+                COUNT(*) FILTER (WHERE scheduled_change.plan_change_id IS NOT NULL) AS scheduled_change_users
+            """ + base_from
+        summary_row = db.execute(text(summary_query), params).fetchone()
+        summary_map = summary_row._mapping if summary_row else {}
+
+        data = []
+        for row in rows:
+            m = row._mapping
+            data.append({
+                "user_id": str(m["user_id"]),
+                "email": m["email"] or "",
+                "current_plan_code": m["current_plan_code"] or "free",
+                "current_plan_name": m["current_plan_name"] or "Free",
+                "current_subscription": {
+                    "subscription_id": str(m["subscription_id"]) if m["subscription_id"] else None,
+                    "status": m["subscription_status"] or "free",
+                    "current_period_start": m["current_period_start"].isoformat() if m["current_period_start"] else None,
+                    "current_period_end": m["current_period_end"].isoformat() if m["current_period_end"] else None,
+                    "next_billing_at": m["next_billing_at"].isoformat() if m["next_billing_at"] else None,
+                    "auto_renew": bool(m["auto_renew"]) if m["subscription_id"] else False,
+                    "cancel_at_period_end": bool(m["cancel_at_period_end"]) if m["subscription_id"] else False,
+                    "cancelled_at": m["cancelled_at"].isoformat() if m["cancelled_at"] else None,
+                    "billing_status": m["billing_status"] or None,
+                },
+                "active_subscription_count": int(m["active_subscription_count"] or 0),
+                "carried_over_subscription": {
+                    "subscription_id": str(m["carried_over_subscription_id"]) if m["carried_over_subscription_id"] else None,
+                    "plan_code": m["carried_over_plan_code"],
+                    "plan_name": m["carried_over_plan_name"],
+                    "current_period_end": m["carried_over_period_end"].isoformat() if m["carried_over_period_end"] else None,
+                    "carried_over_days": int(m["carried_over_days"] or 0),
+                } if m["carried_over_subscription_id"] else None,
+                "scheduled_plan_change": {
+                    "plan_change_id": str(m["plan_change_id"]) if m["plan_change_id"] else None,
+                    "change_type": m["scheduled_change_type"],
+                    "status": m["scheduled_change_status"],
+                    "effective_at": m["scheduled_change_effective_at"].isoformat() if m["scheduled_change_effective_at"] else None,
+                    "to_plan_code": m["scheduled_to_plan_code"],
+                    "to_plan_name": m["scheduled_to_plan_name"],
+                } if m["plan_change_id"] else None,
+                "latest_billing_attempt": {
+                    "attempted_at": m["last_attempted_at"].isoformat() if m["last_attempted_at"] else None,
+                    "status": m["last_attempt_status"],
+                    "attempt_type": m["last_attempt_type"],
+                    "failure_reason": m["last_failure_reason"],
+                } if m["last_attempted_at"] else None,
+            })
+
+        return {
+            "data": data,
+            "summary": {
+                "total_users": int(summary_map.get("total_users") or 0),
+                "paid_users": int(summary_map.get("paid_users") or 0),
+                "billing_failed_users": int(summary_map.get("billing_failed_users") or 0),
+                "scheduled_change_users": int(summary_map.get("scheduled_change_users") or 0),
+            },
+            "total": total,
+            "page": page,
+            "limit": limit,
+        }
+    finally:
+        db.close()
+
+
+def get_admin_subscription_detail(user_id: str):
+    db = SessionLocal()
+    try:
+        current_query = """
+            SELECT
+                u.user_id,
+                u.email,
+                cs.subscription_id,
+                cs.status AS subscription_status,
+                cs.current_period_start,
+                cs.current_period_end,
+                cs.next_billing_at,
+                cs.auto_renew,
+                cs.cancel_at_period_end,
+                cs.cancelled_at,
+                cs.billing_status,
+                cs.carried_over_days,
+                cs.superseded_by_subscription_id,
+                cp.plan_code AS current_plan_code,
+                cp.plan_name AS current_plan_name,
+                fp.plan_code AS free_plan_code,
+                fp.plan_name AS free_plan_name
+            FROM users u
+            LEFT JOIN LATERAL (
+                SELECT s.*
+                FROM subscriptions s
+                JOIN plans p ON p.plan_id = s.plan_id
+                WHERE s.user_id = u.user_id
+                  AND s.status = 'active'
+                  AND (
+                      s.current_period_end IS NULL
+                      OR s.current_period_end > NOW()
+                  )
+                ORDER BY p.plan_rank DESC, s.current_period_end DESC NULLS LAST, s.created_at DESC
+                LIMIT 1
+            ) cs ON TRUE
+            LEFT JOIN plans cp ON cp.plan_id = cs.plan_id
+            LEFT JOIN plans fp ON fp.plan_code = 'free' AND fp.status = 'active'
+            WHERE u.user_id = CAST(:user_id AS uuid)
+        """
+        current_row = db.execute(text(current_query), {"user_id": user_id}).fetchone()
+        if not current_row:
+            raise ValueError("user not found")
+
+        current = current_row._mapping
+
+        active_query = """
+            SELECT
+                s.subscription_id,
+                s.status,
+                s.current_period_start,
+                s.current_period_end,
+                s.next_billing_at,
+                s.auto_renew,
+                s.cancel_at_period_end,
+                s.cancelled_at,
+                s.billing_status,
+                s.carried_over_days,
+                s.superseded_by_subscription_id,
+                s.original_period_end,
+                s.upgraded_at,
+                s.created_at,
+                p.plan_id,
+                p.plan_code,
+                p.plan_name
+            FROM subscriptions s
+            JOIN plans p ON p.plan_id = s.plan_id
+            WHERE s.user_id = CAST(:user_id AS uuid)
+              AND s.status = 'active'
+            ORDER BY p.plan_rank DESC, s.current_period_end DESC NULLS LAST, s.created_at DESC
+        """
+        active_rows = db.execute(text(active_query), {"user_id": user_id}).fetchall()
+
+        attempts_query = """
+            SELECT
+                billing_attempt_id,
+                subscription_id,
+                plan_change_id,
+                attempt_type,
+                status,
+                amount,
+                payment_id,
+                failure_message,
+                attempted_at
+            FROM subscription_billing_attempts
+            WHERE user_id = CAST(:user_id AS uuid)
+            ORDER BY attempted_at DESC, created_at DESC
+            LIMIT 30
+        """
+        attempt_rows = db.execute(text(attempts_query), {"user_id": user_id}).fetchall()
+
+        changes_query = """
+            SELECT
+                pc.plan_change_id,
+                pc.change_type,
+                pc.status,
+                pc.apply_timing,
+                pc.effective_at,
+                pc.applied_at,
+                pc.created_at,
+                pc.from_subscription_id,
+                pc.to_subscription_id,
+                fp.plan_code AS from_plan_code,
+                fp.plan_name AS from_plan_name,
+                tp.plan_code AS to_plan_code,
+                tp.plan_name AS to_plan_name
+            FROM subscription_plan_changes pc
+            LEFT JOIN subscriptions fs ON fs.subscription_id = pc.from_subscription_id
+            LEFT JOIN plans fp ON fp.plan_id = fs.plan_id
+            LEFT JOIN plans tp ON tp.plan_id = pc.to_plan_id
+            WHERE pc.user_id = CAST(:user_id AS uuid)
+            ORDER BY pc.created_at DESC
+            LIMIT 30
+        """
+        change_rows = db.execute(text(changes_query), {"user_id": user_id}).fetchall()
+
+        active_subscriptions = []
+        for row in active_rows:
+            m = row._mapping
+            active_subscriptions.append({
+                "subscription_id": str(m["subscription_id"]),
+                "plan_id": str(m["plan_id"]),
+                "plan_code": m["plan_code"],
+                "plan_name": m["plan_name"],
+                "status": m["status"],
+                "current_period_start": m["current_period_start"].isoformat() if m["current_period_start"] else None,
+                "current_period_end": m["current_period_end"].isoformat() if m["current_period_end"] else None,
+                "next_billing_at": m["next_billing_at"].isoformat() if m["next_billing_at"] else None,
+                "auto_renew": bool(m["auto_renew"]),
+                "cancel_at_period_end": bool(m["cancel_at_period_end"]),
+                "cancelled_at": m["cancelled_at"].isoformat() if m["cancelled_at"] else None,
+                "billing_status": m["billing_status"],
+                "carried_over_days": int(m["carried_over_days"] or 0),
+                "superseded_by_subscription_id": str(m["superseded_by_subscription_id"]) if m["superseded_by_subscription_id"] else None,
+                "original_period_end": m["original_period_end"].isoformat() if m["original_period_end"] else None,
+                "upgraded_at": m["upgraded_at"].isoformat() if m["upgraded_at"] else None,
+                "created_at": m["created_at"].isoformat() if m["created_at"] else None,
+            })
+
+        billing_attempts = []
+        for row in attempt_rows:
+            m = row._mapping
+            billing_attempts.append({
+                "attempt_id": str(m["billing_attempt_id"]),
+                "subscription_id": str(m["subscription_id"]) if m["subscription_id"] else None,
+                "plan_change_id": str(m["plan_change_id"]) if m["plan_change_id"] else None,
+                "attempt_type": m["attempt_type"],
+                "status": m["status"],
+                "amount": m["amount"],
+                "payment_id": str(m["payment_id"]) if m["payment_id"] else None,
+                "failure_reason": m["failure_message"],
+                "attempted_at": m["attempted_at"].isoformat() if m["attempted_at"] else None,
+            })
+
+        plan_changes = []
+        for row in change_rows:
+            m = row._mapping
+            plan_changes.append({
+                "plan_change_id": str(m["plan_change_id"]),
+                "change_type": m["change_type"],
+                "status": m["status"],
+                "apply_timing": m["apply_timing"],
+                "effective_at": m["effective_at"].isoformat() if m["effective_at"] else None,
+                "applied_at": m["applied_at"].isoformat() if m["applied_at"] else None,
+                "created_at": m["created_at"].isoformat() if m["created_at"] else None,
+                "from_subscription_id": str(m["from_subscription_id"]) if m["from_subscription_id"] else None,
+                "to_subscription_id": str(m["to_subscription_id"]) if m["to_subscription_id"] else None,
+                "from_plan_code": m["from_plan_code"],
+                "from_plan_name": m["from_plan_name"],
+                "to_plan_code": m["to_plan_code"],
+                "to_plan_name": m["to_plan_name"],
+            })
+
+        return {
+            "user": {
+                "user_id": str(current["user_id"]),
+                "email": current["email"] or "",
+            },
+            "current_applied_plan": {
+                "plan_code": current["current_plan_code"] or current["free_plan_code"] or "free",
+                "plan_name": current["current_plan_name"] or current["free_plan_name"] or "Free",
+                "subscription_id": str(current["subscription_id"]) if current["subscription_id"] else None,
+                "subscription_status": current["subscription_status"] or "free",
+                "current_period_start": current["current_period_start"].isoformat() if current["current_period_start"] else None,
+                "current_period_end": current["current_period_end"].isoformat() if current["current_period_end"] else None,
+                "next_billing_at": current["next_billing_at"].isoformat() if current["next_billing_at"] else None,
+                "auto_renew": bool(current["auto_renew"]) if current["subscription_id"] else False,
+                "cancel_at_period_end": bool(current["cancel_at_period_end"]) if current["subscription_id"] else False,
+                "cancelled_at": current["cancelled_at"].isoformat() if current["cancelled_at"] else None,
+                "billing_status": current["billing_status"],
+                "carried_over_days": int(current["carried_over_days"] or 0),
+                "superseded_by_subscription_id": str(current["superseded_by_subscription_id"]) if current["superseded_by_subscription_id"] else None,
+            },
+            "active_subscriptions": active_subscriptions,
+            "billing_attempts": billing_attempts,
+            "plan_changes": plan_changes,
+        }
+    finally:
+        db.close()
 
 
 def get_users_list(page: int = 1, limit: int = 20, role: str = None, status_val: str = None):

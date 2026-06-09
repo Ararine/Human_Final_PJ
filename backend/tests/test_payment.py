@@ -3,7 +3,12 @@ from fastapi.testclient import TestClient
 from unittest.mock import MagicMock
 
 import main
-from services import auth, payment as payment_service
+from services import (
+    auth,
+    billing as billing_service,
+    payment as payment_service,
+    subscription_renewal,
+)
 from utils.database import get_db
 
 client = TestClient(main.app)
@@ -368,10 +373,31 @@ async def test_service_confirm_payment_saves_only_allowed_toss_fields(monkeypatc
         payment_select_result,  # 1: confirm SELECT
         MagicMock(),            # 2: UPDATE payments
         restore_result,         # 3: _restore_free_plan
-        MagicMock(),            # 4: UPDATE subscriptions
+        MagicMock(),            # 4: UPDATE payments.subscription_id
         balance_result,         # 5: INSERT INTO user_credit_balances
         MagicMock(),            # 6: INSERT INTO credit_ledger
     ]
+
+    def fake_create_or_extend_subscription(db, user_id, plan_id, payment_id):
+        assert user_id == "user-uuid-3"
+        assert plan_id == "plan-uuid-pro"
+        assert payment_id == "payment-uuid-3"
+        return {"subscription_id": "subscription-created-step5"}
+
+    monkeypatch.setattr(
+        payment_service.subscription_service,
+        "create_or_extend_subscription",
+        fake_create_or_extend_subscription,
+    )
+
+    monkeypatch.setattr(
+        payment_service.subscription_service,
+        "classify_plan_change",
+        lambda db, user_id, to_plan_id: {
+            "change_type": "same_plan",
+            "current_subscription": {"subscription_id": "subscription-uuid-3"},
+        },
+    )
 
     async def fake_toss_confirm(payment_key, order_id, amount):
         return {
@@ -422,8 +448,8 @@ async def test_service_confirm_payment_saves_only_allowed_toss_fields(monkeypatc
     assert "version" not in result
     assert db_mock.execute.call_count == 6
     payment_update_params = db_mock.execute.call_args_list[1].args[1]
-    subscription_update_sql = str(db_mock.execute.call_args_list[3].args[0])
-    subscription_update_params = db_mock.execute.call_args_list[3].args[1]
+    payment_subscription_sql = str(db_mock.execute.call_args_list[3].args[0])
+    payment_subscription_params = db_mock.execute.call_args_list[3].args[1]
     balance_sql = str(db_mock.execute.call_args_list[4].args[0])
     ledger_sql = str(db_mock.execute.call_args_list[5].args[0])
     assert payment_update_params["last_transaction_key"] == "tx-key-3"
@@ -442,13 +468,294 @@ async def test_service_confirm_payment_saves_only_allowed_toss_fields(monkeypatc
     assert "raw_response" not in payment_update_params
     assert "secret" not in payment_update_params
     assert "version" not in payment_update_params
-    assert "plan_id = :plan_id" in subscription_update_sql
-    assert "ended_at = NOW() + INTERVAL '30 days'" in subscription_update_sql
-    assert "renew_at = NOW() + INTERVAL '30 days'" in subscription_update_sql
-    assert "remaining_credits" not in subscription_update_sql
-    assert subscription_update_params["plan_id"] == "plan-uuid-pro"
+    assert "UPDATE payments" in payment_subscription_sql
+    assert "subscription_id = :subscription_id" in payment_subscription_sql
+    assert payment_subscription_params["subscription_id"] == "subscription-created-step5"
+    assert payment_subscription_params["payment_id"] == "payment-uuid-3"
     assert "INSERT INTO user_credit_balances" in balance_sql
     assert "INSERT INTO credit_ledger" in ledger_sql
+    db_mock.commit.assert_called_once()
+
+
+@pytest.mark.anyio
+async def test_service_confirm_payment_applies_upgrade_carryover(monkeypatch):
+    db_mock = MagicMock()
+    payment_row = MagicMock()
+    payment_row._mapping = {
+        "payment_id": "payment-uuid-upgrade",
+        "amount": 19800,
+        "status": "ready",
+        "pg_transaction_id": None,
+        "paid_at": None,
+        "user_id": "user-uuid-upgrade",
+        "subscription_id": "subscription-pro",
+        "product_type": "subscription",
+        "plan_id": "plan-studio",
+        "credit_plan_id": None,
+        "plan_credits": 0,
+        "plan_code": "studio",
+        "base_credits": None,
+        "bonus_credits": None,
+        "credit_plan_code": None,
+    }
+    payment_select_result = MagicMock()
+    payment_select_result.fetchone.return_value = payment_row
+    restore_result = MagicMock()
+    restore_result.fetchone.return_value = None
+    db_mock.execute.side_effect = [
+        payment_select_result,
+        MagicMock(),
+        restore_result,
+        MagicMock(),
+    ]
+
+    async def fake_toss_confirm(payment_key, order_id, amount):
+        return {
+            "status": "DONE",
+            "orderId": order_id,
+            "orderName": "Garim Studio",
+            "totalAmount": amount,
+            "balanceAmount": amount,
+            "currency": "KRW",
+            "lastTransactionKey": "tx-upgrade",
+            "method": "card",
+            "approvedAt": "2026-06-09T12:00:00+09:00",
+            "requestedAt": "2026-06-09T11:59:30+09:00",
+            "receipt": {"url": "https://dashboard.tosspayments.com/receipt/upgrade"},
+            "isPartialCancelable": True,
+        }
+
+    apply_call = MagicMock(return_value={"subscription_id": "subscription-studio"})
+    create_call = MagicMock()
+    monkeypatch.setattr(payment_service, "_confirm_toss_payment", fake_toss_confirm)
+    monkeypatch.setattr(
+        payment_service.subscription_service,
+        "classify_plan_change",
+        lambda db, user_id, to_plan_id: {
+            "change_type": "upgrade",
+            "current_subscription": {"subscription_id": "subscription-pro"},
+        },
+    )
+    monkeypatch.setattr(
+        payment_service.subscription_service,
+        "apply_upgrade_with_carryover",
+        apply_call,
+    )
+    monkeypatch.setattr(
+        payment_service.subscription_service,
+        "create_or_extend_subscription",
+        create_call,
+    )
+
+    result = await payment_service.confirm_payment(
+        db=db_mock,
+        payment_key="payment-key-upgrade",
+        order_id="payment-uuid-upgrade",
+        amount=19800,
+    )
+
+    assert result["status"] == "DONE"
+    apply_call.assert_called_once_with(
+        db=db_mock,
+        user_id="user-uuid-upgrade",
+        from_subscription_id="subscription-pro",
+        to_plan_id="plan-studio",
+        payment_id="payment-uuid-upgrade",
+    )
+    create_call.assert_not_called()
+    payment_subscription_params = db_mock.execute.call_args_list[3].args[1]
+    assert payment_subscription_params["subscription_id"] == "subscription-studio"
+    assert payment_subscription_params["payment_id"] == "payment-uuid-upgrade"
+    db_mock.commit.assert_called_once()
+
+
+@pytest.mark.anyio
+async def test_acceptance_free_to_pro_confirm_payment_creates_30day_subscription(monkeypatch):
+    db_mock = MagicMock()
+    payment_row = MagicMock()
+    payment_row._mapping = {
+        "payment_id": "payment-free-pro-1",
+        "amount": 2900,
+        "status": "ready",
+        "pg_transaction_id": None,
+        "paid_at": None,
+        "user_id": "user-free-pro-1",
+        "subscription_id": None,
+        "product_type": "subscription",
+        "plan_id": "plan-pro",
+        "credit_plan_id": None,
+        "plan_credits": 50,
+        "plan_code": "pro",
+        "base_credits": None,
+        "bonus_credits": None,
+        "credit_plan_code": None,
+    }
+    restore_result = MagicMock()
+    restore_result.fetchone.return_value = None
+    balance_insert_row = MagicMock()
+    balance_insert_row._mapping = {"balance": 50}
+    balance_result = MagicMock()
+    balance_result.fetchone.return_value = balance_insert_row
+    payment_select_result = MagicMock()
+    payment_select_result.fetchone.return_value = payment_row
+    db_mock.execute.side_effect = [
+        payment_select_result,
+        MagicMock(),
+        restore_result,
+        MagicMock(),
+        balance_result,
+        MagicMock(),
+    ]
+
+    create_call = MagicMock(return_value={
+        "subscription_id": "subscription-pro-new",
+        "current_period_end": "2026-07-10T00:00:00",
+    })
+    monkeypatch.setattr(
+        payment_service.subscription_service,
+        "create_or_extend_subscription",
+        create_call,
+    )
+    monkeypatch.setattr(
+        payment_service.subscription_service,
+        "classify_plan_change",
+        lambda db, user_id, to_plan_id: {
+            "change_type": "same_plan",
+            "current_subscription": None,
+        },
+    )
+
+    async def fake_toss_confirm(payment_key, order_id, amount):
+        return {
+            "status": "DONE",
+            "orderId": order_id,
+            "orderName": "Garim Pro",
+            "totalAmount": amount,
+            "balanceAmount": amount,
+            "currency": "KRW",
+            "lastTransactionKey": "tx-free-pro-1",
+            "method": "card",
+            "approvedAt": "2026-06-10T12:00:00+09:00",
+            "requestedAt": "2026-06-10T11:59:30+09:00",
+            "receipt": {"url": "https://dashboard.tosspayments.com/receipt/free-pro"},
+            "isPartialCancelable": True,
+        }
+
+    monkeypatch.setattr(payment_service, "_confirm_toss_payment", fake_toss_confirm)
+
+    result = await payment_service.confirm_payment(
+        db=db_mock,
+        payment_key="payment-key-free-pro",
+        order_id="payment-free-pro-1",
+        amount=2900,
+    )
+
+    assert result["status"] == "DONE"
+    assert result["orderName"] == "Garim Pro"
+    create_call.assert_called_once_with(
+        db=db_mock,
+        user_id="user-free-pro-1",
+        plan_id="plan-pro",
+        payment_id="payment-free-pro-1",
+    )
+    payment_subscription_params = db_mock.execute.call_args_list[3].args[1]
+    assert payment_subscription_params["subscription_id"] == "subscription-pro-new"
+    assert payment_subscription_params["payment_id"] == "payment-free-pro-1"
+    db_mock.commit.assert_called_once()
+
+
+@pytest.mark.anyio
+async def test_acceptance_free_to_studio_confirm_payment_creates_30day_subscription(monkeypatch):
+    db_mock = MagicMock()
+    payment_row = MagicMock()
+    payment_row._mapping = {
+        "payment_id": "payment-free-studio-1",
+        "amount": 19800,
+        "status": "ready",
+        "pg_transaction_id": None,
+        "paid_at": None,
+        "user_id": "user-free-studio-1",
+        "subscription_id": None,
+        "product_type": "subscription",
+        "plan_id": "plan-studio",
+        "credit_plan_id": None,
+        "plan_credits": 500,
+        "plan_code": "studio",
+        "base_credits": None,
+        "bonus_credits": None,
+        "credit_plan_code": None,
+    }
+    restore_result = MagicMock()
+    restore_result.fetchone.return_value = None
+    balance_insert_row = MagicMock()
+    balance_insert_row._mapping = {"balance": 500}
+    balance_result = MagicMock()
+    balance_result.fetchone.return_value = balance_insert_row
+    payment_select_result = MagicMock()
+    payment_select_result.fetchone.return_value = payment_row
+    db_mock.execute.side_effect = [
+        payment_select_result,
+        MagicMock(),
+        restore_result,
+        MagicMock(),
+        balance_result,
+        MagicMock(),
+    ]
+
+    create_call = MagicMock(return_value={
+        "subscription_id": "subscription-studio-new",
+        "current_period_end": "2026-07-10T00:00:00",
+    })
+    monkeypatch.setattr(
+        payment_service.subscription_service,
+        "create_or_extend_subscription",
+        create_call,
+    )
+    monkeypatch.setattr(
+        payment_service.subscription_service,
+        "classify_plan_change",
+        lambda db, user_id, to_plan_id: {
+            "change_type": "same_plan",
+            "current_subscription": None,
+        },
+    )
+
+    async def fake_toss_confirm(payment_key, order_id, amount):
+        return {
+            "status": "DONE",
+            "orderId": order_id,
+            "orderName": "Garim Studio",
+            "totalAmount": amount,
+            "balanceAmount": amount,
+            "currency": "KRW",
+            "lastTransactionKey": "tx-free-studio-1",
+            "method": "card",
+            "approvedAt": "2026-06-10T12:00:00+09:00",
+            "requestedAt": "2026-06-10T11:59:30+09:00",
+            "receipt": {"url": "https://dashboard.tosspayments.com/receipt/free-studio"},
+            "isPartialCancelable": True,
+        }
+
+    monkeypatch.setattr(payment_service, "_confirm_toss_payment", fake_toss_confirm)
+
+    result = await payment_service.confirm_payment(
+        db=db_mock,
+        payment_key="payment-key-free-studio",
+        order_id="payment-free-studio-1",
+        amount=19800,
+    )
+
+    assert result["status"] == "DONE"
+    assert result["orderName"] == "Garim Studio"
+    create_call.assert_called_once_with(
+        db=db_mock,
+        user_id="user-free-studio-1",
+        plan_id="plan-studio",
+        payment_id="payment-free-studio-1",
+    )
+    payment_subscription_params = db_mock.execute.call_args_list[3].args[1]
+    assert payment_subscription_params["subscription_id"] == "subscription-studio-new"
+    assert payment_subscription_params["payment_id"] == "payment-free-studio-1"
     db_mock.commit.assert_called_once()
 
 
@@ -520,6 +827,500 @@ def test_get_my_credit_balance_returns_balance(monkeypatch):
     assert response.json()["balance"] == 150
 
 
+def test_service_save_billing_key_encrypts_and_returns_masked_public_fields(monkeypatch):
+    monkeypatch.setenv("BILLING_KEY_ENCRYPTION_SECRET", "x" * 32)
+    db_mock = MagicMock()
+    inserted = MagicMock()
+    inserted._mapping = {
+        "billing_key_id": "billing-key-id-1",
+        "pg_provider": "toss",
+        "customer_key": "customer-key-1",
+        "card_company": "Hyundai",
+        "masked_card_number": "****1234",
+        "method_type": "card",
+        "status": "active",
+        "last_used_at": None,
+        "revoked_at": None,
+        "created_at": "2026-06-09T00:00:00",
+    }
+    db_mock.execute.return_value.fetchone.return_value = inserted
+
+    result = billing_service.save_billing_key(
+        db=db_mock,
+        user_id="user-uuid-1",
+        billing_key="raw-billing-key-secret",
+        customer_key="customer-key-1",
+        card_company="Hyundai",
+        masked_card_number="1234123412341234",
+        method_type="card",
+    )
+
+    sql = str(db_mock.execute.call_args.args[0])
+    params = db_mock.execute.call_args.args[1]
+    assert "pgp_sym_encrypt(:billing_key, :secret)" in sql
+    assert "encrypted_billing_key" in sql
+    assert params["billing_key_hash"] != "raw-billing-key-secret"
+    assert params["masked_card_number"] == "****1234"
+    assert "billingKey" not in result
+    assert "encrypted_billing_key" not in result
+    assert "billing_key_hash" not in result
+    assert result["masked_card_number"] == "****1234"
+    assert result["status"] == "active"
+
+
+def test_service_list_billing_keys_returns_no_sensitive_fields():
+    db_mock = MagicMock()
+    row = MagicMock()
+    row._mapping = {
+        "billing_key_id": "billing-key-id-1",
+        "pg_provider": "toss",
+        "customer_key": "customer-key-1",
+        "card_company": "Hyundai",
+        "masked_card_number": "****1234",
+        "method_type": "card",
+        "status": "active",
+        "last_used_at": None,
+        "revoked_at": None,
+        "created_at": "2026-06-09T00:00:00",
+    }
+    db_mock.execute.return_value.fetchall.return_value = [row]
+
+    result = billing_service.list_billing_keys(db=db_mock, user_id="user-uuid-1")
+
+    sql = str(db_mock.execute.call_args.args[0])
+    assert "encrypted_billing_key" not in sql
+    assert "billing_key_hash" not in sql
+    assert result == [
+        {
+            "billing_key_id": "billing-key-id-1",
+            "pg_provider": "toss",
+            "customer_key": "customer-key-1",
+            "card_company": "Hyundai",
+            "masked_card_number": "****1234",
+            "method_type": "card",
+            "status": "active",
+            "last_used_at": None,
+            "revoked_at": None,
+            "created_at": "2026-06-09T00:00:00",
+        }
+    ]
+
+
+def test_register_billing_key_route_returns_public_response(monkeypatch):
+    fake_user = {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "email": "user@example.com",
+        "name": "Garim User",
+        "role": "USER",
+        "status": "active",
+        "session_id": "fake_session",
+    }
+    monkeypatch.setenv("BILLING_KEY_ENCRYPTION_SECRET", "x" * 32)
+    monkeypatch.setattr(auth, "authenticate_access_token", lambda token: fake_user)
+
+    db_mock = MagicMock()
+    inserted = MagicMock()
+    inserted._mapping = {
+        "billing_key_id": "billing-key-id-1",
+        "pg_provider": "toss",
+        "customer_key": "customer-key-1",
+        "card_company": "Hyundai",
+        "masked_card_number": "****1234",
+        "method_type": "card",
+        "status": "active",
+        "last_used_at": None,
+        "revoked_at": None,
+        "created_at": "2026-06-09T00:00:00",
+    }
+    db_mock.execute.return_value.fetchone.return_value = inserted
+    main.app.dependency_overrides[get_db] = lambda: db_mock
+
+    try:
+        response = client.post(
+            "/payment/billing-keys",
+            json={
+                "billingKey": "raw-billing-key-secret",
+                "customerKey": "customer-key-1",
+                "cardCompany": "Hyundai",
+                "maskedCardNumber": "1234123412341234",
+                "methodType": "card",
+            },
+            cookies={"access_token": "fake_token"},
+        )
+    finally:
+        main.app.dependency_overrides.pop(get_db, None)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "billingKey" not in body
+    assert "encrypted_billing_key" not in body
+    assert "billing_key_hash" not in body
+    assert body["masked_card_number"] == "****1234"
+    assert body["status"] == "active"
+    db_mock.commit.assert_called_once()
+
+
+def _renewal_subscription_row():
+    return {
+        "subscription_id": "subscription-renewal-1",
+        "user_id": "user-uuid-1",
+        "plan_id": "plan-pro",
+        "billing_key_id": "billing-key-id-1",
+        "next_billing_at": "2026-06-09T00:00:00",
+        "plan_code": "pro",
+        "plan_name": "Pro",
+        "price_amount": 2900,
+        "credits": 50,
+    }
+
+
+def test_find_due_renewal_subscriptions_filters_auto_renew_only():
+    db_mock = MagicMock()
+    result = MagicMock()
+    result.fetchall.return_value = []
+    db_mock.execute.return_value = result
+
+    subscriptions = subscription_renewal._find_due_renewal_subscriptions(db_mock, limit=25)
+
+    sql = str(db_mock.execute.call_args.args[0])
+    params = db_mock.execute.call_args.args[1]
+    assert subscriptions == []
+    assert "s.status = 'active'" in sql
+    assert "s.auto_renew = true" in sql
+    assert "s.cancel_at_period_end = false" in sql
+    assert "s.next_billing_at <= NOW()" in sql
+    assert "FOR UPDATE OF s SKIP LOCKED" in sql
+    assert params["limit"] == 25
+
+
+def test_run_subscription_renewals_records_missing_billing_key(monkeypatch):
+    db_mock = MagicMock()
+    target_result = MagicMock()
+    target_result.fetchall.return_value = [_renewal_subscription_row()]
+    attempt_row = MagicMock()
+    attempt_row._mapping = {"billing_attempt_id": "attempt-missing-key"}
+    db_mock.execute.side_effect = [
+        target_result,
+        MagicMock(fetchone=MagicMock(return_value=attempt_row)),
+        MagicMock(),
+    ]
+    monkeypatch.setattr(
+        subscription_renewal.billing_service,
+        "get_active_billing_key_for_charge",
+        lambda db, user_id, billing_key_id=None: None,
+    )
+
+    result = subscription_renewal.run_subscription_renewals(db_mock)
+
+    attempt_sql = str(db_mock.execute.call_args_list[1].args[0])
+    update_sql = str(db_mock.execute.call_args_list[2].args[0])
+    attempt_params = db_mock.execute.call_args_list[1].args[1]
+    assert result["processed"] == 1
+    assert result["results"][0]["status"] == "failed"
+    assert result["results"][0]["failure_code"] == "billing_key_missing"
+    assert "INSERT INTO subscription_billing_attempts" in attempt_sql
+    assert attempt_params["attempt_type"] == "renewal"
+    assert "billing_status = 'billing_key_missing'" in update_sql
+    db_mock.commit.assert_called_once()
+
+
+def test_run_subscription_renewals_success_creates_payment_and_extends_subscription(monkeypatch):
+    db_mock = MagicMock()
+    target_result = MagicMock()
+    target_result.fetchall.return_value = [_renewal_subscription_row()]
+    payment_row = MagicMock()
+    payment_row._mapping = {"payment_id": "payment-renewal-1"}
+    subscription_row = MagicMock()
+    subscription_row._mapping = {
+        "subscription_id": "subscription-renewal-1",
+        "current_period_end": "2026-07-09T00:00:00",
+        "next_billing_at": "2026-07-09T00:00:00",
+    }
+    attempt_row = MagicMock()
+    attempt_row._mapping = {"billing_attempt_id": "attempt-success"}
+    db_mock.execute.side_effect = [
+        target_result,
+        MagicMock(fetchone=MagicMock(return_value=payment_row)),
+        MagicMock(fetchone=MagicMock(return_value=subscription_row)),
+        MagicMock(fetchone=MagicMock(return_value=attempt_row)),
+        MagicMock(),
+    ]
+    monkeypatch.setattr(
+        subscription_renewal.billing_service,
+        "get_active_billing_key_for_charge",
+        lambda db, user_id, billing_key_id=None: {
+            "billing_key_id": "billing-key-id-1",
+            "billing_key": "raw-billing-key",
+            "customer_key": "customer-key-1",
+        },
+    )
+
+    def charge_client(billing_key, customer_key, amount, order_id, order_name):
+        assert billing_key == "raw-billing-key"
+        assert customer_key == "customer-key-1"
+        assert amount == 2900
+        assert "renewal" in order_name
+        return {
+            "success": True,
+            "pg_transaction_id": "tx-renewal-1",
+            "method": "billing",
+        }
+
+    result = subscription_renewal.run_subscription_renewals(
+        db_mock,
+        charge_client=charge_client,
+    )
+
+    payment_sql = str(db_mock.execute.call_args_list[1].args[0])
+    subscription_sql = str(db_mock.execute.call_args_list[2].args[0])
+    attempt_sql = str(db_mock.execute.call_args_list[3].args[0])
+    billing_key_sql = str(db_mock.execute.call_args_list[4].args[0])
+    assert result["processed"] == 1
+    assert result["results"][0]["status"] == "success"
+    assert result["results"][0]["payment_id"] == "payment-renewal-1"
+    assert "INSERT INTO payments" in payment_sql
+    assert "billing_key_id" in payment_sql
+    assert "current_period_end = current_period_end + INTERVAL '30 days'" in subscription_sql
+    assert "next_billing_at = current_period_end + INTERVAL '30 days'" in subscription_sql
+    assert "INSERT INTO subscription_billing_attempts" in attempt_sql
+    assert ":status" in attempt_sql
+    assert db_mock.execute.call_args_list[3].args[1]["attempt_type"] == "renewal"
+    assert "UPDATE billing_keys" in billing_key_sql
+    db_mock.commit.assert_called_once()
+
+
+def test_run_subscription_renewals_charge_failure_records_failed_attempt(monkeypatch):
+    db_mock = MagicMock()
+    target_result = MagicMock()
+    target_result.fetchall.return_value = [_renewal_subscription_row()]
+    attempt_row = MagicMock()
+    attempt_row._mapping = {"billing_attempt_id": "attempt-failed"}
+    db_mock.execute.side_effect = [
+        target_result,
+        MagicMock(fetchone=MagicMock(return_value=attempt_row)),
+        MagicMock(),
+    ]
+    monkeypatch.setattr(
+        subscription_renewal.billing_service,
+        "get_active_billing_key_for_charge",
+        lambda db, user_id, billing_key_id=None: {
+            "billing_key_id": "billing-key-id-1",
+            "billing_key": "raw-billing-key",
+            "customer_key": "customer-key-1",
+        },
+    )
+
+    def charge_client(**kwargs):
+        return {
+            "success": False,
+            "failure_code": "card_declined",
+            "failure_message": "Card declined",
+        }
+
+    result = subscription_renewal.run_subscription_renewals(
+        db_mock,
+        charge_client=charge_client,
+    )
+
+    attempt_sql = str(db_mock.execute.call_args_list[1].args[0])
+    attempt_params = db_mock.execute.call_args_list[1].args[1]
+    update_sql = str(db_mock.execute.call_args_list[2].args[0])
+    assert result["processed"] == 1
+    assert result["results"][0]["status"] == "failed"
+    assert result["results"][0]["failure_code"] == "card_declined"
+    assert "INSERT INTO subscription_billing_attempts" in attempt_sql
+    assert attempt_params["failure_code"] == "card_declined"
+    assert attempt_params["failure_message"] == "Card declined"
+    assert "billing_status = 'failed'" in update_sql
+    db_mock.commit.assert_called_once()
+
+
+def _scheduled_downgrade_row():
+    return {
+        "plan_change_id": "change-downgrade-due-1",
+        "user_id": "user-uuid-1",
+        "from_subscription_id": "subscription-studio-1",
+        "source_subscription_id": "subscription-studio-1",
+        "to_plan_id": "plan-pro",
+        "effective_at": "2026-06-09T00:00:00",
+        "plan_code": "pro",
+        "plan_name": "Pro",
+        "price_amount": 2900,
+        "credits": 50,
+    }
+
+
+def test_find_due_scheduled_downgrades_filters_scheduled_due_only():
+    db_mock = MagicMock()
+    result = MagicMock()
+    result.fetchall.return_value = []
+    db_mock.execute.return_value = result
+
+    changes = subscription_renewal._find_due_scheduled_downgrades(db_mock, limit=10)
+
+    sql = str(db_mock.execute.call_args.args[0])
+    params = db_mock.execute.call_args.args[1]
+    assert changes == []
+    assert "pc.change_type = 'downgrade'" in sql
+    assert "pc.status = 'scheduled'" in sql
+    assert "pc.effective_at <= NOW()" in sql
+    assert "FOR UPDATE OF pc SKIP LOCKED" in sql
+    assert params["limit"] == 10
+
+
+def test_run_scheduled_downgrades_missing_billing_key_marks_failed(monkeypatch):
+    db_mock = MagicMock()
+    target_result = MagicMock()
+    target_result.fetchall.return_value = [_scheduled_downgrade_row()]
+    attempt_row = MagicMock()
+    attempt_row._mapping = {"billing_attempt_id": "attempt-downgrade-missing-key"}
+    db_mock.execute.side_effect = [
+        target_result,
+        MagicMock(fetchone=MagicMock(return_value=attempt_row)),
+        MagicMock(),
+    ]
+    monkeypatch.setattr(
+        subscription_renewal.billing_service,
+        "get_active_billing_key_for_charge",
+        lambda db, user_id, billing_key_id=None: None,
+    )
+
+    result = subscription_renewal.run_scheduled_downgrades(db_mock)
+
+    attempt_sql = str(db_mock.execute.call_args_list[1].args[0])
+    attempt_params = db_mock.execute.call_args_list[1].args[1]
+    change_sql = str(db_mock.execute.call_args_list[2].args[0])
+    assert result["processed"] == 1
+    assert result["results"][0]["status"] == "failed"
+    assert result["results"][0]["failure_code"] == "billing_key_missing"
+    assert "INSERT INTO subscription_billing_attempts" in attempt_sql
+    assert attempt_params["attempt_type"] == "scheduled_downgrade"
+    assert attempt_params["plan_change_id"] == "change-downgrade-due-1"
+    assert "UPDATE subscription_plan_changes" in change_sql
+    assert "status = :status" in change_sql
+    db_mock.commit.assert_called_once()
+
+
+def test_run_scheduled_downgrades_success_creates_subscription_and_applies_change(monkeypatch):
+    db_mock = MagicMock()
+    target_result = MagicMock()
+    target_result.fetchall.return_value = [_scheduled_downgrade_row()]
+    subscription_row = MagicMock()
+    subscription_row._mapping = {
+        "subscription_id": "subscription-pro-new",
+        "current_period_start": "2026-06-09T00:00:00",
+        "current_period_end": "2026-07-09T00:00:00",
+        "next_billing_at": "2026-07-09T00:00:00",
+    }
+    payment_row = MagicMock()
+    payment_row._mapping = {"payment_id": "payment-downgrade-1"}
+    attempt_row = MagicMock()
+    attempt_row._mapping = {"billing_attempt_id": "attempt-downgrade-success"}
+    applied_row = MagicMock()
+    applied_row._mapping = {
+        "plan_change_id": "change-downgrade-due-1",
+        "status": "applied",
+        "applied_at": "2026-06-09T00:00:00",
+        "to_subscription_id": "subscription-pro-new",
+    }
+    db_mock.execute.side_effect = [
+        target_result,
+        MagicMock(fetchone=MagicMock(return_value=subscription_row)),
+        MagicMock(fetchone=MagicMock(return_value=payment_row)),
+        MagicMock(),
+        MagicMock(fetchone=MagicMock(return_value=attempt_row)),
+        MagicMock(fetchone=MagicMock(return_value=applied_row)),
+        MagicMock(),
+    ]
+    monkeypatch.setattr(
+        subscription_renewal.billing_service,
+        "get_active_billing_key_for_charge",
+        lambda db, user_id, billing_key_id=None: {
+            "billing_key_id": "billing-key-id-1",
+            "billing_key": "raw-billing-key",
+            "customer_key": "customer-key-1",
+        },
+    )
+
+    def charge_client(billing_key, customer_key, amount, order_id, order_name):
+        assert billing_key == "raw-billing-key"
+        assert customer_key == "customer-key-1"
+        assert amount == 2900
+        assert "scheduled downgrade" in order_name
+        return {
+            "success": True,
+            "pg_transaction_id": "tx-downgrade-1",
+            "method": "billing",
+        }
+
+    result = subscription_renewal.run_scheduled_downgrades(
+        db_mock,
+        charge_client=charge_client,
+    )
+
+    insert_subscription_sql = str(db_mock.execute.call_args_list[1].args[0])
+    payment_sql = str(db_mock.execute.call_args_list[2].args[0])
+    link_payment_sql = str(db_mock.execute.call_args_list[3].args[0])
+    attempt_sql = str(db_mock.execute.call_args_list[4].args[0])
+    apply_sql = str(db_mock.execute.call_args_list[5].args[0])
+    assert result["processed"] == 1
+    assert result["results"][0]["status"] == "applied"
+    assert result["results"][0]["subscription_id"] == "subscription-pro-new"
+    assert "INSERT INTO subscriptions" in insert_subscription_sql
+    assert "billing_key_id" in insert_subscription_sql
+    assert "NOW() + INTERVAL '30 days'" in insert_subscription_sql
+    assert "INSERT INTO payments" in payment_sql
+    assert "plan_change_id" in payment_sql
+    assert "UPDATE subscriptions" in link_payment_sql
+    assert "last_payment_id = :payment_id" in link_payment_sql
+    assert "INSERT INTO subscription_billing_attempts" in attempt_sql
+    assert db_mock.execute.call_args_list[4].args[1]["attempt_type"] == "scheduled_downgrade"
+    assert "status = 'applied'" in apply_sql
+    assert "to_subscription_id = :to_subscription_id" in apply_sql
+    db_mock.commit.assert_called_once()
+
+
+def test_run_scheduled_downgrades_charge_failure_marks_plan_change_failed(monkeypatch):
+    db_mock = MagicMock()
+    target_result = MagicMock()
+    target_result.fetchall.return_value = [_scheduled_downgrade_row()]
+    attempt_row = MagicMock()
+    attempt_row._mapping = {"billing_attempt_id": "attempt-downgrade-failed"}
+    db_mock.execute.side_effect = [
+        target_result,
+        MagicMock(fetchone=MagicMock(return_value=attempt_row)),
+        MagicMock(),
+    ]
+    monkeypatch.setattr(
+        subscription_renewal.billing_service,
+        "get_active_billing_key_for_charge",
+        lambda db, user_id, billing_key_id=None: {
+            "billing_key_id": "billing-key-id-1",
+            "billing_key": "raw-billing-key",
+            "customer_key": "customer-key-1",
+        },
+    )
+
+    result = subscription_renewal.run_scheduled_downgrades(
+        db_mock,
+        charge_client=lambda **kwargs: {
+            "success": False,
+            "failure_code": "card_declined",
+            "failure_message": "Card declined",
+        },
+    )
+
+    attempt_params = db_mock.execute.call_args_list[1].args[1]
+    change_sql = str(db_mock.execute.call_args_list[2].args[0])
+    assert result["processed"] == 1
+    assert result["results"][0]["status"] == "failed"
+    assert result["results"][0]["failure_code"] == "card_declined"
+    assert attempt_params["attempt_type"] == "scheduled_downgrade"
+    assert attempt_params["failure_code"] == "card_declined"
+    assert "UPDATE subscription_plan_changes" in change_sql
+    db_mock.commit.assert_called_once()
+
+
 def test_get_my_payment_info_route_returns_plan_code(monkeypatch):
     fake_user = {
         "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -533,13 +1334,27 @@ def test_get_my_payment_info_route_returns_plan_code(monkeypatch):
 
     plan_row = MagicMock()
     plan_row._mapping = {
+        "subscription_id": "subscription-uuid-pro",
+        "subscription_status": "active",
         "plan_name": "Pro",
         "plan_code": "pro",
-        "created_at": None,
+        "plan_rank": 10,
+        "current_period_start": None,
+        "current_period_end": None,
+        "next_billing_at": None,
+        "auto_renew": True,
+        "cancel_at_period_end": False,
+        "cancelled_at": None,
+        "billing_status": "paid",
+        "carried_over_days": 0,
+        "superseded_by_subscription_id": None,
     }
     db_mock = MagicMock()
     db_mock.execute.side_effect = [
         MagicMock(fetchone=MagicMock(return_value=plan_row)),
+        MagicMock(fetchone=MagicMock(return_value=None)),
+        MagicMock(fetchone=MagicMock(return_value=None)),
+        MagicMock(fetchone=MagicMock(return_value=None)),
         MagicMock(fetchall=MagicMock(return_value=[])),
     ]
     main.app.dependency_overrides[get_db] = lambda: db_mock
@@ -555,6 +1370,7 @@ def test_get_my_payment_info_route_returns_plan_code(monkeypatch):
     assert response.status_code == 200
     assert response.json()["plan_code"] == "pro"
     assert response.json()["plan_name"] == "Pro"
+    assert response.json()["scheduled_plan_change"] is None
 
 
 def test_service_get_my_credit_balance_no_row():
@@ -580,10 +1396,46 @@ def test_service_get_my_credit_balance_existing():
 def test_service_get_my_payment_info_returns_current_plan_code():
     db_mock = MagicMock()
     plan_row = MagicMock()
-    plan_row._mapping = {"plan_name": "Pro", "plan_code": "pro"}
+    plan_row._mapping = {
+        "subscription_id": "subscription-uuid-pro",
+        "subscription_status": "active",
+        "plan_name": "Pro",
+        "plan_code": "pro",
+        "plan_rank": 10,
+        "current_period_start": None,
+        "current_period_end": None,
+        "next_billing_at": None,
+        "auto_renew": True,
+        "cancel_at_period_end": False,
+        "cancelled_at": None,
+        "billing_status": "paid",
+        "carried_over_days": 0,
+        "superseded_by_subscription_id": None,
+    }
+    carried_row = MagicMock()
+    carried_row._mapping = {
+        "current_period_end": None,
+        "auto_renew": False,
+        "carried_over_days": 21,
+        "plan_code": "pro",
+        "plan_name": "Pro",
+    }
+    scheduled_row = MagicMock()
+    scheduled_row._mapping = {
+        "plan_change_id": "change-downgrade-1",
+        "change_type": "downgrade",
+        "status": "scheduled",
+        "effective_at": None,
+        "plan_id": "plan-pro",
+        "plan_code": "pro",
+        "plan_name": "Pro",
+    }
     db_mock.execute.side_effect = [
         MagicMock(fetchone=MagicMock(return_value=plan_row)),
+        MagicMock(fetchone=MagicMock(return_value=carried_row)),
+        MagicMock(fetchone=MagicMock(return_value=scheduled_row)),
         MagicMock(fetchone=MagicMock(return_value=None)),
+        MagicMock(fetchall=MagicMock(return_value=[])),
     ]
 
     result = payment_service.get_my_payment_info(db=db_mock, user_id="user-uuid-pro")
@@ -591,6 +1443,9 @@ def test_service_get_my_payment_info_returns_current_plan_code():
     assert result["plan_code"] == "pro"
     assert result["plan_name"] == "Pro"
     assert result["is_premium"] is True
+    assert result["current_plan"]["plan_rank"] == 10
+    assert result["carried_over_subscription"]["plan_code"] == "pro"
+    assert result["scheduled_plan_change"]["change_type"] == "downgrade"
 
 
 def test_spend_user_credits_insufficient_balance():
@@ -667,10 +1522,31 @@ async def test_service_confirm_payment_saves_only_allowed_toss_fields(monkeypatc
         payment_select_result,  # 1: confirm SELECT
         MagicMock(),            # 2: UPDATE payments
         restore_result,         # 3: _restore_free_plan
-        MagicMock(),            # 4: UPDATE subscriptions
+        MagicMock(),            # 4: UPDATE payments.subscription_id
         balance_result,         # 5: INSERT INTO user_credit_balances
         MagicMock(),            # 6: INSERT INTO credit_ledger
     ]
+
+    def fake_create_or_extend_subscription(db, user_id, plan_id, payment_id):
+        assert user_id == "user-uuid-3"
+        assert plan_id == "plan-uuid-pro"
+        assert payment_id == "payment-uuid-3"
+        return {"subscription_id": "subscription-created-step5"}
+
+    monkeypatch.setattr(
+        payment_service.subscription_service,
+        "create_or_extend_subscription",
+        fake_create_or_extend_subscription,
+    )
+
+    monkeypatch.setattr(
+        payment_service.subscription_service,
+        "classify_plan_change",
+        lambda db, user_id, to_plan_id: {
+            "change_type": "same_plan",
+            "current_subscription": {"subscription_id": "subscription-uuid-3"},
+        },
+    )
 
     async def fake_toss_confirm(payment_key, order_id, amount):
         return {
@@ -721,8 +1597,8 @@ async def test_service_confirm_payment_saves_only_allowed_toss_fields(monkeypatc
     assert "version" not in result
     assert db_mock.execute.call_count == 6
     payment_update_params = db_mock.execute.call_args_list[1].args[1]
-    subscription_update_sql = str(db_mock.execute.call_args_list[3].args[0])
-    subscription_update_params = db_mock.execute.call_args_list[3].args[1]
+    payment_subscription_sql = str(db_mock.execute.call_args_list[3].args[0])
+    payment_subscription_params = db_mock.execute.call_args_list[3].args[1]
     balance_sql = str(db_mock.execute.call_args_list[4].args[0])
     ledger_sql = str(db_mock.execute.call_args_list[5].args[0])
     assert payment_update_params["last_transaction_key"] == "tx-key-3"
@@ -741,11 +1617,10 @@ async def test_service_confirm_payment_saves_only_allowed_toss_fields(monkeypatc
     assert "raw_response" not in payment_update_params
     assert "secret" not in payment_update_params
     assert "version" not in payment_update_params
-    assert "plan_id = :plan_id" in subscription_update_sql
-    assert "ended_at = NOW() + INTERVAL '30 days'" in subscription_update_sql
-    assert "renew_at = NOW() + INTERVAL '30 days'" in subscription_update_sql
-    assert "remaining_credits" not in subscription_update_sql
-    assert subscription_update_params["plan_id"] == "plan-uuid-pro"
+    assert "UPDATE payments" in payment_subscription_sql
+    assert "subscription_id = :subscription_id" in payment_subscription_sql
+    assert payment_subscription_params["subscription_id"] == "subscription-created-step5"
+    assert payment_subscription_params["payment_id"] == "payment-uuid-3"
     assert "INSERT INTO user_credit_balances" in balance_sql
     assert "INSERT INTO credit_ledger" in ledger_sql
     db_mock.commit.assert_called_once()

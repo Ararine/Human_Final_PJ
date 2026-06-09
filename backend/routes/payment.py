@@ -1,10 +1,14 @@
 from fastapi import APIRouter, Depends, Cookie
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 from utils.database import get_db
 from services import auth
 from controllers import payment
-from schemas.payment import PaymentConfirmRequest, TempOrderRequest, TempOrderResponse
+from schemas.payment import (
+    BillingKeyRegisterRequest,
+    PaymentConfirmRequest,
+    TempOrderRequest,
+    TempOrderResponse,
+)
 
 router = APIRouter(tags=["payment"])
 
@@ -14,62 +18,7 @@ async def get_my_payment_info(
     db: Session = Depends(get_db)
 ):
     current_user = auth.authenticate_access_token(access_token)
-    user_id = current_user["id"]
-    
-    # 1. 플랜 정보 및 구독 날짜 확인
-    sub_row = db.execute(
-        text("""
-            SELECT pl.plan_name, pl.plan_code, s.created_at 
-            FROM subscriptions s
-            JOIN plans pl ON s.plan_id = pl.plan_id
-            WHERE s.user_id = :user_id AND s.status = 'active'
-        """),
-        {"user_id": user_id}
-    ).fetchone()
-
-    plan_name = "무료 플랜"
-    plan_code = "free"
-    plan_date = None
-    is_premium = False
-    
-    if sub_row:
-        p_code = sub_row._mapping["plan_code"].lower()
-        plan_code = p_code
-        if p_code != 'free':
-            is_premium = True
-            plan_name = sub_row._mapping["plan_name"]
-            plan_date = sub_row._mapping["created_at"]
-
-    # 2. 결제 내역 전체 조회 (플랜 및 크레딧 모두 포함)
-    pay_rows = db.execute(
-        text("""
-            SELECT 
-                payment_id, order_name, pg_provider, amount, created_at
-            FROM payments
-            WHERE user_id = :user_id AND status IN ('DONE', 'success')
-            ORDER BY created_at DESC
-        """),
-        {"user_id": user_id}
-    ).fetchall()
-
-    history = []
-    for r in pay_rows:
-        p = r._mapping
-        history.append({
-            "orderId": str(p["payment_id"]),
-            "orderName": p["order_name"],
-            "method": p.get("pg_provider") or "간편결제",
-            "amount": p["amount"],
-            "approvedAt": p["created_at"].isoformat() if p["created_at"] else None
-        })
-
-    return {
-        "is_premium": is_premium,
-        "plan_code": plan_code,
-        "plan_name": plan_name,
-        "plan_date": plan_date.isoformat() if plan_date else None,
-        "payment_history": history
-    }
+    return payment.get_my_payment_info(current_user, db)
 
 
 @router.post("/temp-order", response_model=TempOrderResponse)
@@ -104,3 +53,22 @@ def get_my_credit_balance(
 ):
     current_user = auth.authenticate_access_token(access_token)
     return payment.get_my_credit_balance(current_user, db)
+
+
+@router.post("/billing-keys")
+def register_billing_key(
+    body: BillingKeyRegisterRequest,
+    access_token: str | None = Cookie(default=None),
+    db: Session = Depends(get_db),
+):
+    current_user = auth.authenticate_access_token(access_token)
+    return payment.register_billing_key(body, current_user, db)
+
+
+@router.get("/billing-keys")
+def list_billing_keys(
+    access_token: str | None = Cookie(default=None),
+    db: Session = Depends(get_db),
+):
+    current_user = auth.authenticate_access_token(access_token)
+    return payment.list_billing_keys(current_user, db)

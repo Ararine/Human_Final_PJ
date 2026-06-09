@@ -52,6 +52,10 @@ export default function AdminCompliance() {
             </span>
             정책 및 상품 관리
           </a>
+          <a href="/admin/subscriptions">
+            <span className="material-icons">subscriptions</span>
+            구독 관리
+          </a>
           <a href="/admin/payments">
             <span className="material-icons">
               payments

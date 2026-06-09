@@ -245,6 +245,10 @@ export default function AdminPaymentCheck() {
             <span className="material-icons">tune</span>
             정책 및 상품 관리
           </a>
+          <a href="/admin/subscriptions">
+            <span className="material-icons">subscriptions</span>
+            구독 관리
+          </a>
           <a href="/admin/payments" className="active">
             <span className="material-icons">payments</span>
             사용자 결제 확인

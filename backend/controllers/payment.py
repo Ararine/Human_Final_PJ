@@ -1,11 +1,12 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from schemas.payment import (
+    BillingKeyRegisterRequest,
     PaymentConfirmRequest,
     TempOrderRequest
 )
 
-from services import payment
+from services import billing, payment
 
 
 async def create_temp_order(
@@ -82,5 +83,42 @@ def get_my_credit_balance(current_user: dict, db: Session):
             db=db,
             user_id=current_user["id"],
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def register_billing_key(
+    body: BillingKeyRegisterRequest,
+    current_user: dict,
+    db: Session,
+):
+    try:
+        result = billing.save_billing_key(
+            db=db,
+            user_id=current_user["id"],
+            billing_key=body.billingKey,
+            customer_key=body.customerKey,
+            card_company=body.cardCompany,
+            masked_card_number=body.maskedCardNumber,
+            method_type=body.methodType,
+        )
+        db.commit()
+        return result
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception:
+        db.rollback()
+        raise
+
+
+def list_billing_keys(current_user: dict, db: Session):
+    try:
+        return {
+            "billing_keys": billing.list_billing_keys(
+                db=db,
+                user_id=current_user["id"],
+            )
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
