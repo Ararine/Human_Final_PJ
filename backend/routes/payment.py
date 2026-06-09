@@ -28,11 +28,13 @@ async def get_my_payment_info(
     ).fetchone()
 
     plan_name = "무료 플랜"
+    plan_code = "free"
     plan_date = None
     is_premium = False
     
     if sub_row:
         p_code = sub_row._mapping["plan_code"].lower()
+        plan_code = p_code
         if p_code != 'free':
             is_premium = True
             plan_name = sub_row._mapping["plan_name"]
@@ -63,6 +65,7 @@ async def get_my_payment_info(
 
     return {
         "is_premium": is_premium,
+        "plan_code": plan_code,
         "plan_name": plan_name,
         "plan_date": plan_date.isoformat() if plan_date else None,
         "payment_history": history

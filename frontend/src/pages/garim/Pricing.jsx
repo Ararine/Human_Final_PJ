@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { useAuthStatus } from "../../hooks/useAuthStatus";
@@ -7,6 +8,7 @@ import {
   formatQuota,
   usePricingPlans,
 } from "../../hooks/usePricingPlans";
+import { getMyPaymentInfo } from "../../utils/api";
 import "../../css/garim-pages/Pricing.css";
 
 import GarimPage from "../../components/garim/GarimPage";
@@ -19,6 +21,32 @@ export default function Pricing() {
     ? "/upload"
     : `/login?next=${encodeURIComponent("/upload")}`;
   const { plans, creditPlans } = usePricingPlans();
+  const [currentPlanCode, setCurrentPlanCode] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!isAuthed) {
+      setCurrentPlanCode("");
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    getMyPaymentInfo()
+      .then((paymentInfo) => {
+        if (!cancelled) {
+          setCurrentPlanCode((paymentInfo.plan_code || "").toLowerCase());
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCurrentPlanCode("");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthed]);
 
   const displayedCredits = creditPlans.slice(0, 8);
   // Keep for static test assertion: creditPlans.map
@@ -72,13 +100,16 @@ export default function Pricing() {
 
       <section style={{ padding: "24px 32px 64px" }}>
         <div className="pricing-grid">
-          {plans.map((plan) => (
+          {plans.map((plan) => {
+            const isCurrentPlan = plan.key === currentPlanCode;
+            const isHighlighted = currentPlanCode ? isCurrentPlan : plan.featured;
+            return (
             <div
               key={plan.key}
-              className={`price-card${plan.featured ? " price-card--featured" : ""}`}
+              className={`price-card${isHighlighted ? " price-card--featured" : ""}${isCurrentPlan ? " price-card--current" : ""}`}
             >
-              <span className={`mui-chip ${plan.badgeClass} price-card__badge`}>
-                {plan.badge}
+              <span className={`mui-chip ${isCurrentPlan ? "mui-chip--success" : plan.badgeClass} price-card__badge`}>
+                {isCurrentPlan ? "현재 플랜" : plan.badge}
               </span>
               <span className="overline-k">{plan.name}</span>
               <div className="price-card__price">
@@ -119,7 +150,15 @@ export default function Pricing() {
                   {formatQuota(plan.retention.metadataRetentionDays, "일")} 보존
                 </li>
               </ul>
-              {plan.key === "free" ? (
+              {isCurrentPlan ? (
+                <button
+                  type="button"
+                  className="mui-btn mui-btn--contained mui-btn--block"
+                  disabled
+                >
+                  현재 이용 중
+                </button>
+              ) : plan.key === "free" ? (
                 <a
                   href={startHref}
                   className="mui-btn mui-btn--contained mui-btn--block"
@@ -136,7 +175,8 @@ export default function Pricing() {
                 </button>
               )}
             </div>
-          ))}
+          );
+          })}
         </div>
       </section>
 

@@ -395,6 +395,10 @@ export default function AdminPolicy() {
             <span className="material-icons">tune</span>
             정책 및 상품 관리
           </a>
+          <a href="/admin/payments">
+            <span className="material-icons">payments</span>
+            사용자 결제 확인
+          </a>
         </aside>
 
         <main className="adm-main pol-adm-main">
@@ -438,61 +442,68 @@ export default function AdminPolicy() {
             {activeTab === "subscription" ? (
               <section className="pol-manager pol-manager--list-only">
                 <div className="pol-list-panel">
-                  <div className="pol-toolbar">
+                  <div className="pol-card-head">
                     <div>
                       <h2>구독 플랜</h2>
                       <p>pricing 페이지에 표시될 구독 상품 정책입니다.</p>
                     </div>
-                    <div className="pol-toolbar-actions">
-                      <button
-                        type="button"
-                        className="mui-btn mui-btn--contained pol-add-btn"
-                        onClick={openNewSubscriptionPlan}
-                      >
-                        <span className="material-icons">add</span>
-                        구독 플랜 추가
-                      </button>
-                      <select
-                        className="pol-status-select"
-                        value={planStatus}
-                        onChange={(e) => {
-                          setPlanStatus(e.target.value);
-                          setSubscriptionPage(1);
-                        }}
-                      >
-                        <option value="all">전체</option>
-                        <option value="active">사용중</option>
-                        <option value="inactive">미사용</option>
-                        <option value="deleted">삭제</option>
-                      </select>
-                      <div className="pol-search">
-                        <span className="material-icons">search</span>
-                        <input
-                          type="search"
-                          value={planSearch}
-                          onChange={(e) => setPlanSearch(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              setSubscriptionPage(1);
-                              loadSubscriptionPlans(planSearch, planStatus, 1, subscriptionLimit);
-                            }
+                    <div className="pol-card-controls">
+                      <div className="pol-card-title-tools">
+                        <select
+                          className="pol-limit-select"
+                          value={subscriptionLimit}
+                          onChange={(e) => {
+                            setSubscriptionLimit(Number(e.target.value));
+                            setSubscriptionPage(1);
                           }}
-                          placeholder="코드, 이름, 상태 검색"
-                        />
+                        >
+                          {PAGE_LIMIT_OPTIONS.map((limit) => (
+                            <option value={limit} key={limit}>{limit}</option>
+                          ))}
+                        </select>
+                        <span className="pol-limit-label">개씩 보기</span>
                       </div>
-                      <select
-                        className="pol-limit-select"
-                        value={subscriptionLimit}
-                        onChange={(e) => {
-                          setSubscriptionLimit(Number(e.target.value));
-                          setSubscriptionPage(1);
-                        }}
-                      >
-                        {PAGE_LIMIT_OPTIONS.map((limit) => (
-                          <option value={limit} key={limit}>{limit}</option>
-                        ))}
-                      </select>
-                      <span className="pol-limit-label">개씩 보기</span>
+
+                      <div className="pol-toolbar">
+                        <div className="pol-toolbar-actions">
+                          <button
+                            type="button"
+                            className="mui-btn mui-btn--contained pol-add-btn"
+                            onClick={openNewSubscriptionPlan}
+                          >
+                            <span className="material-icons">add</span>
+                            구독 플랜 추가
+                          </button>
+                          <select
+                            className="pol-status-select"
+                            value={planStatus}
+                            onChange={(e) => {
+                              setPlanStatus(e.target.value);
+                              setSubscriptionPage(1);
+                            }}
+                          >
+                            <option value="all">전체</option>
+                            <option value="active">사용중</option>
+                            <option value="inactive">미사용</option>
+                            <option value="deleted">삭제</option>
+                          </select>
+                          <div className="pol-search">
+                            <span className="material-icons">search</span>
+                            <input
+                              type="search"
+                              value={planSearch}
+                              onChange={(e) => setPlanSearch(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  setSubscriptionPage(1);
+                                  loadSubscriptionPlans(planSearch, planStatus, 1, subscriptionLimit);
+                                }
+                              }}
+                              placeholder="코드, 이름, 상태 검색"
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -574,63 +585,70 @@ export default function AdminPolicy() {
             ) : (
               <section className="pol-manager pol-manager--list-only">
                 <div className="pol-list-panel">
-                  <div className="pol-toolbar">
+                  <div className="pol-card-head">
                     <div>
                       <h2>크레딧 플랜</h2>
                       <p>
                         일회성 크레딧 충전 상품을 구독 플랜과 별도로 관리합니다.
                       </p>
                     </div>
-                    <div className="pol-toolbar-actions">
-                      <button
-                        type="button"
-                        className="mui-btn mui-btn--contained pol-add-btn"
-                        onClick={openNewCreditPlan}
-                      >
-                        <span className="material-icons">add</span>
-                        크레딧 플랜 추가
-                      </button>
-                      <select
-                        className="pol-status-select"
-                        value={creditStatus}
-                        onChange={(e) => {
-                          setCreditStatus(e.target.value);
-                          setCreditPage(1);
-                        }}
-                      >
-                        <option value="all">전체</option>
-                        <option value="active">사용중</option>
-                        <option value="inactive">미사용</option>
-                        <option value="deleted">삭제</option>
-                      </select>
-                      <div className="pol-search">
-                        <span className="material-icons">search</span>
-                        <input
-                          type="search"
-                          value={creditSearch}
-                          onChange={(e) => setCreditSearch(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              setCreditPage(1);
-                              loadCreditPlans(creditSearch, creditStatus, 1, creditLimit);
-                            }
+                    <div className="pol-card-controls">
+                      <div className="pol-card-title-tools">
+                        <select
+                          className="pol-limit-select"
+                          value={creditLimit}
+                          onChange={(e) => {
+                            setCreditLimit(Number(e.target.value));
+                            setCreditPage(1);
                           }}
-                          placeholder="코드, 이름, 상태 검색"
-                        />
+                        >
+                          {PAGE_LIMIT_OPTIONS.map((limit) => (
+                            <option value={limit} key={limit}>{limit}</option>
+                          ))}
+                        </select>
+                        <span className="pol-limit-label">개씩 보기</span>
                       </div>
-                      <select
-                        className="pol-limit-select"
-                        value={creditLimit}
-                        onChange={(e) => {
-                          setCreditLimit(Number(e.target.value));
-                          setCreditPage(1);
-                        }}
-                      >
-                        {PAGE_LIMIT_OPTIONS.map((limit) => (
-                          <option value={limit} key={limit}>{limit}</option>
-                        ))}
-                      </select>
-                      <span className="pol-limit-label">개씩 보기</span>
+
+                      <div className="pol-toolbar">
+                        <div className="pol-toolbar-actions">
+                          <button
+                            type="button"
+                            className="mui-btn mui-btn--contained pol-add-btn"
+                            onClick={openNewCreditPlan}
+                          >
+                            <span className="material-icons">add</span>
+                            크레딧 플랜 추가
+                          </button>
+                          <select
+                            className="pol-status-select"
+                            value={creditStatus}
+                            onChange={(e) => {
+                              setCreditStatus(e.target.value);
+                              setCreditPage(1);
+                            }}
+                          >
+                            <option value="all">전체</option>
+                            <option value="active">사용중</option>
+                            <option value="inactive">미사용</option>
+                            <option value="deleted">삭제</option>
+                          </select>
+                          <div className="pol-search">
+                            <span className="material-icons">search</span>
+                            <input
+                              type="search"
+                              value={creditSearch}
+                              onChange={(e) => setCreditSearch(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  setCreditPage(1);
+                                  loadCreditPlans(creditSearch, creditStatus, 1, creditLimit);
+                                }
+                              }}
+                              placeholder="코드, 이름, 상태 검색"
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
 

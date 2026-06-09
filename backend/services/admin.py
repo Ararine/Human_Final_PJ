@@ -761,3 +761,260 @@ def update_admin_policies(policies: dict, updated_by=None):
         raise
     finally:
         db.close()
+
+
+def get_payments_list(
+    product_type: str = None,
+    status: str = None,
+    q: str = None,
+    search_key: str = "email",
+    date_from: str = None,
+    date_to: str = None,
+    page: int = 1,
+    limit: int = 10,
+):
+    db = SessionLocal()
+    try:
+        conditions = []
+        params = {}
+
+        if product_type and product_type != "all":
+            conditions.append("p.product_type = :product_type")
+            params["product_type"] = product_type
+
+        if status and status != "all":
+            conditions.append("p.status = :status")
+            params["status"] = status
+
+        if date_from:
+            conditions.append("p.created_at >= CAST(:date_from AS date)")
+            params["date_from"] = date_from
+
+        if date_to:
+            conditions.append("p.created_at < CAST(:date_to AS date) + INTERVAL '1 day'")
+            params["date_to"] = date_to
+
+        if q:
+            val = f"%{q.lower()}%"
+            params["q"] = val
+            if search_key == "email":
+                conditions.append("LOWER(u.email) LIKE :q")
+            elif search_key == "payment_id":
+                conditions.append("CAST(p.payment_id AS varchar) LIKE :q")
+            elif search_key == "user_id":
+                conditions.append("CAST(p.user_id AS varchar) LIKE :q")
+            elif search_key == "product_name":
+                conditions.append("(LOWER(p.order_name) LIKE :q OR LOWER(pl.plan_name) LIKE :q OR LOWER(cp.credit_plan_name) LIKE :q)")
+            else:
+                conditions.append(
+                    "(LOWER(u.email) LIKE :q OR CAST(p.payment_id AS varchar) LIKE :q OR CAST(p.user_id AS varchar) LIKE :q OR LOWER(p.order_name) LIKE :q)"
+                )
+
+        where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+        total_query = f"""
+            SELECT COUNT(*)
+            FROM payments p
+            LEFT JOIN users u ON u.user_id = p.user_id
+            LEFT JOIN plans pl ON pl.plan_id = p.plan_id
+            LEFT JOIN credit_plans cp ON cp.credit_plan_id = p.credit_plan_id
+            {where_clause}
+        """
+        total = db.execute(text(total_query), params).scalar() or 0
+
+        offset = (page - 1) * limit
+        list_query = f"""
+            SELECT
+                p.payment_id,
+                p.paid_at,
+                p.requested_at,
+                p.created_at,
+                p.user_id,
+                u.email AS user_email,
+                p.product_type,
+                COALESCE(p.order_name, pl.plan_name, cp.credit_plan_name) AS product_name,
+                p.amount,
+                p.status,
+                p.payment_method,
+                p.pg_provider
+            FROM payments p
+            LEFT JOIN users u ON u.user_id = p.user_id
+            LEFT JOIN plans pl ON pl.plan_id = p.plan_id
+            LEFT JOIN credit_plans cp ON cp.credit_plan_id = p.credit_plan_id
+            {where_clause}
+            ORDER BY p.created_at DESC, p.payment_id DESC
+            LIMIT :limit OFFSET :offset
+        """
+        rows = db.execute(text(list_query), {**params, "limit": limit, "offset": offset}).fetchall()
+
+        summary_query = """
+            SELECT
+                COALESCE(SUM(amount) FILTER (WHERE status = 'success' AND created_at >= CURRENT_DATE), 0) AS today_amount,
+                COUNT(*) FILTER (WHERE status = 'success') AS success_count,
+                COUNT(*) FILTER (WHERE status IN ('refunded', 'canceled')) AS refund_count,
+                COUNT(*) FILTER (WHERE product_type = 'credit' AND status = 'success') AS credit_count
+            FROM payments
+        """
+        sum_row = db.execute(text(summary_query)).fetchone()
+        sm = sum_row._mapping if sum_row else {}
+
+        summary = {
+            "today_amount": int(sm.get("today_amount") or 0),
+            "success_count": int(sm.get("success_count") or 0),
+            "refund_count": int(sm.get("refund_count") or 0),
+            "credit_count": int(sm.get("credit_count") or 0),
+        }
+
+        data = []
+        for row in rows:
+            m = row._mapping
+            data.append({
+                "payment_id": str(m["payment_id"]),
+                "paid_at": m["paid_at"].isoformat() if m["paid_at"] else (m["created_at"].isoformat() if m["created_at"] else ""),
+                "requested_at": m["requested_at"].isoformat() if m["requested_at"] else "",
+                "user_id": str(m["user_id"]),
+                "user_email": m["user_email"] or "",
+                "product_type": m["product_type"],
+                "product_name": m["product_name"] or "",
+                "amount": m["amount"],
+                "status": m["status"],
+                "payment_method": m["payment_method"] or "",
+                "pg_provider": m["pg_provider"] or "",
+            })
+
+        return {
+            "data": data,
+            "summary": summary,
+            "total": total,
+            "page": page,
+            "limit": limit,
+        }
+    finally:
+        db.close()
+
+
+def get_payment_detail(payment_id: str):
+    db = SessionLocal()
+    try:
+        query = """
+            SELECT
+                p.payment_id,
+                p.paid_at,
+                p.requested_at,
+                p.approved_at,
+                p.refunded_at,
+                p.created_at,
+                p.user_id,
+                u.email AS user_email,
+                p.product_type,
+                COALESCE(p.order_name, pl.plan_name, cp.credit_plan_name) AS product_name,
+                p.amount,
+                p.balance_amount,
+                p.status,
+                p.payment_method,
+                p.pg_provider,
+                p.subscription_id,
+                (SELECT cl.ledger_id FROM credit_ledger cl WHERE cl.source_id = p.payment_id LIMIT 1) AS credit_ledger_id,
+                (SELECT cl.amount FROM credit_ledger cl WHERE cl.source_id = p.payment_id LIMIT 1) AS credit_amount
+            FROM payments p
+            LEFT JOIN users u ON u.user_id = p.user_id
+            LEFT JOIN plans pl ON pl.plan_id = p.plan_id
+            LEFT JOIN credit_plans cp ON cp.credit_plan_id = p.credit_plan_id
+            WHERE p.payment_id = CAST(:payment_id AS uuid)
+        """
+        row = db.execute(text(query), {"payment_id": payment_id}).fetchone()
+        if not row:
+            raise ValueError("결제 내역을 찾을 수 없습니다.")
+
+        m = row._mapping
+        return {
+            "payment_id": str(m["payment_id"]),
+            "paid_at": m["paid_at"].isoformat() if m["paid_at"] else (m["created_at"].isoformat() if m["created_at"] else ""),
+            "requested_at": m["requested_at"].isoformat() if m["requested_at"] else "",
+            "approved_at": m["approved_at"].isoformat() if m["approved_at"] else "",
+            "refunded_at": m["refunded_at"].isoformat() if m["refunded_at"] else None,
+            "user_id": str(m["user_id"]),
+            "user_email": m["user_email"] or "",
+            "product_type": m["product_type"],
+            "product_name": m["product_name"] or "",
+            "amount": m["amount"],
+            "balance_amount": m["balance_amount"] if m["balance_amount"] is not None else m["amount"],
+            "status": m["status"],
+            "payment_method": m["payment_method"] or "",
+            "pg_provider": m["pg_provider"] or "",
+            "subscription_id": str(m["subscription_id"]) if m["subscription_id"] else None,
+            "credit_ledger_id": str(m["credit_ledger_id"]) if m["credit_ledger_id"] else None,
+            "credit_amount": m["credit_amount"] or 0,
+            "admin_note": "정상 결제 건입니다.",
+        }
+    finally:
+        db.close()
+
+
+def refund_payment(payment_id: str, admin_user_id: str = None):
+    db = SessionLocal()
+    try:
+        query = """
+            SELECT payment_id, status, amount, balance_amount
+            FROM payments
+            WHERE payment_id = CAST(:payment_id AS uuid)
+        """
+        row = db.execute(text(query), {"payment_id": payment_id}).fetchone()
+        if not row:
+            raise ValueError("결제 내역을 찾을 수 없습니다.")
+
+        m = row._mapping
+        current_status = str(m["status"]).lower()
+        if current_status in ("refunded", "canceled"):
+            raise ValueError("이미 환불/취소 처리된 결제입니다.")
+
+        db.execute(
+            text("""
+                UPDATE payments
+                SET status = 'refunded',
+                    refunded_at = NOW(),
+                    balance_amount = 0,
+                    updated_at = NOW()
+                WHERE payment_id = CAST(:payment_id AS uuid)
+            """),
+            {"payment_id": payment_id}
+        )
+
+        detail = {
+            "payment_id": payment_id,
+            "amount": m["amount"],
+            "action": "refund_payment"
+        }
+        db.execute(
+            text("""
+                INSERT INTO audit_logs (
+                    actor_user_id,
+                    actor_type,
+                    action,
+                    target_type,
+                    detail,
+                    created_at
+                )
+                VALUES (
+                    :actor_user_id,
+                    'admin',
+                    'refund_payment',
+                    'payment',
+                    CAST(:detail AS jsonb),
+                    NOW()
+                )
+            """),
+            {
+                "actor_user_id": admin_user_id,
+                "detail": json.dumps(detail, ensure_ascii=False)
+            }
+        )
+
+        db.commit()
+        return {"payment_id": payment_id, "status": "refunded"}
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+

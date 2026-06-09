@@ -9,6 +9,8 @@ PRICING_PAGE = Path("frontend/src/pages/garim/Pricing.jsx")
 PRICING_HOOK = Path("frontend/src/hooks/usePricingPlans.js")
 HEADER_COMPONENT = Path("frontend/src/components/garim/GarimHeader.jsx")
 ADMIN_POLICY_PAGE = Path("frontend/src/pages/garim/AdminPolicy.jsx")
+ADMIN_PAYMENT_CHECK_PAGE = Path("frontend/src/pages/garim/AdminPaymentCheck.jsx")
+ADMIN_PAYMENT_CHECK_CSS = Path("frontend/src/css/garim-pages/AdminPaymentCheck.css")
 ADMIN_SERVICE = Path("backend/services/admin.py")
 
 
@@ -158,6 +160,128 @@ def test_admin_policy_plan_management_layout():
     assert "/admin/credit-plans" in api
     assert 'query.set("page", params.page)' in api
     assert 'query.set("limit", params.limit)' in api
+
+
+def test_admin_payment_check_step2_layout():
+    source = ADMIN_PAYMENT_CHECK_PAGE.read_text(encoding="utf-8")
+    css = ADMIN_PAYMENT_CHECK_CSS.read_text(encoding="utf-8")
+
+    assert "사용자 결제 확인" in source
+    assert "사용자 결제 내역, 구독 상태, 크레딧 충전 이력을 검색하고 확인합니다." in source
+    assert "결제 내역" in source
+    assert "환불/취소" in source
+    assert "오늘 결제 금액" in source
+    assert "승인 완료" in source
+    assert "크레딧 충전" in source
+    assert "주문 식별자" in source
+    assert "<span>관리</span>" in source
+    assert "pm-card-head" in source
+    assert "pm-metric-row" in source
+    assert "pm-data-table" in source
+    assert "pm-btn-detail" in source
+    assert "영수증" not in source
+    assert "receipt_url" not in source
+    assert "pg_transaction_id" not in source
+    assert "last_transaction_key" not in source
+    assert "paymentKey" not in source
+    assert "transactionKey" not in source
+    assert ".pm-content--wide" in css
+    assert ".pm-card-head" in css
+    assert ".pm-data-row" in css
+
+
+def test_admin_payment_check_initial_load_uses_default_date_range():
+    source = ADMIN_PAYMENT_CHECK_PAGE.read_text(encoding="utf-8")
+
+    assert "getRecent7DayRange" in source
+    assert 'useState(() => getRecent7DayRange().from)' in source
+    assert 'useState(() => getRecent7DayRange().to)' in source
+    assert "queryVersion" in source
+    assert "setQueryVersion((v) => v + 1)" in source
+    assert "[activeTab, currentPage, pageLimit, queryVersion, dateFrom, dateTo]" in source
+    assert "if (!dateFrom || !dateTo) return;" in source
+
+
+def test_admin_payment_check_detail_refund_availability():
+    source = ADMIN_PAYMENT_CHECK_PAGE.read_text(encoding="utf-8")
+
+    assert "getRefundAvailability" in source
+    assert 'detail.status === "success"' in source
+    assert "Number(detail.balance_amount || 0) > 0" in source
+    assert "환불 가능 여부" in source
+    assert "refundAvailability.label" in source
+    assert "refundAvailability.canRefund" in source
+    assert "환불 가능" in source
+    assert "환불 불가" in source
+    assert "이미 환불됨" in source
+
+
+def test_admin_payment_check_refund_confirmation_modal():
+    source = ADMIN_PAYMENT_CHECK_PAGE.read_text(encoding="utf-8")
+    css = ADMIN_PAYMENT_CHECK_CSS.read_text(encoding="utf-8")
+
+    assert "window.confirm" not in source
+    assert "refundConfirmOpen" in source
+    assert "setRefundConfirmOpen(true)" in source
+    assert "setRefundConfirmOpen(false)" in source
+    assert "handleRequestRefund" in source
+    assert "handleConfirmRefund" in source
+    assert "환불 처리 확인" in source
+    assert "환불 대상 금액" in source
+    assert "취소" in source
+    assert "pm-refund-confirm" in source
+    assert ".pm-refund-confirm" in css
+
+
+def test_admin_payment_check_frontend_behavior_contract():
+    source = ADMIN_PAYMENT_CHECK_PAGE.read_text(encoding="utf-8")
+    api = API_FILE.read_text(encoding="utf-8")
+
+    assert "getAdminPayments({" in source
+    assert "getAdminPaymentDetail(payment.payment_id)" in source
+    assert "refundAdminPayment(detailData.payment_id)" in source
+    assert "const handleSearch" in source
+    assert "const handleReset" in source
+    assert "setCurrentPage(1)" in source
+    assert "limit: pageLimit" in source
+    assert "product_type: productType" in source
+    assert "status: activeTab === \"refund\" ? \"refunded\" : statusFilter" in source
+    assert "q: searchValue" in source
+    assert "search_key: searchKey" in source
+    assert "date_from: dateFrom || undefined" in source
+    assert "date_to: dateTo || undefined" in source
+    assert "detailModalOpen" in source
+    assert "setDetailModalOpen(true)" in source
+    assert "setDetailModalOpen(false)" in source
+    assert "maskPaymentId(payment.payment_id)" in source
+    assert "maskPaymentId(detailData.payment_id)" in source
+    assert "refundConfirmOpen" in source
+    assert "query.set(\"product_type\", params.product_type)" in api
+    assert "query.set(\"status\", params.status)" in api
+    assert "query.set(\"q\", params.q)" in api
+    assert "query.set(\"search_key\", params.search_key)" in api
+    assert "query.set(\"date_from\", params.date_from)" in api
+    assert "query.set(\"date_to\", params.date_to)" in api
+    for forbidden in [
+        "receipt_url",
+        "pg_transaction_id",
+        "last_transaction_key",
+        "paymentKey",
+        "transactionKey",
+    ]:
+        assert forbidden not in source
+
+
+def test_pricing_highlights_current_subscription_plan():
+    source = PRICING_PAGE.read_text(encoding="utf-8")
+
+    assert "getMyPaymentInfo" in source
+    assert "currentPlanCode" in source
+    assert "setCurrentPlanCode" in source
+    assert "paymentInfo.plan_code" in source
+    assert "plan.key === currentPlanCode" in source
+    assert "현재 플랜" in source
+    assert "price-card--current" in source
 
 
 def test_admin_policy_subscription_plan_form_fields():

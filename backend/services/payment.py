@@ -625,8 +625,10 @@ def get_my_payment_info(db: Session, user_id: str):
     ).fetchone()
 
     plan_code = "free"
+    plan_name = "Free"
     if plan_row:
         plan_code = plan_row._mapping["plan_code"].lower()
+        plan_name = plan_row._mapping["plan_name"]
 
     # 2. 유저의 가장 최근 성공 결제 내역 조회 (영수증 모달용)
     payment_row = db.execute(
@@ -660,5 +662,7 @@ def get_my_payment_info(db: Session, user_id: str):
 
     return {
         "is_premium": plan_code != "free",
+        "plan_code": plan_code,
+        "plan_name": plan_name,
         "payment_info": payment_info
     }

@@ -280,3 +280,30 @@ async function requestJson(path, options = {}, isRetry = false) {
 
   return body;
 }
+
+export async function getAdminPayments(params = {}) {
+  const query = new URLSearchParams();
+  if (params.page) query.set("page", params.page);
+  if (params.limit) query.set("limit", params.limit);
+  if (params.product_type) query.set("product_type", params.product_type);
+  if (params.status) query.set("status", params.status);
+  if (params.q) query.set("q", params.q);
+  if (params.search_key) query.set("search_key", params.search_key);
+  if (params.date_from) query.set("date_from", params.date_from);
+  if (params.date_to) query.set("date_to", params.date_to);
+  const qs = query.toString();
+  return requestJson(`/admin/payments${qs ? "?" + qs : ""}`);
+}
+
+export async function getAdminPaymentDetail(paymentId) {
+  return requestJson(`/admin/payments/${paymentId}`);
+}
+
+export async function refundAdminPayment(paymentId) {
+  return requestJson(`/admin/payments/${paymentId}/refund`, {
+    method: "POST",
+  });
+}
+
+
+

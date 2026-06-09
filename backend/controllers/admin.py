@@ -176,3 +176,76 @@ def delete_credit_plan(credit_plan_id: str):
         )
     except Exception as e:
         return _json_error(e)
+
+
+def list_payments(
+    product_type: str = Query(None),
+    status: str = Query(None),
+    q: str = Query(None),
+    search_key: str = Query("email"),
+    date_from: str = Query(None),
+    date_to: str = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+):
+    try:
+        result = admin_service.get_payments_list(
+            product_type=product_type,
+            status=status,
+            q=q,
+            search_key=search_key,
+            date_from=date_from,
+            date_to=date_to,
+            page=page,
+            limit=limit,
+        )
+        return JSONResponse(
+            {
+                "data": result["data"],
+                "summary": result["summary"],
+                "total": result["total"],
+                "page": result["page"],
+                "limit": result["limit"],
+                "message": "Payments list loaded successfully.",
+            },
+            status_code=200,
+        )
+    except Exception as e:
+        return _json_error(e)
+
+
+def get_payment_detail(payment_id: str):
+    try:
+        data = admin_service.get_payment_detail(payment_id)
+        return JSONResponse(
+            {"data": data, "message": "Payment detail loaded successfully."},
+            status_code=200,
+        )
+    except ValueError as ve:
+        return JSONResponse({"message": str(ve)}, status_code=404)
+    except Exception as e:
+        return _json_error(e)
+
+
+def refund_payment(payment_id: str, access_token: str | None = Cookie(default=None)):
+    try:
+        user_id = None
+        if access_token:
+            try:
+                current_user = auth_service.authenticate_access_token(access_token)
+                user_id = current_user.get("id")
+            except Exception:
+                pass
+
+        data = admin_service.refund_payment(payment_id, user_id)
+        return JSONResponse(
+            {"data": data, "message": "Payment refunded successfully."},
+            status_code=200,
+        )
+    except ValueError as ve:
+        return JSONResponse({"message": str(ve)}, status_code=400)
+    except Exception as e:
+        return _json_error(e)
+
+
+

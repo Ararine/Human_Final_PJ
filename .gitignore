@@ -26,5 +26,8 @@ superpowers
 Microsoft
 .tmp_*
 
+# LLM 공통 설정
+GEMINI.md
+
 # Backend 이미지/영상 업로드 폴더
 storage/

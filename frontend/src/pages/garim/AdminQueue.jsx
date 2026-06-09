@@ -52,6 +52,12 @@ export default function AdminQueue() {
             </span>
             정책 및 상품 관리
           </a>
+          <a href="/admin/payments">
+            <span className="material-icons">
+              payments
+            </span>
+            사용자 결제 확인
+          </a>
         </aside>
         <main className="adm-main">
           <div className="adm-head">

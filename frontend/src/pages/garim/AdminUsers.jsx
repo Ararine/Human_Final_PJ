@@ -96,11 +96,17 @@ export default function AdminUsers() {
             <span className="material-icons">tune</span>
             정책 및 상품 관리
           </a>
+          <a href="/admin/payments">
+            <span className="material-icons">payments</span>
+            사용자 결제 확인
+          </a>
         </aside>
         <main className="adm-main">
           <div className="adm-head">
-            <h1>사용자 관리</h1>
-            <span className="meta">전체 가입 회원 · 역할·상태 편집</span>
+            <div>
+              <h1>사용자 관리</h1>
+              <p>전체 가입 회원 목록을 조회하고 역할 및 관리 상태를 편집합니다.</p>
+            </div>
           </div>
 
           <div className="metric-row">
@@ -125,120 +131,141 @@ export default function AdminUsers() {
             </div>
           </div>
 
-          <div className="usr-toolbar">
-            <input
-              className="usr-search"
-              type="search"
-              placeholder="이메일·UID 검색…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <select
-              className="usr-filter-sel"
-              value={roleFilter}
-              onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
-            >
-              <option value="">전체 역할</option>
-              <option value="user">user</option>
-              <option value="admin">admin</option>
-            </select>
-            <select
-              className="usr-filter-sel"
-              value={statFilter}
-              onChange={(e) => { setStatFilter(e.target.value); setPage(1); }}
-            >
-              <option value="">전체 상태</option>
-              <option value="active">active</option>
-              <option value="suspended">suspended</option>
-              <option value="deleted">deleted</option>
-            </select>
-          </div>
-          <div className="usr-limit-row">
-            <select
-              className="usr-limit-sel"
-              value={pageLimit}
-              onChange={(e) => { setPageLimit(Number(e.target.value)); setPage(1); }}
-            >
-              <option value={5}>5</option>
-              <option value={10}>10</option>
-              <option value={20}>20</option>
-              <option value={50}>50</option>
-              <option value={100}>100</option>
-            </select>
-            <span className="usr-limit-label">개씩 보기</span>
-          </div>
-
           <div className="adm-card">
-            <div className="usr-row tbl-head">
-              <span>UID</span>
-              <span>이메일</span>
-              <span>제공자</span>
-              <span>역할</span>
-              <span>상태</span>
-              <span>가입일</span>
-              <span>작업</span>
+            <div className="usr-card-head">
+              <div>
+                <h2>사용자 목록</h2>
+                <p>가입 회원 목록을 이메일, UID, 역할, 상태 필터 기준으로 조회합니다.</p>
+              </div>
+
+              <div className="usr-card-controls">
+                <div className="usr-card-title-tools">
+                  <select
+                    className="usr-limit-sel"
+                    value={pageLimit}
+                    onChange={(e) => { setPageLimit(Number(e.target.value)); setPage(1); }}
+                    aria-label="페이지당 사용자 개수"
+                  >
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                  <span className="usr-limit-label">개씩 보기</span>
+                </div>
+
+                <div className="usr-toolbar">
+                  <select
+                    className="usr-filter-sel"
+                    value={roleFilter}
+                    onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
+                    aria-label="역할 필터"
+                  >
+                    <option value="">전체 역할</option>
+                    <option value="user">user</option>
+                    <option value="admin">admin</option>
+                  </select>
+                  <select
+                    className="usr-filter-sel"
+                    value={statFilter}
+                    onChange={(e) => { setStatFilter(e.target.value); setPage(1); }}
+                    aria-label="상태 필터"
+                  >
+                    <option value="">전체 상태</option>
+                    <option value="active">active</option>
+                    <option value="suspended">suspended</option>
+                    <option value="deleted">deleted</option>
+                  </select>
+                  <div className="usr-search-wrap">
+                    <input
+                      className="usr-search"
+                      type="search"
+                      placeholder="이메일·UID 검색…"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      aria-label="사용자 검색"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {loading && (
-              <div style={{ padding: "32px 16px", textAlign: "center", color: "var(--fg-2)", font: "400 13px var(--font-sans)" }}>
-                불러오는 중…
+            <div className="usr-data-table">
+              <div className="usr-row tbl-head">
+                <span>UID</span>
+                <span>이메일</span>
+                <span>제공자</span>
+                <span>역할</span>
+                <span>상태</span>
+                <span>가입일</span>
+                <span>작업</span>
               </div>
-            )}
-            {!loading && error && (
-              <div style={{ padding: "32px 16px", textAlign: "center", color: "#d32f2f", font: "400 13px var(--font-sans)" }}>
-                {error}
-              </div>
-            )}
-            {!loading && !error && filteredUsers.length === 0 && (
-              <div style={{ padding: "32px 16px", textAlign: "center", color: "var(--fg-3)", font: "400 13px var(--font-sans)" }}>
-                등록된 사용자가 없습니다.
-              </div>
-            )}
-            {!loading && !error && filteredUsers.map((u) => (
-              <div className="usr-row" key={u.user_id}>
-                <span className="mono">{u.user_id}</span>
-                <span>{u.email}</span>
-                <span>
-                  <span className="mui-chip">{u.provider || "—"}</span>
-                </span>
-                <span>
-                  <span className={`mui-chip ${u.role === "admin" ? "mui-chip--soft-primary" : ""}`}>
-                    {u.role}
-                  </span>
-                </span>
-                <span>
-                  <span className={`mui-chip ${STATUS_CHIP[u.status] || ""}`}>
-                    {u.status}
-                  </span>
-                </span>
-                <span className="mono">{u.created_at}</span>
-                <span className="usr-actions">
-                  <button className="mui-btn mui-btn--outlined mui-btn--sm">편집</button>
-                </span>
-              </div>
-            ))}
-          </div>
 
-          <div className="usr-pagination">
-            <span className="meta">
-              {total === 0 ? "0건" : `${(page - 1) * pageLimit + 1}–${Math.min(page * pageLimit, total)} / ${total.toLocaleString()}`}
-            </span>
-            <div style={{ display: "flex", gap: "4px" }}>
-              <button
-                className="mui-btn mui-btn--outlined mui-btn--sm"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                이전
-              </button>
-              <button
-                className="mui-btn mui-btn--outlined mui-btn--sm"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                다음
-              </button>
+              {loading && (
+                <div style={{ padding: "32px 16px", textAlign: "center", color: "var(--fg-2)", font: "400 13px var(--font-sans)" }}>
+                  불러오는 중…
+                </div>
+              )}
+              {!loading && error && (
+                <div style={{ padding: "32px 16px", textAlign: "center", color: "#d32f2f", font: "400 13px var(--font-sans)" }}>
+                  {error}
+                </div>
+              )}
+              {!loading && !error && filteredUsers.length === 0 && (
+                <div style={{ padding: "32px 16px", textAlign: "center", color: "var(--fg-3)", font: "400 13px var(--font-sans)" }}>
+                  등록된 사용자가 없습니다.
+                </div>
+              )}
+              {!loading && !error && filteredUsers.map((u) => (
+                <div className="usr-row" key={u.user_id}>
+                  <span className="mono">{u.user_id}</span>
+                  <span>{u.email}</span>
+                  <span>
+                    <span className="mui-chip">{u.provider || "—"}</span>
+                  </span>
+                  <span>
+                    <span className={`mui-chip ${u.role === "admin" ? "mui-chip--soft-primary" : ""}`}>
+                      {u.role}
+                    </span>
+                  </span>
+                  <span>
+                    <span className={`mui-chip ${STATUS_CHIP[u.status] || ""}`}>
+                      {u.status}
+                    </span>
+                  </span>
+                  <span className="mono">{u.created_at}</span>
+                  <span className="usr-actions">
+                    <button className="mui-btn mui-btn--outlined mui-btn--sm">편집</button>
+                  </span>
+                </div>
+              ))}
             </div>
+
+            {/* [5번 박스] 페이지 변경 통합 Footer */}
+            <div className="usr-pagination">
+              <span className="meta">
+                {total === 0 ? "0건" : `${(page - 1) * pageLimit + 1}–${Math.min(page * pageLimit, total)} / ${total.toLocaleString()}`}
+              </span>
+
+              <div className="usr-pagination-actions">
+                <button
+                  className="mui-btn mui-btn--outlined mui-btn--sm"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  이전
+                </button>
+                <button
+                  className="mui-btn mui-btn--outlined mui-btn--sm"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  다음
+                </button>
+              </div>
+            </div>
+
           </div>
         </main>
       </div>

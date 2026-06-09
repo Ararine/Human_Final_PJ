@@ -15,3 +15,9 @@ router.add_api_route("/credit-plans", admin.list_credit_plans, methods=["GET"])
 router.add_api_route("/credit-plans", admin.create_credit_plan, methods=["POST"])
 router.add_api_route("/credit-plans/{credit_plan_id}", admin.update_credit_plan, methods=["PUT"])
 router.add_api_route("/credit-plans/{credit_plan_id}", admin.delete_credit_plan, methods=["DELETE"])
+router.add_api_route("/payments", admin.list_payments, methods=["GET"])
+router.add_api_route("/payments/{payment_id}", admin.get_payment_detail, methods=["GET"])
+router.add_api_route("/payments/{payment_id}/refund", admin.refund_payment, methods=["POST"])
+
+
+

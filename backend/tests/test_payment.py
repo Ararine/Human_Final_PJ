@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import main
 from services import auth, payment as payment_service
+from utils.database import get_db
 
 client = TestClient(main.app)
 
@@ -519,6 +520,43 @@ def test_get_my_credit_balance_returns_balance(monkeypatch):
     assert response.json()["balance"] == 150
 
 
+def test_get_my_payment_info_route_returns_plan_code(monkeypatch):
+    fake_user = {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "email": "user@example.com",
+        "name": "Garim User",
+        "role": "USER",
+        "status": "active",
+        "session_id": "fake_session",
+    }
+    monkeypatch.setattr(auth, "authenticate_access_token", lambda token: fake_user)
+
+    plan_row = MagicMock()
+    plan_row._mapping = {
+        "plan_name": "Pro",
+        "plan_code": "pro",
+        "created_at": None,
+    }
+    db_mock = MagicMock()
+    db_mock.execute.side_effect = [
+        MagicMock(fetchone=MagicMock(return_value=plan_row)),
+        MagicMock(fetchall=MagicMock(return_value=[])),
+    ]
+    main.app.dependency_overrides[get_db] = lambda: db_mock
+
+    try:
+        response = client.get(
+            "/payment/me",
+            cookies={"access_token": "fake_token"},
+        )
+    finally:
+        main.app.dependency_overrides.pop(get_db, None)
+
+    assert response.status_code == 200
+    assert response.json()["plan_code"] == "pro"
+    assert response.json()["plan_name"] == "Pro"
+
+
 def test_service_get_my_credit_balance_no_row():
     db_mock = MagicMock()
     db_mock.execute.return_value.fetchone.return_value = None
@@ -537,6 +575,22 @@ def test_service_get_my_credit_balance_existing():
     result = payment_service.get_my_credit_balance(db=db_mock, user_id="user-uuid-existing")
 
     assert result == {"balance": 300}
+
+
+def test_service_get_my_payment_info_returns_current_plan_code():
+    db_mock = MagicMock()
+    plan_row = MagicMock()
+    plan_row._mapping = {"plan_name": "Pro", "plan_code": "pro"}
+    db_mock.execute.side_effect = [
+        MagicMock(fetchone=MagicMock(return_value=plan_row)),
+        MagicMock(fetchone=MagicMock(return_value=None)),
+    ]
+
+    result = payment_service.get_my_payment_info(db=db_mock, user_id="user-uuid-pro")
+
+    assert result["plan_code"] == "pro"
+    assert result["plan_name"] == "Pro"
+    assert result["is_premium"] is True
 
 
 def test_spend_user_credits_insufficient_balance():
