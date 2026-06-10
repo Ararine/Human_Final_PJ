@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom"; // 이전 화면 이동을 위한 useNavigate 임포트
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import {
   cancelScheduledPlanChange,
@@ -27,8 +28,31 @@ function formatPrice(value) {
   return new Intl.NumberFormat("ko-KR").format(Number(value || 0));
 }
 
+// 결제 상태(billing_status)값을 한국어로 변환해주는 유틸리티 함수
+function formatBillingStatus(status) {
+  if (!status) return "-";
+  const statusMap = {
+    paid: "결제 완료",
+    pending: "결제 대기",
+    failed: "결제 실패",
+    unpaid: "미결제",
+    cancelled: "취소됨",
+  };
+  return statusMap[status.toLowerCase()] || status;
+}
+
 export default function Billing() {
   useDocumentTitle("결제·구독 관리 · Garim");
+  const navigate = useNavigate(); // useNavigate 훅 초기화
+
+  // 이전 화면 이동 핸들러 (히스토리 없으면 설정 화면으로 fallback)
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate("/settings");
+    }
+  };
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -115,14 +139,29 @@ export default function Billing() {
             <h1>결제·구독 관리</h1>
             <p>현재 플랜, 다음 결제일, 예약된 변경 상태를 한 화면에서 확인합니다.</p>
           </div>
-          <button
-            type="button"
-            className="mui-btn mui-btn--outlined"
-            onClick={loadBillingInfo}
-            disabled={loading}
-          >
-            새로고침
-          </button>
+          {/* 헤더 버튼 영역: 이전 버튼 및 새로고침 버튼을 가로로 정렬 */}
+          <div className="billing-header-actions" style={{ display: "flex", gap: "8px" }}>
+            <button
+              type="button"
+              className="mui-btn mui-btn--outlined"
+              onClick={handleGoBack}
+              aria-label="이전 페이지로 이동"
+              style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
+            >
+              <span className="material-icons" style={{ fontSize: "18px" }}>arrow_back</span>
+              이전
+            </button>
+            <button
+              type="button"
+              className="mui-btn mui-btn--outlined"
+              onClick={loadBillingInfo}
+              disabled={loading}
+              style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
+            >
+              <span className="material-icons" style={{ fontSize: "18px" }}>refresh</span>
+              새로고침
+            </button>
+          </div>
         </div>
 
         {error ? <div className="billing-banner billing-banner--error">{error}</div> : null}
@@ -234,20 +273,20 @@ export default function Billing() {
               </div>
               <dl className="billing-definition">
                 <div>
-                  <dt>current_period_start</dt>
+                  <dt>구독 시작일</dt>
                   <dd>{formatDateTime(currentSubscription?.current_period_start)}</dd>
                 </div>
                 <div>
-                  <dt>current_period_end</dt>
+                  <dt>구독 만료일</dt>
                   <dd>{formatDateTime(currentSubscription?.current_period_end)}</dd>
                 </div>
                 <div>
-                  <dt>next_billing_at</dt>
+                  <dt>다음 결제 예정일</dt>
                   <dd>{formatDateTime(currentSubscription?.next_billing_at)}</dd>
                 </div>
                 <div>
-                  <dt>billing_status</dt>
-                  <dd>{currentSubscription?.billing_status || "-"}</dd>
+                  <dt>결제 상태</dt>
+                  <dd>{formatBillingStatus(currentSubscription?.billing_status)}</dd>
                 </div>
               </dl>
             </section>
@@ -278,6 +317,20 @@ export default function Billing() {
                 <div className="billing-surface--empty">표시할 결제 이력이 없습니다.</div>
               )}
             </section>
+
+            {/* 하단 이전 페이지 이동 버튼 영역 */}
+            <div className="billing-bottom-actions" style={{ marginTop: "24px", display: "flex", justifyContent: "flex-start" }}>
+              <button
+                type="button"
+                className="mui-btn mui-btn--outlined"
+                onClick={handleGoBack}
+                aria-label="이전 페이지로 이동"
+                style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
+              >
+                <span className="material-icons" style={{ fontSize: "18px" }}>arrow_back</span>
+                이전 페이지로
+              </button>
+            </div>
           </>
         )}
       </div>

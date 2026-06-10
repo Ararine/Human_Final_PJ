@@ -4,6 +4,13 @@ import "../../css/garim-pages/AdminPaymentCheck.css";
 import GarimPage from "../../components/garim/GarimPage";
 import { getAdminPayments, getAdminPaymentDetail, refundAdminPayment } from "../../utils/api";
 
+// 결제일시를 초 단위까지만 깔끔하게 포맷팅하는 한국어 주석 헬퍼 함수
+function formatDateTimeSeconds(value) {
+  if (!value) return "-";
+  // T를 공백으로 치환하고 밀리초(.)가 존재한다면 그 앞부분만 취합니다.
+  return value.replace("T", " ").split(".")[0];
+}
+
 function formatDateParam(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -414,7 +421,6 @@ export default function AdminPaymentCheck() {
                 <div className="pm-data-row pm-data-head">
                   <span>결제일</span>
                   <span>사용자</span>
-                  <span>주문 식별자</span>
                   <span>상품</span>
                   <span>금액</span>
                   <span>상태</span>
@@ -436,12 +442,10 @@ export default function AdminPaymentCheck() {
 
                 {!isLoading && !error && payments.map((payment) => (
                   <div className="pm-data-row" key={payment.payment_id}>
-                    <span className="pm-date-cell">{payment.paid_at.replace("T", " ")}</span>
+                    <span className="pm-date-cell">{formatDateTimeSeconds(payment.paid_at)}</span>
                     <span className="pm-user-cell">
                       <strong>{payment.user_email || "—"}</strong>
-                      <small>{payment.user_id}</small>
                     </span>
-                    <span className="pm-uuid-cell mono">{maskPaymentId(payment.payment_id)}</span>
                     <span className="pm-product-cell">
                       <span className={`pm-prod-badge ${payment.product_type}`}>
                         {payment.product_type === "subscription" ? "구독" : "크레딧"}
@@ -540,7 +544,7 @@ export default function AdminPaymentCheck() {
                       {getStatusLabel(detailData.status)}
                     </span>
                     <span>
-                      {(detailData.approved_at || detailData.paid_at || detailData.created_at || "").replace("T", " ")}
+                      {formatDateTimeSeconds(detailData.approved_at || detailData.paid_at || detailData.created_at)}
                     </span>
                   </div>
 
@@ -555,7 +559,6 @@ export default function AdminPaymentCheck() {
                     <div>
                       <span className="pm-detail-lbl">사용자</span>
                       <strong className="pm-detail-val">{detailData.user_email || "—"}</strong>
-                      <small className="pm-detail-sub mono">{detailData.user_id || "—"}</small>
                     </div>
                     <div>
                       <span className="pm-detail-lbl">상품</span>
@@ -590,10 +593,6 @@ export default function AdminPaymentCheck() {
                     {detailData.product_type === "subscription" ? (
                       <div className="pm-detail-result-grid">
                         <div>
-                          <strong>구독 처리 완료</strong>
-                          <small className="mono">{detailData.subscription_id || "처리 완료"}</small>
-                        </div>
-                        <div>
                           <strong>크레딧 반영</strong>
                           <small>{detailData.credit_amount || 0} 크레딧</small>
                         </div>
@@ -603,10 +602,6 @@ export default function AdminPaymentCheck() {
                         <div>
                           <strong>크레딧 충전 완료</strong>
                           <small>{detailData.credit_amount || 0} 크레딧</small>
-                        </div>
-                        <div>
-                          <strong>원장 반영</strong>
-                          <small className="mono">{detailData.credit_ledger_id || "처리 완료"}</small>
                         </div>
                       </div>
                     )}

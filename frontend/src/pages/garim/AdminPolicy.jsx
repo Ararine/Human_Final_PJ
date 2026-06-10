@@ -25,6 +25,7 @@ const SUBSCRIPTION_DEFAULT = {
   watermark_required: false,
   price_amount: "0",
   sort_order: "0",
+  plan_rank: "0",
   status: "active",
   file_size_limit: "50",
   max_jobs: "3",
@@ -49,6 +50,7 @@ const SUBSCRIPTION_NUMBER_FIELDS = [
   "result_retention_days",
   "price_amount",
   "sort_order",
+  "plan_rank",
   "file_size_limit",
   "max_jobs",
   "auto_delete_original_hours",
@@ -283,8 +285,9 @@ export default function AdminPolicy() {
           selectedPlanId &&
           plans.find((p) => p.plan_id === selectedPlanId)?.status === "active";
 
-        if (!isCurrentlyActive && activeCount >= 4) {
-          alert("활성화된 구독 플랜 카드는 최대 4개까지만 등록할 수 있습니다.");
+        // 활성 플랜이 3개 이상인 상태에서 새로 활성화하거나 추가하려는 경우 차단합니다.
+        if (!isCurrentlyActive && activeCount >= 3) {
+          alert("활성화된 구독 플랜 카드는 최대 3개까지만 등록할 수 있습니다.");
           return;
         }
       }
@@ -882,6 +885,11 @@ function PlanFormPanel({ title, form, onChange, onSave, onReset, onClose }) {
           label="노출 순서"
           value={form.sort_order}
           onChange={(v) => onChange("sort_order", v)}
+        />
+        <NumberField
+          label="플랜 랭크"
+          value={form.plan_rank}
+          onChange={(v) => onChange("plan_rank", v)}
         />
         <SelectField
           label="관리 상태"

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom"; // useNavigate 임포트 추가
 
 import GarimPage from "../../components/garim/GarimPage";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
@@ -38,6 +38,22 @@ function storePaymentResult(orderId, data) {
 
 export default function PaymentSuccess() {
   useDocumentTitle("결제 성공 · Garim");
+  const navigate = useNavigate(); // useNavigate 훅 초기화
+
+  // 이전 페이지 이동 핸들러 (히스토리가 없으면 설정 페이지로 fallback)
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate("/settings");
+    }
+  };
+
+  // 결제 내역 확인(설정 페이지) 이동 핸들러
+  const handleGoSettings = () => {
+    navigate("/settings");
+  };
+
   const [searchParams] = useSearchParams();
   const didConfirmRef = useRef(false);
   const [status, setStatus] = useState("confirming");
@@ -128,6 +144,40 @@ export default function PaymentSuccess() {
               </div>
             </div>
           </div>
+
+          {/* 결제 확인창 아래 중앙 버튼 영역 (flexWrap: "wrap" 추가로 좁은 화면 줄바꿈 대응) */}
+          <div
+            className="payment-success-actions"
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: "12px",
+              marginTop: "24px",
+              flexWrap: "wrap",
+            }}
+          >
+            <button
+              type="button"
+              className="mui-btn mui-btn--outlined"
+              onClick={handleGoBack}
+              aria-label="이전 페이지로 이동"
+              style={{ minWidth: "120px" }}
+            >
+              이전 페이지로
+            </button>
+
+            <button
+              type="button"
+              className="mui-btn mui-btn--contained"
+              onClick={handleGoSettings}
+              aria-label="결제 내역 확인 페이지로 이동"
+              style={{ minWidth: "140px" }}
+            >
+              결제 내역 확인
+            </button>
+          </div>
+
         </div>
       </main>
     </GarimPage>

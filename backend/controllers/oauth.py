@@ -137,6 +137,21 @@ def update_user_status(user_id: int, payload: dict = Body(...)):
     return {"user": user}
 
 
+# 사용자의 역할(role)과 상태(status)를 함께 수정하고, 정지/탈퇴 처리 시 강제 세션 만료를 처리하는 컨트롤러 함수
+def update_user_role_and_status(user_id: str, payload: dict = Body(...)):
+    role_value = payload.get("role", "")
+    status_value = payload.get("status", "")
+    try:
+        user = users.update_user_role_and_status(user_id, role_value, status_value)
+    except (ValueError, users.UserStatusError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+    if user["status"] != users.ACTIVE:
+        redis_store.delete_user_sessions(user_id)
+    return {"user": user}
+
+
 def delete_session(session_id: str):
     redis_store.delete_session(session_id)
     return {"deleted": True}

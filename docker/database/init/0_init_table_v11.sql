@@ -1328,7 +1328,7 @@ INSERT INTO plans (
     auto_delete_original_hours, metadata_retention_days, credits
 )
 VALUES
-    ('enterprise', 'Enterprise', '엔터프라이즈', 'mui-chip--success', '대규모 팀과 비즈니스를 위한 고급 기능 플랜입니다.', NULL, 90, false, 49000, 40, 'active', 10240, 100, 24, 365, 2000),
+    ('enterprise', 'Enterprise', '엔터프라이즈', 'mui-chip--success', '대규모 팀과 비즈니스를 위한 고급 기능 플랜입니다.', NULL, 90, false, 49000, 40, 'inactive', 10240, 100, 24, 365, 2000),
     ('starter_light', 'Starter Light', '테스트', 'mui-chip--soft-info', '가벼운 테스트와 데모 환경 검증을 위한 비노출 플랜입니다.', 10, 3, true, 900, 50, 'inactive', 100, 3, 12, 90, 10),
     ('starter_plus', 'Starter Plus', '테스트', 'mui-chip--soft-info', '소규모 개인 테스트를 위한 예비 플랜입니다.', 20, 5, true, 1900, 60, 'inactive', 200, 5, 12, 90, 20),
     ('creator_basic', 'Creator Basic', '크리에이터', 'mui-chip--soft-primary', '개인 크리에이터의 정기 영상 분석을 위한 예비 플랜입니다.', 30, 7, false, 3900, 70, 'inactive', 300, 5, 12, 90, 35),

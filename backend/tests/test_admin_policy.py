@@ -618,9 +618,9 @@ def test_list_admin_credit_plans_invalid_status_returns_400(monkeypatch):
     assert "status must be one of active, inactive, deleted" in response.json()["message"]
 
 
-def test_service_create_subscription_plan_blocks_5th_active(monkeypatch):
+def test_service_create_subscription_plan_blocks_4th_active(monkeypatch):
     db_mock = MagicMock()
-    db_mock.execute.return_value.scalar.return_value = 4
+    db_mock.execute.return_value.scalar.return_value = 3
     monkeypatch.setattr(admin_service, "SessionLocal", lambda: db_mock)
 
     payload = {
@@ -631,13 +631,13 @@ def test_service_create_subscription_plan_blocks_5th_active(monkeypatch):
     }
 
     import pytest
-    with pytest.raises(ValueError, match="활성화된 구독 플랜 카드는 최대 4개까지만 등록할 수 있습니다."):
+    with pytest.raises(ValueError, match="활성화된 구독 플랜 카드는 최대 3개까지만 등록할 수 있습니다."):
         admin_service.create_subscription_plan(payload)
 
 
-def test_service_update_subscription_plan_blocks_5th_active(monkeypatch):
+def test_service_update_subscription_plan_blocks_4th_active(monkeypatch):
     db_mock = MagicMock()
-    db_mock.execute.return_value.scalar.return_value = 4
+    db_mock.execute.return_value.scalar.return_value = 3
     monkeypatch.setattr(admin_service, "SessionLocal", lambda: db_mock)
 
     payload = {
@@ -645,7 +645,7 @@ def test_service_update_subscription_plan_blocks_5th_active(monkeypatch):
     }
 
     import pytest
-    with pytest.raises(ValueError, match="활성화된 구독 플랜 카드는 최대 4개까지만 등록할 수 있습니다."):
+    with pytest.raises(ValueError, match="활성화된 구독 플랜 카드는 최대 3개까지만 등록할 수 있습니다."):
         admin_service.update_subscription_plan("550e8400-e29b-41d4-a716-446655440001", payload)
 
 

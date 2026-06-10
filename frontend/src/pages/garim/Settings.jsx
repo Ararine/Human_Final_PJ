@@ -281,7 +281,17 @@ export default function Settings() {
           </div>
 
           <div className="set-section" id="plan">
-            <h3>플랜</h3>
+            {/* 플랜 섹션 헤더: '자세히 보기' 버튼을 추가하여 billing 페이지로 이동할 수 있도록 설정 */}
+            <div className="set-section-head">
+              <h3>플랜</h3>
+              <button
+                className="mui-btn mui-btn--outlined mui-btn--sm"
+                type="button"
+                onClick={() => navigate("/billing")}
+              >
+                자세히 보기
+              </button>
+            </div>
             <p className="sub">
               현재 이용 중인 요금제와 결제 내역을 확인합니다.
             </p>

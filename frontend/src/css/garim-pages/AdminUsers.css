@@ -118,12 +118,21 @@ body { background: #fafafa; }
   width: 100%;
 }
 
-.usr-row { display: grid; grid-template-columns: 280px 1fr 140px 130px 150px 150px 80px; gap: 12px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--mui-divider); font: 400 13px var(--font-sans); }
+/* 사용자 테이블 행 레이아웃: 모든 컬럼에 fr 단위를 사용하여 가로 폭에 따라 여백이 고르게 분배되도록 함 */
+.usr-row { display: grid; grid-template-columns: 3fr 1.2fr 1.5fr 1.2fr 1.8fr 1fr; gap: 12px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--mui-divider); font: 400 13px var(--font-sans); }
 .usr-row:last-child { border-bottom: none; }
 .adm-shell .usr-row.tbl-head { display: grid; background: #fafafa; font: 500 11px var(--font-sans); text-transform: uppercase; letter-spacing: 0.5px; color: var(--fg-2); }
 .usr-row:not(.tbl-head):hover { background: rgba(0,0,0,0.02); }
 .usr-row .mono { font-family: var(--font-mono); font-size: 12px; color: var(--fg-2); }
-.usr-actions { display: flex; gap: 4px; }
+/* 제공자, 역할, 상태, 가입일 컬럼의 텍스트 및 요소를 중앙 정렬하여 시각적 균형을 맞춤 */
+.usr-row > *:nth-child(2),
+.usr-row > *:nth-child(3),
+.usr-row > *:nth-child(4),
+.usr-row > *:nth-child(5) {
+  text-align: center;
+}
+/* 작업(버튼) 컬럼 내 요소를 중앙에 정렬함 */
+.usr-actions { display: flex; gap: 4px; justify-content: center; }
 
 .usr-pagination {
   display: grid;
@@ -154,3 +163,149 @@ body { background: #fafafa; }
 .mui-chip--soft-success { background: rgba(46,125,50,0.1); color: #2e7d32; }
 .mui-chip--soft-warning { background: rgba(237,108,2,0.1); color: #e65100; }
 .mui-chip--soft-error { background: rgba(211,47,47,0.1); color: #c62828; }
+
+/* 사용자 편집 모달 팝업 스타일 */
+.usr-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.usr-modal {
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  background: #fff;
+  border: 1px solid var(--mui-border);
+  border-radius: 6px;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.18);
+}
+
+.usr-modal-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 22px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.usr-modal-head h2 {
+  margin: 0 0 4px;
+  color: #111827;
+  font: 800 16px var(--font-sans);
+}
+
+.usr-modal-head p {
+  margin: 0;
+  color: #64748b;
+  font: 400 12px/1.5 var(--font-sans);
+}
+
+.usr-modal-body {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.usr-modal-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.usr-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.usr-form-group label {
+  font: 600 11px var(--font-sans);
+  color: var(--fg-2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: left;
+}
+
+.usr-form-group input,
+.usr-form-group select {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--mui-border);
+  border-radius: 4px;
+  background: #f8fafc;
+  color: var(--fg-1);
+  font: 400 13px var(--font-sans);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.usr-form-group input:disabled {
+  background: #f1f5f9;
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+.usr-form-group select {
+  background: #fff;
+  cursor: pointer;
+}
+
+.usr-form-group select:focus {
+  border-color: #1976d2;
+}
+
+.usr-radio-group {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  height: 38px;
+}
+
+.usr-radio-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 400 13px var(--font-sans);
+  color: var(--fg-1);
+  cursor: pointer;
+}
+
+.usr-radio-label input {
+  margin: 0;
+  cursor: pointer;
+}
+
+.usr-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 18px;
+}
+
+.usr-provider-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  border: 1px solid var(--mui-border);
+  border-radius: 4px;
+  background: #f8fafc;
+  font: 500 13px var(--font-sans);
+  color: var(--fg-1);
+  box-sizing: border-box;
+}
+

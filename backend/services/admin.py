@@ -50,6 +50,7 @@ PLAN_FIELDS = {
     "watermark_required",
     "price_amount",
     "sort_order",
+    "plan_rank",
     "status",
     "file_size_limit",
     "max_jobs",
@@ -165,6 +166,7 @@ def list_subscription_plans(
                     watermark_required,
                     price_amount,
                     sort_order,
+                    plan_rank,
                     status,
                     file_size_limit,
                     max_jobs,
@@ -203,8 +205,9 @@ def create_subscription_plan(payload: dict):
             active_count = db.execute(
                 text("SELECT COUNT(*) FROM plans WHERE status = 'active'")
             ).scalar()
-            if active_count >= 4:
-                raise ValueError("활성화된 구독 플랜 카드는 최대 4개까지만 등록할 수 있습니다.")
+            # 활성화된 구독 플랜은 최대 3개까지만 등록 가능하도록 제한합니다.
+            if active_count >= 3:
+                raise ValueError("활성화된 구독 플랜 카드는 최대 3개까지만 등록할 수 있습니다.")
 
         columns = list(data.keys())
         placeholders = [f":{column}" for column in columns]
@@ -224,6 +227,7 @@ def create_subscription_plan(payload: dict):
                     watermark_required,
                     price_amount,
                     sort_order,
+                    plan_rank,
                     status,
                     file_size_limit,
                     max_jobs,
@@ -256,8 +260,9 @@ def update_subscription_plan(plan_id: str, payload: dict):
                 text("SELECT COUNT(*) FROM plans WHERE status = 'active' AND plan_id <> CAST(:plan_id AS uuid)"),
                 {"plan_id": plan_id}
             ).scalar()
-            if active_count >= 4:
-                raise ValueError("활성화된 구독 플랜 카드는 최대 4개까지만 등록할 수 있습니다.")
+            # 활성화된 구독 플랜은 최대 3개까지만 등록 가능하도록 제한합니다.
+            if active_count >= 3:
+                raise ValueError("활성화된 구독 플랜 카드는 최대 3개까지만 등록할 수 있습니다.")
 
         set_clause = ", ".join([f"{field} = :{field}" for field in data])
         params = {**data, "plan_id": plan_id}
@@ -279,6 +284,7 @@ def update_subscription_plan(plan_id: str, payload: dict):
                     watermark_required,
                     price_amount,
                     sort_order,
+                    plan_rank,
                     status,
                     file_size_limit,
                     max_jobs,
@@ -957,6 +963,7 @@ def get_users_list(page: int = 1, limit: int = 20, role: str = None, status_val:
                     u.role,
                     u.status,
                     u.created_at,
+                    u.last_login_at,
                     oa.provider
                 FROM users u
                 LEFT JOIN oauth_accounts oa ON oa.user_id = u.user_id
@@ -988,6 +995,7 @@ def get_users_list(page: int = 1, limit: int = 20, role: str = None, status_val:
                     "role": m["role"],
                     "status": m["status"],
                     "created_at": m["created_at"].strftime("%Y.%m.%d") if m["created_at"] else "",
+                    "last_login_at": m["last_login_at"].strftime("%Y.%m.%d %H:%M") if m["last_login_at"] else "기록 없음",
                     "provider": m["provider"] or "",
                 }
             )
@@ -1059,7 +1067,8 @@ def get_admin_policies():
                     metadata_retention_days,
                     credits,
                     status,
-                    sort_order
+                    sort_order,
+                    plan_rank
                 FROM plans
                 WHERE status = 'active'
                 ORDER BY sort_order ASC, created_at ASC
@@ -1076,6 +1085,7 @@ def get_admin_policies():
                 "description": pm["description"],
                 "sortOrder": pm["sort_order"],
                 "status": pm["status"],
+                "planRank": pm["plan_rank"],
             }
             policies["file_processing"]["plans"][pcode] = {
                 **common,

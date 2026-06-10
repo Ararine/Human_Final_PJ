@@ -165,6 +165,7 @@ export function buildPricingPlans(policy) {
         // 버튼 문구는 price 기준 고정 분기값 (cta_label 제거됨)
         cta: Number(payment.price || 0) === 0 ? "무료로 시작" : "결제하기",
         sortOrder: Number(payment.sortOrder ?? 0),
+        planRank: Number(payment.planRank ?? 0),
         status: payment.status || "active",
         file:
           policy.file_processing.plans[key] ||

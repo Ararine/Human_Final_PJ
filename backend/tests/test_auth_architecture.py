@@ -205,3 +205,23 @@ def test_admin_suspend_user_deletes_all_user_sessions(monkeypatch, fake_redis):
     assert updated == [(1, "SUSPENDED")]
     assert redis_store.get_session(first["session_id"]) is None
     assert redis_store.get_session(second["session_id"]) is None
+
+
+def test_admin_users_route_updates_role_and_status(monkeypatch):
+    updated = []
+    monkeypatch.setattr(
+        users,
+        "update_user_role_and_status",
+        lambda user_id, role_value, status_value: updated.append((user_id, role_value, status_value)) or {
+            **active_user(),
+            "id": user_id,
+            "role": role_value.lower(),
+            "status": status_value.lower(),
+        },
+    )
+
+    response = client.patch("/admin/users/user-1", json={"role": "admin", "status": "active"})
+
+    assert response.status_code == 200
+    assert updated == [("user-1", "admin", "active")]
+    assert response.json()["user"]["role"] == "admin"

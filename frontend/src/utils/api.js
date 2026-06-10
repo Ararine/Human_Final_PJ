@@ -95,6 +95,16 @@ export async function getAdminUsers(params = {}) {
   return requestJson(`/admin/users${qs ? "?" + qs : ""}`);
 }
 
+export async function updateAdminUser(userId, payload) {
+  return requestJson(`/admin/users/${userId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function getAdminPolicySettings() {
   return requestJson("/admin/policy");
 }

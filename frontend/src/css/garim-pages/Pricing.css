@@ -50,38 +50,65 @@
   .faq-item h4 { font: 500 16px var(--font-sans); margin: 0 0 8px; }
   .faq-item p { font: 400 14px/1.6 var(--font-sans); color: var(--fg-2); margin: 0; }
 
+/* 3개 구독 요금제 카드가 화면 내에서 대칭적(Symmetrical)이고 균형 있게 배치되도록 Flexbox 정렬 구조로 변경합니다. */
 .pricing-grid {
-  grid-template-columns: repeat(4, 1fr) !important;
-  max-width: 1280px !important;
+  display: flex !important;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 24px;
+  max-width: 1100px !important;
+  margin: 0 auto;
 }
 
+/* 요금제 카드가 해상도에 따라 너무 과도하게 늘어나는 것을 방지하기 위해 최소/최대 가로 한계치를 제한합니다. */
+.pricing-grid .price-card {
+  flex: 1 1 320px;
+  max-width: 340px;
+}
+
+/* 현재 플랜 하이라이트 색상을 mui-chip--primary 배경색(#1976d2)에 맞춰 파란색 테마로 변경하고, 현재 플랜 배지 색상은 눈에 띄는 파란색과 흰색 글자로 설정하며 z-index를 높여 하이라이트보다 위에 보이도록 합니다. */
 .price-card--current {
-  border-color: #2e7d32 !important;
-  box-shadow: 0 10px 28px rgba(46, 125, 50, 0.16) !important;
+  border-color: #1976d2 !important;
+  box-shadow: 0 10px 28px rgba(25, 118, 210, 0.16) !important;
+}
+
+/* 카드 배지를 absolute가 아닌 flex 내에서 우측에 배치되도록 위치 속성을 해제하고 리셋합니다. */
+.price-card__badge {
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
+  z-index: 2;
 }
 
 .price-card--current .price-card__badge {
-  background: #e8f5e9;
-  color: #1b5e20;
-}
-
-.price-card--current .mui-btn:disabled {
-  background: #2e7d32 !important;
+  background: linear-gradient(135deg, #1976d2 0%, #9747ff 100%) !important;
   color: #fff !important;
-  cursor: default;
-  opacity: 1;
+  border: none !important;
 }
 
-@media (max-width: 1100px) {
-  .pricing-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
+/* 요금제 가격 기간 표시 스타일 */
+.price-card__period {
+  font-size: 16px;
+  color: var(--fg-3);
+  margin-left: 4px;
+  font-weight: normal;
 }
 
-@media (max-width: 900px) {
-  .pricing-grid {
-    grid-template-columns: 1fr !important;
-  }
+/* 현재 사용 중인 플랜의 버튼 스타일: 연한 블루그레이 배경과 인디고 텍스트 지정 */
+.price-card--current .current-plan-btn {
+  background: #e8eaf6 !important;
+  color: #3f51b5 !important;
+  box-shadow: none !important;
+  border: 1px solid rgba(63, 81, 181, 0.2) !important;
+}
+
+.price-card--current .current-plan-btn:hover {
+  background: #c5cae9 !important;
+}
+
+/* 현재 구독 중인 플랜 카드의 가격 텍스트 색상을 브랜드 기본 파란색(#1976d2)으로 변경 */
+.price-card--current .price-card__price {
+  color: #1976d2 !important;
 }
 
 .credit-row-wrap {

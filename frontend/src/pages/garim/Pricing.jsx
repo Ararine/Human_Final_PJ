@@ -10,8 +10,18 @@ import {
 } from "../../hooks/usePricingPlans";
 import { getMyPaymentInfo } from "../../utils/api";
 import "../../css/garim-pages/Pricing.css";
-
 import GarimPage from "../../components/garim/GarimPage";
+
+// ISO 8601 날짜 문자열을 YYYY.MM.DD 포맷으로 변환하는 한국어 헬퍼 함수
+function formatDateDot(isoString) {
+  if (!isoString) return "";
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return isoString;
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}.${m}.${d}`;
+}
 
 export default function Pricing() {
   useDocumentTitle("요금제 · Garim");
@@ -20,27 +30,35 @@ export default function Pricing() {
   const startHref = isAuthed
     ? "/upload"
     : `/login?next=${encodeURIComponent("/upload")}`;
-  const { plans, creditPlans } = usePricingPlans();
+  const { plans: allPlans, creditPlans } = usePricingPlans();
+  // 사용자의 요청에 따라 화면에 노출될 구독 플랜을 최대 3개까지만 제한하여 사용합니다.
+  const plans = allPlans.slice(0, 3);
   const [currentPlanCode, setCurrentPlanCode] = useState("");
+  const [paymentInfo, setPaymentInfo] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
 
     if (!isAuthed) {
       setCurrentPlanCode("");
+      setPaymentInfo(null);
       return () => {
         cancelled = true;
       };
     }
 
     getMyPaymentInfo()
-      .then((paymentInfo) => {
+      .then((info) => {
         if (!cancelled) {
-          setCurrentPlanCode((paymentInfo.plan_code || "").toLowerCase());
+          setPaymentInfo(info);
+          setCurrentPlanCode((info.plan_code || "").toLowerCase());
         }
       })
       .catch(() => {
-        if (!cancelled) setCurrentPlanCode("");
+        if (!cancelled) {
+          setCurrentPlanCode("");
+          setPaymentInfo(null);
+        }
       });
 
     return () => {
@@ -103,22 +121,93 @@ export default function Pricing() {
           {plans.map((plan) => {
             const isCurrentPlan = plan.key === currentPlanCode;
             const isHighlighted = currentPlanCode ? isCurrentPlan : plan.featured;
+
+            // 백엔드 데이터 및 정책 설정의 동적 랭크 값을 기반으로 대소 판별
+            const curRank = Number(paymentInfo?.current_plan?.plan_rank ?? 0);
+            const planRank = Number(plan.planRank ?? 0);
+            const isLowerPlan = planRank < curRank;
+
+            // 이월 구독 이력 정보 매핑
+            const carriedOver = paymentInfo?.carried_over_subscription;
+            const isCarriedPlan = carriedOver && carriedOver.plan_code === plan.key;
+
+            // 다운그레이드 예약 활성화 상태 매핑
+            const isScheduledToThis = paymentInfo?.scheduled_plan_change?.to_plan_code === plan.key;
+
             return (
             <div
               key={plan.key}
               className={`price-card${isHighlighted ? " price-card--featured" : ""}${isCurrentPlan ? " price-card--current" : ""}`}
             >
-              <span className={`mui-chip ${isCurrentPlan ? "mui-chip--success" : plan.badgeClass} price-card__badge`}>
-                {isCurrentPlan ? "현재 플랜" : plan.badge}
-              </span>
-              <span className="overline-k">{plan.name}</span>
+              {/* 플랜 명칭과 배지를 한 행에 정렬 */}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                <span className="overline-k" style={{ margin: 0, lineHeight: 1 }}>{plan.name}</span>
+                {/* 1번 체크: 이전 플랜 뱃지 표시(이월 발생 시) */}
+                {isCarriedPlan ? (
+                  <span className="mui-chip" style={{ background: "rgba(0, 0, 0, 0.08)", color: "var(--fg-2)" }}>
+                    이전 플랜
+                  </span>
+                ) : (isCurrentPlan || plan.badge) && (
+                  <span className={`mui-chip ${isCurrentPlan ? "" : plan.badgeClass} price-card__badge`}>
+                    {isCurrentPlan ? "현재 플랜" : plan.badge}
+                  </span>
+                )}
+              </div>
               <div className="price-card__price">
                 {formatPrice(plan.payment.price)}
                 <small>원</small>
+                {/* 요금제 기간 표시 (/ 영구 또는 / 30일) */}
+                <span className="price-card__period">
+                  {plan.key === "free" ? "/ 영구" : "/ 30일"}
+                </span>
               </div>
+              {/* 1번 체크: 업그레이드로 종료됨 회색 배지 박스 추가 */}
+              {isCarriedPlan && (
+                <div style={{ marginTop: "4px", marginBottom: "8px" }}>
+                  <span
+                    style={{
+                      background: "rgba(0, 0, 0, 0.05)",
+                      border: "1px solid var(--mui-divider)",
+                      color: "var(--fg-2)",
+                      padding: "4px 8px",
+                      fontSize: "11px",
+                      borderRadius: "4px",
+                      fontWeight: "500",
+                      display: "inline-block"
+                    }}
+                  >
+                    업그레이드로 종료됨
+                  </span>
+                </div>
+              )}
               <p className="caption-k" style={{ fontSize: "13px" }}>
                 {plan.description}
               </p>
+              {/* 2번 체크: Pro 카드 중간 업그레이드 및 이월 설명 안내 박스 */}
+              {isCarriedPlan && (
+                <div
+                  style={{
+                    background: "#e5f6fd",
+                    border: "1px solid #b3e5fc",
+                    color: "#014361",
+                    borderRadius: "8px",
+                    padding: "16px",
+                    fontSize: "13px",
+                    lineHeight: "1.6",
+                    marginBottom: "16px"
+                  }}
+                >
+                  <div style={{ display: "flex", gap: "6px", alignItems: "flex-start" }}>
+                    <span className="material-icons" style={{ fontSize: "18px", marginTop: "1px" }}>info</span>
+                    <div>
+                      {formatDateDot(carriedOver.current_period_end)} {carriedOver.plan_name} 플랜으로 업그레이드되며 종료되었습니다.
+                      <div style={{ marginTop: "4px" }}>
+                        남은 {carriedOver.carried_over_days}일이 {paymentInfo?.plan_name || "Studio"} 플랜 기간 뒤로 이월되었습니다.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               <ul className="price-card__feats">
                 <li>
                   <span className="material-icons">check</span>크레딧{" "}
@@ -151,12 +240,114 @@ export default function Pricing() {
                 </li>
               </ul>
               {isCurrentPlan ? (
+                /* 현재 플랜인 경우: 버튼 문구를 '현재 구독 중'으로 변경하고 하단에 구독 정보 및 관리 링크 노출 */
+                <>
+                  <button
+                    type="button"
+                    className="mui-btn mui-btn--contained mui-btn--block current-plan-btn"
+                    onClick={() => navigate("/settings")}
+                  >
+                    현재 구독 중
+                  </button>
+
+                  {/* 노란색 체크: 현재 구독 정보 표시 영역 */}
+                  {paymentInfo?.current_subscription && (
+                    <div style={{ marginTop: "16px" }}>
+                      <div
+                        style={{
+                          fontSize: "13px",
+                          fontWeight: "600",
+                          color: "var(--fg-1)",
+                          marginBottom: "8px",
+                          textAlign: "left"
+                        }}
+                      >
+                        현재 구독 정보
+                      </div>
+                      <div
+                        style={{
+                          border: "1px solid var(--mui-divider)",
+                          borderRadius: "8px",
+                          background: "#fff",
+                          fontSize: "12px",
+                          lineHeight: "1.6",
+                          overflow: "hidden"
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            padding: "8px 12px",
+                            borderBottom: "1px solid var(--mui-divider)"
+                          }}
+                        >
+                          <span style={{ color: "var(--fg-2)" }}>다음 결제일</span>
+                          <span style={{ fontWeight: "500" }}>
+                            {formatDateDot(paymentInfo.current_subscription.next_billing_at)}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            padding: "8px 12px",
+                            borderBottom: "1px solid var(--mui-divider)"
+                          }}
+                        >
+                          <span style={{ color: "var(--fg-2)" }}>자동결제</span>
+                          <span style={{ fontWeight: "500" }}>
+                            {paymentInfo.current_subscription.auto_renew ? "사용 중" : "중지"}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            padding: "8px 12px"
+                          }}
+                        >
+                          <span style={{ color: "var(--fg-2)" }}>상태</span>
+                          <span style={{ fontWeight: "500" }}>
+                            {paymentInfo.current_subscription.status === "active" ? "활성" : "정지"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 구독 관리로 이동 링크 */}
+                      <div style={{ textAlign: "center", marginTop: "12px" }}>
+                        <button
+                          type="button"
+                          onClick={() => navigate("/settings")}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "#1976d2",
+                            fontSize: "13px",
+                            fontWeight: "500",
+                            cursor: "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px"
+                          }}
+                        >
+                          구독 관리로 이동
+                          <span className="material-icons" style={{ fontSize: "14px" }}>
+                            chevron_right
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : isLowerPlan ? (
+                /* 현재 플랜보다 rank가 낮은 플랜인 경우: 무료 플랜으로 변경(3번 체크) 또는 ~로 변경 예약(1번 체크) */
                 <button
                   type="button"
-                  className="mui-btn mui-btn--contained mui-btn--block"
-                  disabled
+                  className="mui-btn mui-btn--outlined mui-btn--block"
+                  onClick={() => navigate("/settings")}
                 >
-                  현재 이용 중
+                  {plan.key === "free" ? "무료 플랜으로 변경" : `${plan.name}로 변경 예약`}
                 </button>
               ) : plan.key === "free" ? (
                 <a
@@ -173,6 +364,29 @@ export default function Pricing() {
                 >
                   {plan.cta}
                 </button>
+              )}
+
+              {/* 2번 및 4번 체크: 전환 예약 설명 문구 박스 (하위 플랜일 때 상시 노출) */}
+              {isLowerPlan && (
+                <div
+                  style={{
+                    background: "#f8fafc",
+                    border: "1px solid var(--mui-divider)",
+                    borderRadius: "8px",
+                    padding: "16px",
+                    fontSize: "13px",
+                    lineHeight: "1.5",
+                    color: "var(--fg-2)",
+                    marginTop: "16px",
+                    textAlign: "center"
+                  }}
+                >
+                  {plan.key === "free" ? (
+                    "현재 유료 플랜은 이번 이용 기간 종료일까지 유지되며, 다음 결제일부터 Free 플랜으로 전환됩니다."
+                  ) : (
+                    `현재 ${paymentInfo?.plan_name || "Studio"} 플랜은 이번 이용 기간 종료일까지 유지되며, 다음 결제일부터 ${plan.name} 플랜으로 전환됩니다.`
+                  )}
+                </div>
               )}
             </div>
           );

@@ -80,3 +80,17 @@ def update_user_status(user_id, status_value):
     with engine.begin() as conn:
         row = user_model.update_user_status_query(conn, user_id, status_value)
         return normalize_user_row(row)
+
+
+# 사용자의 역할(role)과 상태(status)를 검증하고 동시 업데이트하는 한국어 주석 서비스 함수
+def update_user_role_and_status(user_id, role_value, status_value):
+    role_value = role_value.lower()
+    status_value = status_value.lower()
+    if role_value not in {"user", "admin"}:
+        raise ValueError("Invalid user role.")
+    if status_value not in VALID_STATUSES:
+        raise UserStatusError("Invalid user status.")
+
+    with engine.begin() as conn:
+        row = user_model.update_user_role_and_status_query(conn, user_id, role_value, status_value)
+        return normalize_user_row(row)

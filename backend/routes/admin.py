@@ -1,10 +1,11 @@
 from fastapi import APIRouter
 
-from controllers import admin
+from controllers import admin, oauth
 
 router = APIRouter(tags=["admin"])
 
 router.add_api_route("/users", admin.list_users, methods=["GET"])
+router.add_api_route("/users/{user_id}", oauth.update_user_role_and_status, methods=["PATCH"])
 router.add_api_route("/policy", admin.get_policy_settings, methods=["GET"])
 router.add_api_route("/policy", admin.update_policy_settings, methods=["PUT"])
 router.add_api_route("/plans", admin.list_subscription_plans, methods=["GET"])

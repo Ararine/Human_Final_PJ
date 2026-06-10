@@ -1,4 +1,7 @@
-import uvicorn,os,logging
+import logging
+import os
+import uvicorn
+from contextlib import asynccontextmanager
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -11,6 +14,7 @@ from routes import payment
 
 from core.logger import setup_logging
 from routes import oauth, post, setting, uploads, admin, analysis, worker, subscription
+from services import subscription_scheduler # 자동결제 및 다운그레이드 처리 스케줄러 임포트
 
 ################## 초기 세팅 ######################
 ## 로거 기본 세팅
@@ -20,7 +24,22 @@ logger = logging.getLogger(__name__)
 
 logger.info("backend server is running...")
 
-app = FastAPI()
+# FastAPI Lifespan 이벤트 처리기를 구현하여 앱 시작/종료 시점에 백그라운드 스케줄러를 제어합니다.
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    settings = subscription_scheduler.get_scheduler_settings()
+    scheduler_task = subscription_scheduler.start_subscription_scheduler(
+        enabled=settings.enabled,
+        interval_seconds=settings.interval_seconds,
+        batch_limit=settings.batch_limit,
+    )
+    try:
+        yield
+    finally:
+        # 종료 시 생성된 스케줄러 백그라운드 태스크를 안전하게 취소하고 리소스를 반환합니다.
+        await subscription_scheduler.stop_subscription_scheduler(scheduler_task)
+
+app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000",
