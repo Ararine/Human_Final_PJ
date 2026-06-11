@@ -250,6 +250,17 @@ def set_auth_cookies(response, token_pair):
         path="/auth/refresh",
         max_age=get_refresh_ttl_seconds(),
     )
+    # [한글 주석] 프론트엔드 자바스크립트가 로그인 여부를 간접 식별할 수 있도록 비-HttpOnly 쿠키를 심어줍니다.
+    # 만료 기한은 세션 전체 수명(Refresh Token 만료 기한)과 동일하게 7일로 설정합니다.
+    response.set_cookie(
+        key="logged_in",
+        value="yes",
+        httponly=False,
+        secure=get_cookie_secure(),
+        samesite=get_cookie_samesite(),
+        path="/",
+        max_age=get_refresh_ttl_seconds(),
+    )
 
 
 def delete_auth_cookies(response):
@@ -261,8 +272,18 @@ def delete_auth_cookies(response):
     response.delete_cookie(ACCESS_COOKIE_NAME, path="/", **cookie_options)
     response.delete_cookie(REFRESH_COOKIE_NAME, path="/auth/refresh", **cookie_options)
     response.delete_cookie(REFRESH_COOKIE_NAME, path="/", **cookie_options)
+    
+    # [한글 주석] 로그아웃 시 프론트엔드 인식용 비-HttpOnly 쿠키 logged_in도 함께 지워줍니다.
+    non_httponly_options = {
+        "secure": get_cookie_secure(),
+        "httponly": False,
+        "samesite": get_cookie_samesite(),
+    }
+    response.delete_cookie("logged_in", path="/", **non_httponly_options)
+
     for cookie_name in LEGACY_AUTH_COOKIE_NAMES:
         response.delete_cookie(cookie_name, path="/", **cookie_options)
+
 
 
 def delete_session_from_tokens(access_token=None, refresh_token=None, *extra_tokens):
