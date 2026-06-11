@@ -29,3 +29,11 @@ class BillingKeyRegisterRequest(BaseModel):
     cardCompany: str | None = None
     maskedCardNumber: str | None = None
     methodType: Literal["card", "easy_pay", "account", "unknown"] = "unknown"
+
+
+# [한글 주석] 정기구독 빌링키 발급 및 승인 요청을 처리하기 위한 스키마
+class BillingConfirmRequest(BaseModel):
+    authKey: str
+    customerKey: str
+    planCode: str
+

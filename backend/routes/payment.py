@@ -8,6 +8,7 @@ from schemas.payment import (
     PaymentConfirmRequest,
     TempOrderRequest,
     TempOrderResponse,
+    BillingConfirmRequest,
 )
 
 router = APIRouter(tags=["payment"])
@@ -72,3 +73,19 @@ def list_billing_keys(
 ):
     current_user = auth.authenticate_access_token(access_token)
     return payment.list_billing_keys(current_user, db)
+
+
+# [한글 주석] 정기 결제 빌링 인증 성공 시 최초 결제 승인 및 구독 생성을 처리하는 엔드포인트
+@router.post("/billing-confirm")
+async def confirm_billing_payment(
+    body: BillingConfirmRequest,
+    access_token: str | None = Cookie(default=None),
+    db: Session = Depends(get_db),
+):
+    current_user = auth.authenticate_access_token(access_token)
+    return await payment.confirm_billing_payment(
+        body=body,
+        current_user=current_user,
+        db=db
+    )
+

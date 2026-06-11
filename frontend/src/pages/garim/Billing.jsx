@@ -127,7 +127,8 @@ export default function Billing() {
   const currentPlan = data?.current_plan;
   const currentSubscription = data?.current_subscription;
   const scheduledPlanChange = data?.scheduled_plan_change;
-  const carriedOver = data?.carried_over_subscription;
+  // [한글 주석] 기존 carryover 이월 정보를 제거하고 최신 업그레이드 정산 내역을 바인딩합니다.
+  const latestUpgradeProration = data?.latest_upgrade_proration;
   const isCancelScheduled = scheduledPlanChange?.change_type === "cancel_to_free";
   const isDowngradeScheduled = scheduledPlanChange?.change_type === "downgrade";
 
@@ -204,12 +205,15 @@ export default function Billing() {
               </div>
             </section>
 
-            {carriedOver ? (
+            {/* [한글 주석] 기존 이월 하위 플랜 UI 대신 업그레이드 차감 정산 결과를 노출하는 안내 박스를 표시합니다. */}
+            {latestUpgradeProration ? (
               <section className="billing-surface billing-message">
-                <h3>업그레이드 후 이월된 하위 플랜</h3>
+                <h3>구독 업그레이드 정산 내역</h3>
                 <p>
-                  {carriedOver.plan_name} 잔여 기간 {carriedOver.carried_over_days}일이 현재 플랜 종료 이후까지
-                  이어집니다. 종료 시점은 {formatDateTime(carriedOver.current_period_end)}입니다.
+                  기존 {latestUpgradeProration.from_plan_name} 플랜의 남은 이용분{" "}
+                  {formatPrice(latestUpgradeProration.discount_amount)}원이{" "}
+                  {latestUpgradeProration.to_plan_name} 결제 금액에서 차감되었습니다. (실제 결제 금액:{" "}
+                  {formatPrice(latestUpgradeProration.charged_amount)}원)
                 </p>
               </section>
             ) : null}

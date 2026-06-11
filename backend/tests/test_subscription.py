@@ -21,8 +21,6 @@ def test_resolve_current_plan_uses_valid_active_subscription_rank_order():
         "cancel_at_period_end": False,
         "cancelled_at": None,
         "billing_status": "paid",
-        "carried_over_days": 0,
-        "superseded_by_subscription_id": None,
         "plan_id": "plan-studio",
         "plan_code": "studio",
         "plan_name": "Studio",
@@ -94,14 +92,14 @@ def _mock_subscription_row(code, rank):
         "cancel_at_period_end": True,
         "cancelled_at": None,
         "billing_status": "paid",
-        "carried_over_days": 0,
-        "superseded_by_subscription_id": None,
         "plan_id": f"plan-{code}",
         "plan_code": code,
         "plan_name": code.title(),
         "plan_rank": rank,
         "price_amount": 1000,
         "credits": 0,
+        "billing_key_id": "00000000-0000-0000-0000-000000000000",
+        "last_payment_id": "11111111-1111-1111-1111-111111111111",
     }
     return row
 
@@ -372,8 +370,6 @@ def test_resume_subscription_restores_auto_renew_and_cancels_cancel_to_free():
         "cancel_at_period_end": False,
         "cancelled_at": None,
         "billing_status": "paid",
-        "carried_over_days": 0,
-        "superseded_by_subscription_id": None,
     }
     db_mock.execute.side_effect = [
         MagicMock(fetchone=MagicMock(return_value=existing)),
@@ -469,8 +465,6 @@ def test_resume_subscription_route_restores_cancellation(monkeypatch):
         "cancel_at_period_end": False,
         "cancelled_at": None,
         "billing_status": "paid",
-        "carried_over_days": 0,
-        "superseded_by_subscription_id": None,
     }
     db_mock = MagicMock()
     db_mock.execute.side_effect = [
@@ -546,6 +540,16 @@ def test_cancel_plan_change_route_cancels_scheduled_downgrade(monkeypatch):
 
 def test_create_or_extend_subscription_extends_future_same_plan():
     db_mock = MagicMock()
+    target_plan = MagicMock()
+    target_plan._mapping = {
+        "plan_id": "plan-pro",
+        "plan_code": "pro",
+        "plan_name": "Pro Plan",
+        "plan_rank": 2,
+        "price_amount": 19800,
+        "credits": 200,
+        "billing_period_days": 30
+    }
     existing = MagicMock()
     existing._mapping = {
         "subscription_id": "subscription-pro",
@@ -560,6 +564,7 @@ def test_create_or_extend_subscription_extends_future_same_plan():
         "next_billing_at": "2026-07-31T00:00:00",
     }
     db_mock.execute.side_effect = [
+        MagicMock(fetchone=MagicMock(return_value=target_plan)), # _get_target_plan 호출
         MagicMock(fetchone=MagicMock(return_value=existing)),
         MagicMock(fetchone=MagicMock(return_value=extended)),
     ]
@@ -571,14 +576,24 @@ def test_create_or_extend_subscription_extends_future_same_plan():
         payment_id="payment-1",
     )
 
-    update_sql = str(db_mock.execute.call_args_list[1].args[0])
-    assert "current_period_end + INTERVAL '30 days'" in update_sql
+    update_sql = str(db_mock.execute.call_args_list[2].args[0])
+    assert "current_period_end + CAST(:period_days || ' days' AS interval)" in update_sql
     assert "last_payment_id = :payment_id" in update_sql
     assert result["subscription_id"] == "subscription-pro"
 
 
 def test_create_or_extend_subscription_inserts_when_same_plan_missing():
     db_mock = MagicMock()
+    target_plan = MagicMock()
+    target_plan._mapping = {
+        "plan_id": "plan-pro",
+        "plan_code": "pro",
+        "plan_name": "Pro Plan",
+        "plan_rank": 2,
+        "price_amount": 19800,
+        "credits": 200,
+        "billing_period_days": 30
+    }
     inserted = MagicMock()
     inserted._mapping = {
         "subscription_id": "subscription-new",
@@ -587,6 +602,7 @@ def test_create_or_extend_subscription_inserts_when_same_plan_missing():
         "next_billing_at": "2026-07-01T00:00:00",
     }
     db_mock.execute.side_effect = [
+        MagicMock(fetchone=MagicMock(return_value=target_plan)), # _get_target_plan 호출
         MagicMock(fetchone=MagicMock(return_value=None)),
         MagicMock(fetchone=MagicMock(return_value=inserted)),
     ]
@@ -598,16 +614,45 @@ def test_create_or_extend_subscription_inserts_when_same_plan_missing():
         payment_id="payment-1",
     )
 
-    insert_sql = str(db_mock.execute.call_args_list[1].args[0])
-    insert_params = db_mock.execute.call_args_list[1].args[1]
+    insert_sql = str(db_mock.execute.call_args_list[2].args[0])
+    insert_params = db_mock.execute.call_args_list[2].args[1]
     assert "INSERT INTO subscriptions" in insert_sql
-    assert "NOW() + INTERVAL '30 days'" in insert_sql
+    assert "NOW() + CAST(:period_days || ' days' AS interval)" in insert_sql
     assert insert_params["plan_id"] == "plan-pro"
     assert insert_params["payment_id"] == "payment-1"
     assert result["subscription_id"] == "subscription-new"
 
 
-def test_apply_upgrade_with_carryover_creates_upper_and_extends_lower():
+def test_calculate_upgrade_proration():
+    # [한글 주석] 기존 구독 플랜 정보 모킹
+    current_plan = {"price_amount": 3000}
+    # [한글 주석] 6월 1일부터 6월 30일까지 30일 기간의 구독 정보 모킹
+    current_subscription = {
+        "current_period_start": "2026-06-01T00:00:00",
+        "current_period_end": "2026-07-01T00:00:00"
+    }
+    # [한글 주석] 업그레이드 대상 플랜 정보 모킹
+    target_plan = {"price_amount": 20000}
+    
+    # [한글 주석] 6월 21일(10일 남은 시점)에 업그레이드한다고 가정
+    now = "2026-06-21T00:00:00"
+    
+    res = subscription_service.calculate_upgrade_proration(
+        current_plan=current_plan,
+        current_subscription=current_subscription,
+        target_plan=target_plan,
+        now=now
+    )
+    
+    # [한글 주석] 남은 가치 = floor(3000 * 10 / 30) = 1000원
+    assert res["remaining_amount"] == 1000
+    assert res["target_plan_amount"] == 20000
+    assert res["discount_amount"] == 1000
+    # [한글 주석] 청구액 = 20000 - 1000 = 19000원
+    assert res["charged_amount"] == 19000
+
+
+def test_apply_upgrade_with_proration_creates_upper_and_cancels_lower():
     db_mock = MagicMock()
     target_plan = _mock_plan_row("studio", 20)
     lower = MagicMock()
@@ -615,53 +660,63 @@ def test_apply_upgrade_with_carryover_creates_upper_and_extends_lower():
         "subscription_id": "subscription-pro",
         "plan_id": "plan-pro",
         "current_period_start": "2026-06-01T00:00:00",
-        "current_period_end": "2026-06-21T00:00:00",
+        "current_period_end": "2026-07-01T00:00:00",
         "plan_rank": 10,
+        "price_amount": 3000,
     }
+    
     upper = MagicMock()
     upper._mapping = {
         "subscription_id": "subscription-studio",
-        "current_period_start": "2026-06-01T00:00:00",
-        "current_period_end": "2026-07-01T00:00:00",
-        "next_billing_at": "2026-07-01T00:00:00",
+        "current_period_start": "2026-06-11T00:00:00",
+        "current_period_end": "2026-07-11T00:00:00",
+        "next_billing_at": "2026-07-11T00:00:00",
     }
-    lower_update = MagicMock()
-    lower_update._mapping = {
-        "subscription_id": "subscription-pro",
-        "plan_id": "plan-pro",
-        "original_period_end": "2026-06-21T00:00:00",
-        "current_period_end": "2026-07-21T00:00:00",
-        "carried_over_days": 20,
-        "remaining_seconds": 1728000,
-    }
+    
     plan_change = MagicMock()
     plan_change._mapping = {"plan_change_id": "change-upgrade-1"}
+    
+    # [한글 주석] DB execute 호출의 결과들을 설정
     db_mock.execute.side_effect = [
-        MagicMock(fetchone=MagicMock(return_value=target_plan)),
-        MagicMock(fetchone=MagicMock(return_value=lower)),
-        MagicMock(fetchone=MagicMock(return_value=upper)),
-        MagicMock(fetchone=MagicMock(return_value=lower_update)),
-        MagicMock(fetchone=MagicMock(return_value=plan_change)),
+        MagicMock(fetchone=MagicMock(return_value=target_plan)), # _get_target_plan
+        MagicMock(fetchone=MagicMock(return_value=lower)),       # _find_upgrade_source_subscription
+        MagicMock(fetchone=MagicMock(return_value=upper)),       # upper_row 생성
+        MagicMock(),                                             # 기존 하위 구독 취소
+        MagicMock(),                                             # 기존 변경 예약 취소
+        MagicMock(fetchone=MagicMock(return_value=plan_change)), # plan_change 이력 기록
     ]
-
-    result = subscription_service.apply_upgrade_with_carryover(
+    
+    result = subscription_service.apply_upgrade_with_proration(
         db=db_mock,
         user_id="user-1",
         from_subscription_id="subscription-pro",
         to_plan_id="studio",
         payment_id="payment-1",
+        billing_key_id="00000000-0000-0000-0000-000000000000",
     )
-
+    
     insert_upper_sql = str(db_mock.execute.call_args_list[2].args[0])
-    update_lower_sql = str(db_mock.execute.call_args_list[3].args[0])
-    change_sql = str(db_mock.execute.call_args_list[4].args[0])
+    insert_upper_params = db_mock.execute.call_args_list[2].args[1]
+    
+    cancel_lower_sql = str(db_mock.execute.call_args_list[3].args[0])
+    
+    change_sql = str(db_mock.execute.call_args_list[5].args[0])
+    change_params = db_mock.execute.call_args_list[5].args[1]
+    
+    # [한글 주석] 상위 구독 insert 쿼리 및 파라미터 체크
     assert "INSERT INTO subscriptions" in insert_upper_sql
-    assert "NOW() + INTERVAL '30 days'" in insert_upper_sql
-    assert "current_period_end = calculated.carried_end" in update_lower_sql
-    assert "auto_renew = false" in update_lower_sql
-    assert "cancel_at_period_end = true" in update_lower_sql
-    assert "superseded_by_subscription_id = :upper_subscription_id" in update_lower_sql
+    assert "billing_key_id" in insert_upper_sql
+    assert insert_upper_params["billing_key_id"] == "00000000-0000-0000-0000-000000000000"
+    
+    # [한글 주석] 하위 구독 취소 쿼리 체크
+    assert "UPDATE subscriptions" in cancel_lower_sql
+    assert "status = 'cancelled'" in cancel_lower_sql
+    
+    # [한글 주석] 정산 이력 기록 쿼리 체크
     assert "INSERT INTO subscription_plan_changes" in change_sql
-    assert "'upgrade'" in change_sql
+    assert "remaining_amount" in change_sql
+    assert "charged_amount" in change_sql
+    assert change_params["discount_amount"] >= 0
+    
     assert result["subscription_id"] == "subscription-studio"
-    assert result["carried_over_days"] == 20
+    assert result["plan_change_id"] == "change-upgrade-1"

@@ -488,9 +488,10 @@
   min-width: 0;
 }
 
+/* [한글 주석] 이월 요약 카드가 제거됨에 따라 3컬럼 그리드로 정렬을 최적화합니다. */
 .sb-detail-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -558,9 +559,9 @@
   min-width: 0;
 }
 
-/* 활성 구독 목록 테이블 행 레이아웃: 대체 구독 플랜 도입 및 컬럼 비율 균형 조정 */
+/* [한글 주석] 대체 구독 및 이월 컬럼 삭제로 인해 3개 컬럼(플랜, 종료일시, 자동결제) 레이아웃으로 축소 조정합니다. */
 .sb-detail-row-subscription {
-  grid-template-columns: 1.2fr 1.5fr 2.5fr 1fr 1fr;
+  grid-template-columns: 1.5fr 2.5fr 1fr;
   min-width: 620px;
 }
 
@@ -574,9 +575,10 @@
   min-width: 720px;
 }
 
+/* [한글 주석] 업그레이드 정산 내역 3개 컬럼 추가에 따라 9개 컬럼 레이아웃으로 변경하고 가로 스크롤 최소 너비를 확장합니다. */
 .sb-detail-row-change {
-  grid-template-columns: 1.1fr 140px 110px 120px 120px 1.1fr;
-  min-width: 760px;
+  grid-template-columns: 1.1fr 100px 90px 100px 100px 1.1fr 100px 100px 100px;
+  min-width: 960px;
 }
 
 .sb-detail-head {

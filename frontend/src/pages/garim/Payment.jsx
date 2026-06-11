@@ -78,23 +78,35 @@ export default function Payment() {
 
     setIsSubmitting(true);
     try {
-      const tempOrder = await createPaymentTempOrder({
-        product_type: productType,
-        product_code: productCode,
-        amount: plan.amount,
-      });
-
-      sessionStorage.setItem("lastOrderId", tempOrder.orderId);
-
       const tossPayments = await loadTossPayments(clientKey);
-      await tossPayments.requestPayment("CARD", {
-        amount: tempOrder.amount,
-        orderId: tempOrder.orderId,
-        orderName: `Garim ${tempOrder.orderName}`,
-        customerName: "Garim 사용자",
-        successUrl: `${window.location.origin}/payment/success`,
-        failUrl: `${window.location.origin}/payment/fail`,
-      });
+
+      if (productType === "credit") {
+        /* [한글 주석] 크레딧 충전의 경우 기존의 1회성 카드 결제창(requestPayment)을 띄우고 성공 시 /payment/success로 보냅니다. */
+        const tempOrder = await createPaymentTempOrder({
+          product_type: productType,
+          product_code: productCode,
+          amount: plan.amount,
+        });
+
+        sessionStorage.setItem("lastOrderId", tempOrder.orderId);
+
+        await tossPayments.requestPayment("CARD", {
+          amount: tempOrder.amount,
+          orderId: tempOrder.orderId,
+          orderName: `Garim ${tempOrder.orderName}`,
+          customerName: "Garim 사용자",
+          successUrl: `${window.location.origin}/payment/success`,
+          failUrl: `${window.location.origin}/payment/fail`,
+        });
+      } else {
+        /* [한글 주석] 정기 구독 요금제의 경우, 자동 결제용 빌링키 인증창(requestBillingAuth)을 띄우고 성공 시 /payment/billing-success로 리다이렉트합니다. */
+        const customerKey = `customer-${Math.random().toString(36).substring(2, 11)}`; // 사용자 고유 식별값 생성
+        await tossPayments.requestBillingAuth("CARD", {
+          customerKey,
+          successUrl: `${window.location.origin}/payment/billing-success?planCode=${productCode}`,
+          failUrl: `${window.location.origin}/payment/fail`,
+        });
+      }
     } catch (err) {
       console.error(err);
       alert(err.message || "결제창 실행에 실패했습니다.");

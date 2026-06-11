@@ -63,11 +63,6 @@ class FakeAdminSubscriptionsSession:
                 "cancelled_at": None,
                 "billing_status": "failed",
                 "active_subscription_count": 2,
-                "carried_over_subscription_id": "850e8400-e29b-41d4-a716-446655440000",
-                "carried_over_plan_code": "pro",
-                "carried_over_plan_name": "Pro",
-                "carried_over_period_end": None,
-                "carried_over_days": 12,
                 "plan_change_id": "950e8400-e29b-41d4-a716-446655440000",
                 "scheduled_change_type": "downgrade",
                 "scheduled_change_status": "scheduled",
@@ -108,8 +103,6 @@ class FakeAdminSubscriptionDetailSession:
                 "cancel_at_period_end": False,
                 "cancelled_at": None,
                 "billing_status": "failed",
-                "carried_over_days": 0,
-                "superseded_by_subscription_id": None,
                 "current_plan_code": "studio",
                 "current_plan_name": "Studio",
                 "free_plan_code": "free",
@@ -127,10 +120,6 @@ class FakeAdminSubscriptionDetailSession:
                 "cancel_at_period_end": False,
                 "cancelled_at": None,
                 "billing_status": "failed",
-                "carried_over_days": 0,
-                "superseded_by_subscription_id": None,
-                "original_period_end": None,
-                "upgraded_at": None,
                 "created_at": None,
                 "plan_id": "plan-studio",
                 "plan_code": "studio",
@@ -161,6 +150,11 @@ class FakeAdminSubscriptionDetailSession:
                 "created_at": None,
                 "from_subscription_id": "750e8400-e29b-41d4-a716-446655440000",
                 "to_subscription_id": None,
+                # [한글 주석] 정산금 관련 모크 필드를 추가하여 KeyError를 방지합니다.
+                "remaining_amount": 0,
+                "target_plan_amount": 0,
+                "discount_amount": 0,
+                "charged_amount": 0,
                 "from_plan_code": "studio",
                 "from_plan_name": "Studio",
                 "to_plan_code": "pro",
@@ -196,7 +190,6 @@ def test_list_admin_subscriptions(monkeypatch):
                     "billing_status": "active",
                 },
                 "active_subscription_count": 1,
-                "carried_over_subscription": None,
                 "scheduled_plan_change": None,
                 "latest_billing_attempt": None,
             }],
@@ -286,7 +279,6 @@ def test_get_admin_subscriptions_list_service_maps_filters_and_payload(monkeypat
     assert executed_params["q"] == "%admin-check%"
     assert executed_params["plan_code"] == "studio"
     assert result["summary"]["billing_failed_users"] == 1
-    assert result["data"][0]["carried_over_subscription"]["plan_code"] == "pro"
     assert result["data"][0]["scheduled_plan_change"]["change_type"] == "downgrade"
     assert session.closed is True
 

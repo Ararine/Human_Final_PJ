@@ -223,6 +223,17 @@ export async function confirmPayment(payment) {
   });
 }
 
+// [한글 주석] 정기 결제 빌링키 발급 및 최초 청구를 승인 처리하는 백엔드 API를 호출합니다.
+export async function confirmBillingPayment(billingData) {
+  return requestJson("/payment/billing-confirm", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(billingData),
+  });
+}
+
 export async function initUpload(meta) {
   return requestJson("/uploads/init", {
     method: "POST",

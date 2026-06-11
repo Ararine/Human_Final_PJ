@@ -213,12 +213,7 @@ export default function AdminSubscriptions() {
     }
   };
 
-  // 대체 구독 ID를 바탕으로 활성 구독 목록에서 대체 플랜명을 검색해 주는 한국어 헬퍼 함수
-  const getSupersededPlanName = (supersededId) => {
-    if (!supersededId || !detailData?.active_subscriptions) return "-";
-    const found = detailData.active_subscriptions.find((s) => s.subscription_id === supersededId);
-    return found ? found.plan_name : "-";
-  };
+
 
   return (
     <GarimPage bodyClass="" screenLabel="31 Admin Subscriptions">
@@ -444,11 +439,6 @@ export default function AdminSubscriptions() {
                     <span className={getPlanTone(row.current_plan_code)}>
                       {row.current_plan_name}
                     </span>
-                    {row.carried_over_subscription && (
-                      <small className="sb-subtext">
-                        이월: {row.carried_over_subscription.plan_name} {row.carried_over_subscription.carried_over_days}일
-                      </small>
-                    )}
                   </span>
 
                   <span className="sb-state-cell">
@@ -550,8 +540,8 @@ export default function AdminSubscriptions() {
                   <div className="sb-detail-summary-card">
                     <span className="sb-detail-label">현재 적용 플랜</span>
                     <strong>{detailData.current_applied_plan?.plan_name || "-"}</strong>
-                    {/* 사용자의 요청에 따라 UUID 대신 대체 구독 플랜을 표시하고 한글화 */}
-                    <small>대체 구독 플랜: {getSupersededPlanName(detailData.current_applied_plan?.superseded_by_subscription_id)}</small>
+                    {/* [한글 주석] 이월/대체 관련 설명 대신 빈 공간으로 둡니다. */}
+                    <small>-</small>
                   </div>
                   <div className="sb-detail-summary-card">
                     <span className="sb-detail-label">다음 결제일</span>
@@ -565,12 +555,6 @@ export default function AdminSubscriptions() {
                     {/* 영문 상태값을 한글로 매핑하여 표시 */}
                     <small>결제 상태: {mapStatusLabel(detailData.current_applied_plan?.billing_status)}</small>
                   </div>
-                  <div className="sb-detail-summary-card">
-                    <span className="sb-detail-label">이월 기간</span>
-                    <strong>{detailData.current_applied_plan?.carried_over_days ?? 0}일</strong>
-                    {/* 대체 구독 ID 대신 대체 구독 플랜으로 노출하고 한글화 */}
-                    <small>대체 구독 플랜: {getSupersededPlanName(detailData.current_applied_plan?.superseded_by_subscription_id)}</small>
-                  </div>
                 </section>
 
                 <section className="sb-detail-section">
@@ -580,13 +564,11 @@ export default function AdminSubscriptions() {
                     <p>현재 사용자에게 유효한 활성 구독 목록입니다.</p>
                   </div>
                   <div className="sb-detail-table">
-                    {/* UUID 컬럼 대신 대체 구독 플랜 컬럼을 삽입 및 한글화 */}
+                    {/* [한글 주석] 이월 및 대체 컬럼을 지우고 플랜, 종료 일시, 자동결제 여부만 노출합니다. */}
                     <div className="sb-detail-row sb-detail-head sb-detail-row-subscription">
                       <span>플랜</span>
-                      <span>대체 구독 플랜</span>
                       <span>종료 일시</span>
                       <span>자동결제</span>
-                      <span>이월 기간</span>
                     </div>
                     {detailData.active_subscriptions.length === 0 && (
                       <div className="sb-empty">활성 구독이 없습니다.</div>
@@ -594,11 +576,8 @@ export default function AdminSubscriptions() {
                     {detailData.active_subscriptions.map((subscription) => (
                       <div className="sb-detail-row sb-detail-row-subscription" key={subscription.subscription_id}>
                         <span>{subscription.plan_name}</span>
-                        {/* 대체 구독 플랜을 표시 */}
-                        <span>{getSupersededPlanName(subscription.superseded_by_subscription_id)}</span>
                         <span className="mono">{formatDateTime(subscription.current_period_end)}</span>
                         <span>{boolLabel(subscription.auto_renew)}</span>
-                        <span>{subscription.carried_over_days || 0}일</span>
                       </div>
                     ))}
                   </div>
@@ -642,7 +621,7 @@ export default function AdminSubscriptions() {
                     <p>업그레이드, 다운그레이드 예약, Free 변경 예약 이력입니다.</p>
                   </div>
                   <div className="sb-detail-table">
-                    {/* from / to 헤더 한글화 */}
+                    {/* [한글 주석] 이전 플랜 정보 외에 정산 차액 4개 필드 중 대표 필드 3개(대상 요금, 이용분 차감, 실제 청구액)를 테이블로 노출합니다. */}
                     <div className="sb-detail-row sb-detail-head sb-detail-row-change">
                       <span>생성 일시</span>
                       <span>유형</span>
@@ -650,6 +629,9 @@ export default function AdminSubscriptions() {
                       <span>이전 플랜</span>
                       <span>변경 플랜</span>
                       <span>적용 시점</span>
+                      <span>대상 요금</span>
+                      <span>이용분 차감</span>
+                      <span>실제 청구액</span>
                     </div>
                     {detailData.plan_changes.length === 0 && (
                       <div className="sb-empty">플랜 변경 이력이 없습니다.</div>
@@ -666,6 +648,9 @@ export default function AdminSubscriptions() {
                         <span>{change.from_plan_name || "-"}</span>
                         <span>{change.to_plan_name || "-"}</span>
                         <span className="mono">{formatDateTime(change.effective_at)}</span>
+                        <span>{change.change_type === "upgrade" && change.status === "applied" ? `${formatMoney(change.target_plan_amount)}원` : "-"}</span>
+                        <span>{change.change_type === "upgrade" && change.status === "applied" ? `${formatMoney(change.discount_amount)}원` : "-"}</span>
+                        <span>{change.change_type === "upgrade" && change.status === "applied" ? `${formatMoney(change.charged_amount)}원` : "-"}</span>
                       </div>
                     ))}
                   </div>

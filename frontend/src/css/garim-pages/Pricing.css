@@ -126,3 +126,22 @@
   flex-wrap: wrap;
   width: 100%;
 }
+
+/* [한글 주석] 요금제 카드 내의 혜택 리스트가 남는 빈 세로 공간을 다 차지하도록 설정하여 하단 영역을 정렬시킵니다. */
+.price-card__feats {
+  flex-grow: 1;
+}
+
+/* [한글 주석] 1번 버튼과 2번 설명/링크 영역을 감싸 요금제 카드의 바닥에 고정시키는 액션 컨테이너 클래스입니다. */
+.price-card__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: auto;
+}
+
+/* [한글 주석] 2번 정보 영역의 높이를 80px로 일치시켜 가로 열 간의 버튼 Y축 정렬선이 동일하게 형성되도록 제어합니다. */
+.price-card__action-info {
+  height: 80px;
+  box-sizing: border-box;
+}

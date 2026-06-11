@@ -1,3 +1,4 @@
+from math import floor
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -25,12 +26,6 @@ def _subscription_payload(row):
         "cancel_at_period_end": row.get("cancel_at_period_end"),
         "cancelled_at": _to_iso(row.get("cancelled_at")),
         "billing_status": row.get("billing_status"),
-        "carried_over_days": row.get("carried_over_days"),
-        "superseded_by_subscription_id": (
-            str(row["superseded_by_subscription_id"])
-            if row.get("superseded_by_subscription_id")
-            else None
-        ),
     }
 
 
@@ -42,6 +37,7 @@ def _plan_payload(row):
         "plan_rank": int(row.get("plan_rank") or 0),
         "price_amount": int(row.get("price_amount") or 0),
         "credits": int(row.get("credits") or 0),
+        "billing_period_days": int(row.get("billing_period_days") or 30), # [한글 주석] 플랜 갱신 주기(일 단위) 추가
     }
 
 
@@ -53,6 +49,7 @@ def _default_free_plan():
         "plan_rank": 0,
         "price_amount": 0,
         "credits": 0,
+        "billing_period_days": 30, # [한글 주석] 기본 무료 플랜 주기 설정
     }
 
 
@@ -70,14 +67,13 @@ def resolve_current_plan(db: Session, user_id: str):
                 s.cancel_at_period_end,
                 s.cancelled_at,
                 s.billing_status,
-                s.carried_over_days,
-                s.superseded_by_subscription_id,
                 p.plan_id,
                 p.plan_code,
                 p.plan_name,
                 p.plan_rank,
                 p.price_amount,
-                p.credits
+                p.credits,
+                p.billing_period_days -- [한글 주석] 동적 만료일 설정을 위해 추가
             FROM subscriptions s
             JOIN plans p ON p.plan_id = s.plan_id
             WHERE s.user_id = :user_id
@@ -109,7 +105,8 @@ def resolve_current_plan(db: Session, user_id: str):
                 plan_name,
                 plan_rank,
                 price_amount,
-                credits
+                credits,
+                billing_period_days -- [한글 주석] 동적 만료일 설정을 위해 추가
             FROM plans
             WHERE LOWER(plan_code) = 'free'
               AND status = 'active'
@@ -136,7 +133,8 @@ def _get_target_plan(db: Session, to_plan_id: str):
                 plan_name,
                 plan_rank,
                 price_amount,
-                credits
+                credits,
+                billing_period_days -- [한글 주석] 동적 만료일 설정을 위해 추가
             FROM plans
             WHERE status = 'active'
               AND (
@@ -154,6 +152,40 @@ def _get_target_plan(db: Session, to_plan_id: str):
     return _plan_payload(target)
 
 
+def calculate_upgrade_proration(current_plan, current_subscription, target_plan, now=None):
+    """업그레이드 시 기존 플랜의 잔여 이용 가치를 금액으로 계산한다. (소수점 이하 버림)"""
+    if now is None:
+        from datetime import datetime
+        now = datetime.now()
+
+    from dateutil.parser import parse
+    def parse_dt(dt_val):
+        if isinstance(dt_val, str):
+            return parse(dt_val)
+        return dt_val
+
+    current_period_start = parse_dt(current_subscription["current_period_start"])
+    current_period_end = parse_dt(current_subscription["current_period_end"])
+    now = parse_dt(now)
+
+    period_seconds = max(1.0, (current_period_end - current_period_start).total_seconds())
+    remaining_seconds = max(0.0, (current_period_end - now).total_seconds())
+
+    remaining_amount = floor(int(current_plan["price_amount"] or 0) * remaining_seconds / period_seconds)
+    target_plan_amount = int(target_plan["price_amount"] or 0)
+    charged_amount = max(0, target_plan_amount - remaining_amount)
+    discount_amount = target_plan_amount - charged_amount
+
+    return {
+        "period_seconds": int(period_seconds),
+        "remaining_seconds": int(remaining_seconds),
+        "remaining_amount": remaining_amount,
+        "target_plan_amount": target_plan_amount,
+        "discount_amount": discount_amount,
+        "charged_amount": charged_amount
+    }
+
+
 def classify_plan_change(db: Session, user_id: str, to_plan_id: str):
     """현재 플랜과 대상 플랜의 rank를 비교해 플랜 변경 유형만 판단한다."""
     current = resolve_current_plan(db, user_id)
@@ -164,6 +196,7 @@ def classify_plan_change(db: Session, user_id: str, to_plan_id: str):
     target_rank = int(target_plan.get("plan_rank") or 0)
     target_code = (target_plan.get("plan_code") or "").lower()
 
+    proration = None
     if target_code == "free":
         change_type = "cancel_to_free"
         apply_timing = "period_end"
@@ -172,6 +205,12 @@ def classify_plan_change(db: Session, user_id: str, to_plan_id: str):
         change_type = "upgrade"
         apply_timing = "immediate"
         requires_payment_now = True
+        if current["current_subscription"]:
+            proration = calculate_upgrade_proration(
+                current_plan=current_plan,
+                current_subscription=current["current_subscription"],
+                target_plan=target_plan
+            )
     elif target_rank < current_rank:
         change_type = "downgrade"
         apply_timing = "period_end"
@@ -181,7 +220,7 @@ def classify_plan_change(db: Session, user_id: str, to_plan_id: str):
         apply_timing = "none"
         requires_payment_now = False
 
-    return {
+    res = {
         "change_type": change_type,
         "apply_timing": apply_timing,
         "requires_payment_now": requires_payment_now,
@@ -189,6 +228,9 @@ def classify_plan_change(db: Session, user_id: str, to_plan_id: str):
         "target_plan": target_plan,
         "current_subscription": current["current_subscription"],
     }
+    if proration:
+        res["proration"] = proration
+    return res
 
 
 def request_plan_change(db: Session, user_id: str, to_plan_id: str):
@@ -380,9 +422,7 @@ def resume_subscription(db: Session, user_id: str, subscription_id: str):
                 auto_renew,
                 cancel_at_period_end,
                 cancelled_at,
-                billing_status,
-                carried_over_days,
-                superseded_by_subscription_id
+                billing_status
         """),
         {"subscription_id": subscription_id},
     ).fetchone()
@@ -570,8 +610,12 @@ def create_or_extend_subscription(
     user_id: str,
     plan_id,
     payment_id=None,
+    billing_key_id=None, # [한글 주석] 정기 결제 빌링키 ID 파라미터 추가
 ):
-    """결제 성공 후 같은 플랜 구독을 30일 생성하거나 연장한다."""
+    """결제 성공 후 같은 플랜 구독을 동적으로 정의된 기간만큼 생성하거나 연장한다."""
+    target_plan = _get_target_plan(db, str(plan_id))
+    p_days = int(target_plan.get("billing_period_days") or 30)
+
     existing_row = db.execute(
         text("""
             SELECT
@@ -606,23 +650,23 @@ def create_or_extend_subscription(
                     current_period_start = COALESCE(current_period_start, NOW()),
                     current_period_end = CASE
                         WHEN current_period_end > NOW()
-                        THEN current_period_end + INTERVAL '30 days'
-                        ELSE NOW() + INTERVAL '30 days'
+                        THEN current_period_end + CAST(:period_days || ' days' AS interval) -- [한글 주석] 동적 만료일 연장
+                        ELSE NOW() + CAST(:period_days || ' days' AS interval)
                     END,
                     next_billing_at = CASE
                         WHEN current_period_end > NOW()
-                        THEN current_period_end + INTERVAL '30 days'
-                        ELSE NOW() + INTERVAL '30 days'
+                        THEN current_period_end + CAST(:period_days || ' days' AS interval) -- [한글 주석] 동적 다음결제일 연장
+                        ELSE NOW() + CAST(:period_days || ' days' AS interval)
                     END,
                     ended_at = CASE
                         WHEN current_period_end > NOW()
-                        THEN current_period_end + INTERVAL '30 days'
-                        ELSE NOW() + INTERVAL '30 days'
+                        THEN current_period_end + CAST(:period_days || ' days' AS interval) -- [한글 주석] 동적 만료일 연장
+                        ELSE NOW() + CAST(:period_days || ' days' AS interval)
                     END,
                     renew_at = CASE
                         WHEN current_period_end > NOW()
-                        THEN current_period_end + INTERVAL '30 days'
-                        ELSE NOW() + INTERVAL '30 days'
+                        THEN current_period_end + CAST(:period_days || ' days' AS interval) -- [한글 주석] 동적 갱신일 연장
+                        ELSE NOW() + CAST(:period_days || ' days' AS interval)
                     END,
                     status = 'active',
                     auto_renew = true,
@@ -630,6 +674,7 @@ def create_or_extend_subscription(
                     cancelled_at = NULL,
                     billing_status = 'paid',
                     last_payment_id = :payment_id,
+                    billing_key_id = COALESCE(CAST(:billing_key_id AS uuid), billing_key_id), -- [한글 주석] 빌링키 정보 업데이트
                     updated_at = NOW()
                 WHERE subscription_id = :subscription_id
                 RETURNING subscription_id, current_period_start, current_period_end, next_billing_at
@@ -637,6 +682,8 @@ def create_or_extend_subscription(
             {
                 "subscription_id": existing["subscription_id"],
                 "payment_id": payment_id,
+                "billing_key_id": billing_key_id, # [한글 주석] 빌링키 바인딩 추가
+                "period_days": p_days,
             },
         ).fetchone()
         return _row_mapping(extend_row)
@@ -648,20 +695,17 @@ def create_or_extend_subscription(
                 SET
                     status = 'active',
                     started_at = NOW(),
-                    ended_at = NOW() + INTERVAL '30 days',
-                    renew_at = NOW() + INTERVAL '30 days',
+                    ended_at = NOW() + CAST(:period_days || ' days' AS interval), -- [한글 주석] 동적 만료일 설정
+                    renew_at = NOW() + CAST(:period_days || ' days' AS interval), -- [한글 주석] 동적 갱신일 설정
                     current_period_start = NOW(),
-                    current_period_end = NOW() + INTERVAL '30 days',
-                    next_billing_at = NOW() + INTERVAL '30 days',
+                    current_period_end = NOW() + CAST(:period_days || ' days' AS interval), -- [한글 주석] 동적 만료일 설정
+                    next_billing_at = NOW() + CAST(:period_days || ' days' AS interval), -- [한글 주석] 동적 다음결제일 설정
                     auto_renew = true,
                     cancel_at_period_end = false,
                     cancelled_at = NULL,
                     billing_status = 'paid',
                     last_payment_id = :payment_id,
-                    upgraded_at = NULL,
-                    superseded_by_subscription_id = NULL,
-                    carried_over_days = 0,
-                    original_period_end = NULL,
+                    billing_key_id = CAST(:billing_key_id AS uuid), -- [한글 주석] 빌링키 정보 재설정
                     updated_at = NOW()
                 WHERE subscription_id = :subscription_id
                 RETURNING subscription_id, current_period_start, current_period_end, next_billing_at
@@ -669,6 +713,8 @@ def create_or_extend_subscription(
             {
                 "subscription_id": existing["subscription_id"],
                 "payment_id": payment_id,
+                "billing_key_id": billing_key_id, # [한글 주석] 빌링키 바인딩 추가
+                "period_days": p_days,
             },
         ).fetchone()
         return _row_mapping(reset_row)
@@ -689,6 +735,7 @@ def create_or_extend_subscription(
                 cancel_at_period_end,
                 billing_status,
                 last_payment_id,
+                billing_key_id, -- [한글 주석] 빌링키 컬럼 추가
                 created_at,
                 updated_at
             )
@@ -697,15 +744,16 @@ def create_or_extend_subscription(
                 :plan_id,
                 'active',
                 NOW(),
-                NOW() + INTERVAL '30 days',
-                NOW() + INTERVAL '30 days',
+                NOW() + CAST(:period_days || ' days' AS interval), -- [한글 주석] 동적 만료일 설정
+                NOW() + CAST(:period_days || ' days' AS interval), -- [한글 주석] 동적 갱신일 설정
                 NOW(),
-                NOW() + INTERVAL '30 days',
-                NOW() + INTERVAL '30 days',
+                NOW() + CAST(:period_days || ' days' AS interval), -- [한글 주석] 동적 만료일 설정
+                NOW() + CAST(:period_days || ' days' AS interval), -- [한글 주석] 동적 다음결제일 설정
                 true,
                 false,
                 'paid',
                 :payment_id,
+                CAST(:billing_key_id AS uuid), -- [한글 주석] 빌링키 컬럼 바인딩
                 NOW(),
                 NOW()
             )
@@ -715,19 +763,22 @@ def create_or_extend_subscription(
             "user_id": user_id,
             "plan_id": plan_id,
             "payment_id": payment_id,
+            "billing_key_id": billing_key_id, # [한글 주석] 빌링키 바인딩 추가
+            "period_days": p_days,
         },
     ).fetchone()
     return _row_mapping(insert_row)
 
 
-def apply_upgrade_with_carryover(
+def apply_upgrade_with_proration(
     db: Session,
     user_id: str,
     from_subscription_id=None,
     to_plan_id=None,
     payment_id=None,
+    billing_key_id=None, # [한글 주석] 정기 결제 빌링키 ID 파라미터 추가
 ):
-    """Create the upgraded subscription now and carry the lower plan's remaining time after it."""
+    """업그레이드 시 기존 구독을 즉시 취소하고, 새 플랜 구독을 정산 차액 기준으로 적용합니다."""
     if not to_plan_id:
         raise ValueError("Target plan is required for upgrade.")
 
@@ -743,6 +794,14 @@ def apply_upgrade_with_carryover(
     if int(target_plan["plan_rank"]) <= int(lower.get("plan_rank") or 0):
         raise ValueError("Target plan must be higher than the current plan.")
 
+    # 1. 정산 금액 계산
+    proration = calculate_upgrade_proration(
+        current_plan=lower,
+        current_subscription=lower,
+        target_plan=target_plan
+    )
+
+    # 2. 새 상위 구독 active 생성 (빌링키 고유 ID 매핑 보존)
     upper_row = db.execute(
         text("""
             INSERT INTO subscriptions (
@@ -759,6 +818,7 @@ def apply_upgrade_with_carryover(
                 cancel_at_period_end,
                 billing_status,
                 last_payment_id,
+                billing_key_id, -- [한글 주석] 빌링키 고유키 매핑
                 created_at,
                 updated_at
             )
@@ -767,15 +827,16 @@ def apply_upgrade_with_carryover(
                 :plan_id,
                 'active',
                 NOW(),
-                NOW() + INTERVAL '30 days',
-                NOW() + INTERVAL '30 days',
+                NOW() + CAST(:period_days || ' days' AS interval), -- [한글 주석] 동적 만료일 설정
+                NOW() + CAST(:period_days || ' days' AS interval), -- [한글 주석] 동적 갱신일 설정
                 NOW(),
-                NOW() + INTERVAL '30 days',
-                NOW() + INTERVAL '30 days',
+                NOW() + CAST(:period_days || ' days' AS interval), -- [한글 주석] 동적 만료일 설정
+                NOW() + CAST(:period_days || ' days' AS interval), -- [한글 주석] 동적 다음결제일 설정
                 true,
                 false,
                 'paid',
                 :payment_id,
+                CAST(:billing_key_id AS uuid), -- [한글 주석] 빌링키 컬럼 바인딩
                 NOW(),
                 NOW()
             )
@@ -785,61 +846,56 @@ def apply_upgrade_with_carryover(
             "user_id": user_id,
             "plan_id": target_plan["plan_id"],
             "payment_id": payment_id,
+            "billing_key_id": billing_key_id,
+            "period_days": int(target_plan.get("billing_period_days") or 30),
         },
     ).fetchone()
     upper = _row_mapping(upper_row)
 
-    lower_update_row = db.execute(
+    # 3. 기존 하위 구독 즉시 취소(cancelled) 처리
+    db.execute(
         text("""
-            WITH remaining AS (
-                SELECT
-                    current_period_end AS original_end,
-                    GREATEST(0, EXTRACT(EPOCH FROM (current_period_end - NOW()))) AS remaining_seconds,
-                    CEIL(GREATEST(0, EXTRACT(EPOCH FROM (current_period_end - NOW()))) / 86400.0)::integer AS remaining_days
-                FROM subscriptions
-                WHERE subscription_id = :lower_subscription_id
-            ),
-            calculated AS (
-                SELECT
-                    original_end,
-                    remaining_seconds,
-                    remaining_days,
-                    CAST(:upper_period_end AS timestamp)
-                        + (remaining_seconds || ' seconds')::interval AS carried_end
-                FROM remaining
-            )
-            UPDATE subscriptions s
+            UPDATE subscriptions
             SET
-                original_period_end = COALESCE(s.original_period_end, calculated.original_end),
-                current_period_end = calculated.carried_end,
-                ended_at = calculated.carried_end,
-                renew_at = calculated.carried_end,
+                status = 'cancelled',
+                ended_at = NOW(),
+                renew_at = NULL,
+                current_period_end = NOW(),
                 next_billing_at = NULL,
                 auto_renew = false,
-                cancel_at_period_end = true,
-                billing_status = 'paid',
-                upgraded_at = NOW(),
-                superseded_by_subscription_id = :upper_subscription_id,
-                carried_over_days = calculated.remaining_days,
+                cancel_at_period_end = false,
+                cancelled_at = NOW(),
+                billing_status = 'cancelled',
                 updated_at = NOW()
-            FROM calculated
-            WHERE s.subscription_id = :lower_subscription_id
-            RETURNING
-                s.subscription_id,
-                s.plan_id,
-                s.original_period_end,
-                s.current_period_end,
-                s.carried_over_days,
-                calculated.remaining_seconds
+            WHERE subscription_id = :from_subscription_id
+              AND user_id = :user_id
+              AND status = 'active'
         """),
         {
-            "lower_subscription_id": lower["subscription_id"],
-            "upper_subscription_id": upper["subscription_id"],
-            "upper_period_end": upper["current_period_end"],
+            "from_subscription_id": lower["subscription_id"],
+            "user_id": user_id,
         },
-    ).fetchone()
-    lower_update = _row_mapping(lower_update_row)
+    )
 
+    # 4. 기존 하위 구독에 연계되었던 모든 예약 변경(scheduled) 취소(cancelled)
+    db.execute(
+        text("""
+            UPDATE subscription_plan_changes
+            SET
+                status = 'cancelled',
+                cancelled_at = NOW(),
+                updated_at = NOW()
+            WHERE user_id = :user_id
+              AND from_subscription_id = :from_subscription_id
+              AND status = 'scheduled'
+        """),
+        {
+            "user_id": user_id,
+            "from_subscription_id": lower["subscription_id"],
+        },
+    )
+
+    # 5. subscription_plan_changes 정산 이력 기록
     plan_change_row = db.execute(
         text("""
             INSERT INTO subscription_plan_changes (
@@ -852,10 +908,12 @@ def apply_upgrade_with_carryover(
                 change_type,
                 apply_timing,
                 status,
-                remaining_days,
                 remaining_seconds,
+                remaining_amount,
+                target_plan_amount,
+                discount_amount,
+                charged_amount,
                 from_subscription_original_end,
-                from_subscription_new_end,
                 requested_at,
                 effective_at,
                 applied_at,
@@ -872,10 +930,12 @@ def apply_upgrade_with_carryover(
                 'upgrade',
                 'immediate',
                 'applied',
-                :remaining_days,
                 :remaining_seconds,
-                :original_period_end,
-                :current_period_end,
+                :remaining_amount,
+                :target_plan_amount,
+                :discount_amount,
+                :charged_amount,
+                :from_subscription_original_end,
                 NOW(),
                 NOW(),
                 NOW(),
@@ -890,10 +950,12 @@ def apply_upgrade_with_carryover(
             "from_plan_id": lower["plan_id"],
             "to_plan_id": target_plan["plan_id"],
             "lower_subscription_id": lower["subscription_id"],
-            "remaining_days": lower_update["carried_over_days"],
-            "remaining_seconds": lower_update["remaining_seconds"],
-            "original_period_end": lower_update["original_period_end"],
-            "current_period_end": lower_update["current_period_end"],
+            "remaining_seconds": proration["remaining_seconds"],
+            "remaining_amount": proration["remaining_amount"],
+            "target_plan_amount": proration["target_plan_amount"],
+            "discount_amount": proration["discount_amount"],
+            "charged_amount": proration["charged_amount"],
+            "from_subscription_original_end": lower["current_period_end"],
         },
     ).fetchone()
     plan_change = _row_mapping(plan_change_row)
@@ -901,9 +963,7 @@ def apply_upgrade_with_carryover(
     return {
         "subscription_id": upper["subscription_id"],
         "upper_subscription": upper,
-        "lower_subscription": lower_update,
         "plan_change_id": plan_change["plan_change_id"] if plan_change else None,
-        "carried_over_days": lower_update["carried_over_days"],
     }
 
 
@@ -928,7 +988,8 @@ def _find_upgrade_source_subscription(
                 s.plan_id,
                 s.current_period_start,
                 s.current_period_end,
-                p.plan_rank
+                p.plan_rank,
+                p.price_amount -- [한글 주석] 기존 구독 플랜의 잔여 가치 금액 계산을 위해 가격 추가
             FROM subscriptions s
             JOIN plans p ON p.plan_id = s.plan_id
             WHERE s.user_id = :user_id

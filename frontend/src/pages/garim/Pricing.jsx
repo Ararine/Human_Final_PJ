@@ -83,6 +83,24 @@ export default function Pricing() {
     creditRows = [displayedCredits.slice(0, 4), displayedCredits.slice(4, 8)];
   }
 
+  // [한글 주석]
+  // 결제 성공 횟수가 가장 높은 활성 크레딧 플랜에 하이라이트를 적용하기 위한 키 계산 로직입니다.
+  // 1. 노출할 크레딧 플랜 목록 중 최대 결제 성공 횟수(popularityCount)를 도출합니다.
+  // 2. 최대 횟수가 0보다 큰 경우, 해당 최대 횟수를 가진 플랜들 중 정렬 순서(sortOrder)가 가장 높은 것을 선택합니다.
+  // 3. 만약 모든 플랜의 결제 성공 횟수가 0이거나 초기 상태인 경우, 목록의 첫 번째 크레딧 플랜을 기본 하이라이트 대상으로 지정합니다.
+  let highlightedCreditKey = "";
+  if (displayedCredits.length > 0) {
+    const maxPopularity = Math.max(...displayedCredits.map((p) => p.popularityCount ?? 0));
+    if (maxPopularity > 0) {
+      const candidates = displayedCredits.filter((p) => (p.popularityCount ?? 0) === maxPopularity);
+      // sortOrder 기준 내림차순 정렬 후 첫 번째 선택 (동률인 경우 가격이 더 높은 플랜을 선택하기 위함)
+      candidates.sort((a, b) => b.sortOrder - a.sortOrder);
+      highlightedCreditKey = candidates[0].key;
+    } else {
+      highlightedCreditKey = displayedCredits[0].key;
+    }
+  }
+
   function handlePayClick(plan) {
     const isCredit = plan.productType === "credit";
     const params = new URLSearchParams({
@@ -98,6 +116,25 @@ export default function Pricing() {
     }
     navigate(paymentPath);
   }
+
+  // [한글 주석] 세 요금제 카드 중 2번 영역(전환 예약 안내 박스 혹은 구독 관리 링크)에 유효한 정보가 하나라도 노출되는지 감지합니다.
+  // 하나도 노출되지 않는 경우(예: 현재 무료 플랜을 쓰고 있어서 자동결제나 이력 등이 없는 상태)에는 하단의 80px 여백을 제거하기 위함입니다.
+  const hasAnyActionInfo = plans.some((plan) => {
+    const isCurrent = plan.key === currentPlanCode;
+    const curRank = Number(paymentInfo?.current_plan?.plan_rank ?? 0);
+    const planRank = Number(plan.planRank ?? 0);
+    const isLower = planRank < curRank;
+
+    // 현재 플랜이면서 구독 정보가 있는 경우 (단, 무료 플랜은 다음 결제일 등의 구독 관리가 없으므로 제외)
+    if (isCurrent && paymentInfo?.current_subscription && plan.key !== "free") {
+      return true;
+    }
+    // 현재 플랜보다 낮은 랭크의 플랜인 경우 (전환 변경 예약 설명 박스 노출 대상)
+    if (isLower) {
+      return true;
+    }
+    return false;
+  });
 
   return (
     <GarimPage bodyClass="page-public" screenLabel="02 Pricing">
@@ -127,10 +164,6 @@ export default function Pricing() {
             const planRank = Number(plan.planRank ?? 0);
             const isLowerPlan = planRank < curRank;
 
-            // 이월 구독 이력 정보 매핑
-            const carriedOver = paymentInfo?.carried_over_subscription;
-            const isCarriedPlan = carriedOver && carriedOver.plan_code === plan.key;
-
             // 다운그레이드 예약 활성화 상태 매핑
             const isScheduledToThis = paymentInfo?.scheduled_plan_change?.to_plan_code === plan.key;
 
@@ -142,12 +175,7 @@ export default function Pricing() {
               {/* 플랜 명칭과 배지를 한 행에 정렬 */}
               <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
                 <span className="overline-k" style={{ margin: 0, lineHeight: 1 }}>{plan.name}</span>
-                {/* 1번 체크: 이전 플랜 뱃지 표시(이월 발생 시) */}
-                {isCarriedPlan ? (
-                  <span className="mui-chip" style={{ background: "rgba(0, 0, 0, 0.08)", color: "var(--fg-2)" }}>
-                    이전 플랜
-                  </span>
-                ) : (isCurrentPlan || plan.badge) && (
+                {(isCurrentPlan || plan.badge) && (
                   <span className={`mui-chip ${isCurrentPlan ? "" : plan.badgeClass} price-card__badge`}>
                     {isCurrentPlan ? "현재 플랜" : plan.badge}
                   </span>
@@ -161,53 +189,9 @@ export default function Pricing() {
                   {plan.key === "free" ? "/ 영구" : "/ 30일"}
                 </span>
               </div>
-              {/* 1번 체크: 업그레이드로 종료됨 회색 배지 박스 추가 */}
-              {isCarriedPlan && (
-                <div style={{ marginTop: "4px", marginBottom: "8px" }}>
-                  <span
-                    style={{
-                      background: "rgba(0, 0, 0, 0.05)",
-                      border: "1px solid var(--mui-divider)",
-                      color: "var(--fg-2)",
-                      padding: "4px 8px",
-                      fontSize: "11px",
-                      borderRadius: "4px",
-                      fontWeight: "500",
-                      display: "inline-block"
-                    }}
-                  >
-                    업그레이드로 종료됨
-                  </span>
-                </div>
-              )}
               <p className="caption-k" style={{ fontSize: "13px" }}>
                 {plan.description}
               </p>
-              {/* 2번 체크: Pro 카드 중간 업그레이드 및 이월 설명 안내 박스 */}
-              {isCarriedPlan && (
-                <div
-                  style={{
-                    background: "#e5f6fd",
-                    border: "1px solid #b3e5fc",
-                    color: "#014361",
-                    borderRadius: "8px",
-                    padding: "16px",
-                    fontSize: "13px",
-                    lineHeight: "1.6",
-                    marginBottom: "16px"
-                  }}
-                >
-                  <div style={{ display: "flex", gap: "6px", alignItems: "flex-start" }}>
-                    <span className="material-icons" style={{ fontSize: "18px", marginTop: "1px" }}>info</span>
-                    <div>
-                      {formatDateDot(carriedOver.current_period_end)} {carriedOver.plan_name} 플랜으로 업그레이드되며 종료되었습니다.
-                      <div style={{ marginTop: "4px" }}>
-                        남은 {carriedOver.carried_over_days}일이 {paymentInfo?.plan_name || "Studio"} 플랜 기간 뒤로 이월되었습니다.
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
               <ul className="price-card__feats">
                 <li>
                   <span className="material-icons">check</span>크레딧{" "}
@@ -239,83 +223,63 @@ export default function Pricing() {
                   {formatQuota(plan.retention.metadataRetentionDays, "일")} 보존
                 </li>
               </ul>
-              {isCurrentPlan ? (
-                /* 현재 플랜인 경우: 버튼 문구를 '현재 구독 중'으로 변경하고 하단에 구독 정보 및 관리 링크 노출 */
-                <>
-                  <button
-                    type="button"
-                    className="mui-btn mui-btn--contained mui-btn--block current-plan-btn"
-                    onClick={() => navigate("/settings")}
-                  >
-                    현재 구독 중
-                  </button>
-
-                  {/* 노란색 체크: 현재 구독 정보 표시 영역 */}
-                  {paymentInfo?.current_subscription && (
-                    <div style={{ marginTop: "16px" }}>
-                      <div
-                        style={{
-                          fontSize: "13px",
-                          fontWeight: "600",
-                          color: "var(--fg-1)",
-                          marginBottom: "8px",
-                          textAlign: "left"
-                        }}
+              {/* [한글 주석] 하단 1번 버튼들과 2번 정보 영역을 세로/가로로 동일하게 정렬시키기 위한 액션 그룹 래퍼입니다. */}
+              <div className="price-card__actions">
+                <div className="price-card__action-btn">
+                  {isCurrentPlan ? (
+                    plan.key === "free" ? (
+                      /* [한글 주석] 현재 사용중인 플랜이 무료 플랜일 경우 파란색 활성화 버튼("무료로 시작")으로 변경하고 로그인 여부에 따라 라우팅합니다. */
+                      <button
+                        type="button"
+                        className="mui-btn mui-btn--contained mui-btn--primary mui-btn--block"
+                        onClick={() => navigate(startHref)}
                       >
-                        현재 구독 정보
-                      </div>
-                      <div
-                        style={{
-                          border: "1px solid var(--mui-divider)",
-                          borderRadius: "8px",
-                          background: "#fff",
-                          fontSize: "12px",
-                          lineHeight: "1.6",
-                          overflow: "hidden"
-                        }}
+                        무료로 시작
+                      </button>
+                    ) : (
+                      /* [한글 주석] 현재 사용 중인 유료 플랜의 경우 기존 회색 스타일의 '현재 구독 중' 버튼을 유지합니다. */
+                      <button
+                        type="button"
+                        className="mui-btn mui-btn--contained mui-btn--block current-plan-btn"
+                        onClick={() => navigate("/settings")}
                       >
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            padding: "8px 12px",
-                            borderBottom: "1px solid var(--mui-divider)"
-                          }}
-                        >
-                          <span style={{ color: "var(--fg-2)" }}>다음 결제일</span>
-                          <span style={{ fontWeight: "500" }}>
-                            {formatDateDot(paymentInfo.current_subscription.next_billing_at)}
-                          </span>
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            padding: "8px 12px",
-                            borderBottom: "1px solid var(--mui-divider)"
-                          }}
-                        >
-                          <span style={{ color: "var(--fg-2)" }}>자동결제</span>
-                          <span style={{ fontWeight: "500" }}>
-                            {paymentInfo.current_subscription.auto_renew ? "사용 중" : "중지"}
-                          </span>
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            padding: "8px 12px"
-                          }}
-                        >
-                          <span style={{ color: "var(--fg-2)" }}>상태</span>
-                          <span style={{ fontWeight: "500" }}>
-                            {paymentInfo.current_subscription.status === "active" ? "활성" : "정지"}
-                          </span>
-                        </div>
-                      </div>
+                        현재 구독 중
+                      </button>
+                    )
+                  ) : isLowerPlan ? (
+                    /* 현재 플랜보다 rank가 낮은 플랜인 경우: 무료 플랜으로 변경 또는 ~로 변경 예약 */
+                    <button
+                      type="button"
+                      className="mui-btn mui-btn--outlined mui-btn--block"
+                      onClick={() => navigate("/settings")}
+                    >
+                      {plan.key === "free" ? "무료 플랜으로 변경" : `${plan.name}로 변경 예약`}
+                    </button>
+                  ) : plan.key === "free" ? (
+                    <a
+                      href={startHref}
+                      className="mui-btn mui-btn--contained mui-btn--block"
+                    >
+                      {plan.cta}
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      className="mui-btn mui-btn--outlined mui-btn--block"
+                      onClick={() => handlePayClick(plan)}
+                    >
+                      {plan.cta}
+                    </button>
+                  )}
+                </div>
 
-                      {/* 구독 관리로 이동 링크 */}
-                      <div style={{ textAlign: "center", marginTop: "12px" }}>
+                {/* [한글 주석] 화면 상에 유효한 정보(전환 안내 박스, 구독 관리 링크 등)가 표시될 요소가 있는 경우에만 영역을 렌더링하여 하단 빈 여백을 지웁니다. */}
+                {hasAnyActionInfo && (
+                  <div className="price-card__action-info">
+                    {/* [한글 주석] 2번 영역: 사용자의 현재 구독 여부나 전환 예약 정보에 따라 해당하는 텍스트 박스 혹은 링크를 노출합니다. */}
+                    {isCurrentPlan && paymentInfo?.current_subscription ? (
+                      /* [한글 주석] 구독 관리로 이동하는 링크 버튼 영역입니다. 높이 정렬을 위해 flex 중앙 정렬을 적용합니다. */
+                      <div style={{ textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
                         <button
                           type="button"
                           onClick={() => navigate("/settings")}
@@ -337,57 +301,35 @@ export default function Pricing() {
                           </span>
                         </button>
                       </div>
-                    </div>
-                  )}
-                </>
-              ) : isLowerPlan ? (
-                /* 현재 플랜보다 rank가 낮은 플랜인 경우: 무료 플랜으로 변경(3번 체크) 또는 ~로 변경 예약(1번 체크) */
-                <button
-                  type="button"
-                  className="mui-btn mui-btn--outlined mui-btn--block"
-                  onClick={() => navigate("/settings")}
-                >
-                  {plan.key === "free" ? "무료 플랜으로 변경" : `${plan.name}로 변경 예약`}
-                </button>
-              ) : plan.key === "free" ? (
-                <a
-                  href={startHref}
-                  className="mui-btn mui-btn--contained mui-btn--block"
-                >
-                  {plan.cta}
-                </a>
-              ) : (
-                <button
-                  type="button"
-                  className="mui-btn mui-btn--outlined mui-btn--block"
-                  onClick={() => handlePayClick(plan)}
-                >
-                  {plan.cta}
-                </button>
-              )}
-
-              {/* 2번 및 4번 체크: 전환 예약 설명 문구 박스 (하위 플랜일 때 상시 노출) */}
-              {isLowerPlan && (
-                <div
-                  style={{
-                    background: "#f8fafc",
-                    border: "1px solid var(--mui-divider)",
-                    borderRadius: "8px",
-                    padding: "16px",
-                    fontSize: "13px",
-                    lineHeight: "1.5",
-                    color: "var(--fg-2)",
-                    marginTop: "16px",
-                    textAlign: "center"
-                  }}
-                >
-                  {plan.key === "free" ? (
-                    "현재 유료 플랜은 이번 이용 기간 종료일까지 유지되며, 다음 결제일부터 Free 플랜으로 전환됩니다."
-                  ) : (
-                    `현재 ${paymentInfo?.plan_name || "Studio"} 플랜은 이번 이용 기간 종료일까지 유지되며, 다음 결제일부터 ${plan.name} 플랜으로 전환됩니다.`
-                  )}
-                </div>
-              )}
+                    ) : isLowerPlan ? (
+                      /* [한글 주석] 전환 예약 설명 문구 박스로, height: 100%를 적용하여 action-info 컨테이너를 가득 채웁니다. */
+                      <div
+                        style={{
+                          background: "#f8fafc",
+                          border: "1px solid var(--mui-divider)",
+                          borderRadius: "8px",
+                          padding: "16px",
+                          fontSize: "13px",
+                          lineHeight: "1.5",
+                          color: "var(--fg-2)",
+                          textAlign: "center",
+                          height: "100%",
+                          boxSizing: "border-box"
+                        }}
+                      >
+                        {plan.key === "free" ? (
+                          "현재 유료 플랜은 이번 이용 기간 종료일까지 유지되며, 다음 결제일부터 Free 플랜으로 전환됩니다."
+                        ) : (
+                          `현재 ${paymentInfo?.plan_name || "Studio"} 플랜은 이번 이용 기간 종료일까지 유지되며, 다음 결제일부터 ${plan.name} 플랜으로 전환됩니다.`
+                        )}
+                      </div>
+                    ) : (
+                      /* [한글 주석] 그 외 정보 영역이 비어 있는 카드들은 정렬 레이아웃을 맞추기 위해 투명한 빈 공간으로 확보해 둡니다. */
+                      <div style={{ height: "100%" }} />
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           );
           })}
@@ -408,6 +350,8 @@ export default function Pricing() {
             <div className="credit-row" key={rIdx}>
               {row.map((plan) => {
                 const globalIndex = displayedCredits.indexOf(plan);
+                // [한글 주석] 계산된 highlightedCreditKey와 현재 플랜의 key가 일치하는지 비교하여 하이라이트 여부를 결정합니다.
+                const isHighlighted = plan.key === highlightedCreditKey;
                 return (
                   <div
                     key={plan.key}
@@ -415,7 +359,7 @@ export default function Pricing() {
                       width: "320px",
                       textAlign: "center",
                       border:
-                        globalIndex === 0
+                        isHighlighted
                           ? "2px solid #1976d2"
                           : "1px solid var(--mui-divider)",
                       padding: "32px 24px",
@@ -423,12 +367,12 @@ export default function Pricing() {
                       background: "#fff",
                       position: "relative",
                       boxShadow:
-                        globalIndex === 0 ? "0 8px 24px rgba(25,118,210,0.12)" : "none",
+                        isHighlighted ? "0 8px 24px rgba(25,118,210,0.12)" : "none",
                       display: "flex",
                       flexDirection: "column",
                     }}
                   >
-                    {globalIndex === 0 && (
+                    {isHighlighted && (
                       <div
                         style={{
                           position: "absolute",
@@ -459,7 +403,7 @@ export default function Pricing() {
                       <span
                         className="material-icons"
                         style={{
-                          color: globalIndex === 0 ? "#1976d2" : "var(--fg-2)",
+                          color: isHighlighted ? "#1976d2" : "var(--fg-2)",
                           fontSize: "24px",
                         }}
                       >
@@ -469,7 +413,7 @@ export default function Pricing() {
                         style={{
                           margin: 0,
                           fontSize: "20px",
-                          color: globalIndex === 0 ? "#1976d2" : "var(--fg-1)",
+                          color: isHighlighted ? "#1976d2" : "var(--fg-1)",
                           fontWeight: "600",
                         }}
                       >
@@ -510,7 +454,7 @@ export default function Pricing() {
                     <button
                       onClick={() => handlePayClick(plan)}
                       className={`mui-btn ${
-                        globalIndex === 0 ? "mui-btn--contained" : "mui-btn--outlined"
+                        isHighlighted ? "mui-btn--contained" : "mui-btn--outlined"
                       } mui-btn--block`}
                       style={{ padding: "12px" }}
                     >

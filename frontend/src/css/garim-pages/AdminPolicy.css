@@ -187,16 +187,18 @@ body { background: #fafafa; }
 }
 
 /* Chip Badge styling in Preview */
+/* Pricing.css와 일치하도록 배지 위치 속성을 relative로 변경합니다. */
 .pol-price-preview .price-card__badge {
-  position: absolute;
-  left: 24px;
-  top: -12px;
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
   font-size: 11px;
   font-weight: 600;
   padding: 4px 12px;
   border-radius: 20px;
   letter-spacing: 0.5px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  z-index: 2;
 }
 
 /* Plan Title */

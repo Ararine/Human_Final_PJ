@@ -3,76 +3,18 @@ import { getAdminPolicySettings } from "../utils/api";
 
 export const PLAN_KEYS = ["free", "pro", "studio"];
 
+// DB 정책 설정이 우선되므로 하드코딩된 기본 정책 플랜/크레딧 목록 데이터를 빈 객체로 초기화합니다.
 export const DEFAULT_POLICY = {
   file_processing: {
-    plans: {
-      free: {
-        fileSizeLimit: 50,
-        maxJobs: 3,
-        monthlyQuota: 5,
-        resultRetention: 3,
-      },
-      pro: {
-        fileSizeLimit: 500,
-        maxJobs: 10,
-        monthlyQuota: 50,
-        resultRetention: 7,
-      },
-      studio: {
-        fileSizeLimit: 2048,
-        maxJobs: 30,
-        monthlyQuota: null,
-        resultRetention: 30,
-      },
-    },
+    plans: {},
     allowedFormats: ["jpg", "jpeg", "png", "webp", "mp4", "mov"],
   },
   payment: {
-    plans: {
-      free: {
-        credits: 5,
-        price: 0,
-        sortOrder: 10,
-        status: "active",
-      },
-      pro: {
-        credits: 50,
-        price: 2900,
-        sortOrder: 20,
-        status: "active",
-      },
-      studio: {
-        credits: 500,
-        price: 19800,
-        sortOrder: 30,
-        status: "active",
-      },
-    },
-    creditPlans: {
-      credit_100: {
-        name: "100 크레딧",
-        credits: 100,
-        bonusCredits: 0,
-        price: 5000,
-        sortOrder: 10,
-        status: "active",
-      },
-      credit_500: {
-        name: "500 크레딧",
-        credits: 500,
-        bonusCredits: 0,
-        price: 20000,
-        sortOrder: 20,
-        status: "active",
-      },
-    },
+    plans: {},
+    creditPlans: {},
   },
   retention: {
-    plans: {
-      free: { autoDeleteOriginalHours: 12, metadataRetentionDays: 90 },
-      pro: { autoDeleteOriginalHours: 12, metadataRetentionDays: 90 },
-      studio: { autoDeleteOriginalHours: 12, metadataRetentionDays: 90 },
-    },
+    plans: {},
   },
 };
 
@@ -197,6 +139,8 @@ export function buildCreditPlans(policy) {
         bonusCredits: credit.bonusCredits || 0,
       },
       expiresDays: credit.expiresDays,
+      // 개별 크레딧 플랜의 과거 결제 성공 건수 통계를 정수형태로 바인딩합니다.
+      popularityCount: Number(credit.popularityCount ?? 0),
     }))
     .filter((plan) => plan.status === "active")
     .sort((a, b) => a.sortOrder - b.sortOrder);

@@ -215,6 +215,10 @@
   font: 400 13px var(--font-sans);
 }
 
+.billing-history__row > div:last-child {
+  text-align: right;
+}
+
 @media (max-width: 900px) {
   .billing-grid,
   .billing-definition,
@@ -228,6 +232,10 @@
   .billing-history__row {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .billing-history__row > div:last-child {
+    text-align: left;
   }
 
   .billing-hero__price {

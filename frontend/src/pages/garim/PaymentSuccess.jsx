@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom"; // useNavigate 
 
 import GarimPage from "../../components/garim/GarimPage";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
-import { confirmPayment } from "../../utils/api";
+import { confirmPayment, confirmBillingPayment } from "../../utils/api";
 
 function getProcessedOrders() {
   try {
@@ -40,13 +40,9 @@ export default function PaymentSuccess() {
   useDocumentTitle("결제 성공 · Garim");
   const navigate = useNavigate(); // useNavigate 훅 초기화
 
-  // 이전 페이지 이동 핸들러 (히스토리가 없으면 설정 페이지로 fallback)
+  // [한글 주석] 이전 페이지 이동 핸들러: 결제 성공 이후 백버튼 동작 시, 이전 결제 대기 페이지 진입을 차단하기 위해 요금제 페이지(/pricing)로 직접 라우팅시킵니다.
   const handleGoBack = () => {
-    if (window.history.length > 1) {
-      navigate(-1);
-    } else {
-      navigate("/settings");
-    }
+    navigate("/pricing");
   };
 
   // 결제 내역 확인(설정 페이지) 이동 핸들러
@@ -70,40 +66,71 @@ export default function PaymentSuccess() {
       if (didConfirmRef.current) return;
       didConfirmRef.current = true;
 
-      if (!paymentKey || !orderId || !requestedAmount) {
-        setStatus("error");
-        setMessage("결제 승인에 필요한 파라미터가 부족합니다.");
-        return;
-      }
+      const isBilling = window.location.pathname.includes("billing-success");
 
-      const processedOrders = getProcessedOrders();
-      if (processedOrders.includes(orderId)) {
-        setResult(getStoredPaymentResult(orderId));
-        setStatus("success");
-        setMessage("이미 처리된 결제입니다.");
-        return;
-      }
+      if (isBilling) {
+        /* [한글 주석] 정기 결제 빌링 인증 성공 시의 승인 처리 흐름입니다. */
+        const authKey = searchParams.get("authKey") || "";
+        const customerKey = searchParams.get("customerKey") || "";
+        const planCode = searchParams.get("planCode") || "";
 
-      try {
-        const data = await confirmPayment({
-          paymentKey,
-          orderId,
-          amount: requestedAmount,
-        });
-        addProcessedOrder(orderId);
-        storePaymentResult(orderId, data);
-        setResult(data);
-        setStatus("success");
-        setMessage(data.idempotent ? "이미 승인 완료된 결제입니다." : "결제 승인이 완료되었습니다.");
-      } catch (error) {
-        console.error("Failed to confirm payment", error);
-        setStatus("error");
-        setMessage(error.message || "결제 승인 처리에 실패했습니다.");
+        if (!authKey || !customerKey || !planCode) {
+          setStatus("error");
+          setMessage("정기 결제 승인에 필요한 파라미터가 부족합니다.");
+          return;
+        }
+
+        try {
+          const data = await confirmBillingPayment({
+            authKey,
+            customerKey,
+            planCode,
+          });
+          setResult(data);
+          setStatus("success");
+          setMessage(data.idempotent ? "이미 승인 완료된 정기 결제입니다." : "정기 구독 승인이 완료되었습니다.");
+        } catch (error) {
+          /* [한글 주석] 정기 결제 승인 처리가 실패했을 때, 상세 에러 메시지와 함께 정기결제 실패 페이지(/payment/billing-fail)로 리다이렉트시킵니다. */
+          console.error("Failed to confirm billing payment", error);
+          navigate(`/payment/billing-fail?message=${encodeURIComponent(error.message || "정기 결제 승인 처리에 실패했습니다.")}`);
+        }
+      } else {
+        /* [한글 주석] 기존 크레딧 일회성 결제 성공 시의 승인 처리 흐름입니다. */
+        if (!paymentKey || !orderId || !requestedAmount) {
+          setStatus("error");
+          setMessage("결제 승인에 필요한 파라미터가 부족합니다.");
+          return;
+        }
+
+        const processedOrders = getProcessedOrders();
+        if (processedOrders.includes(orderId)) {
+          setResult(getStoredPaymentResult(orderId));
+          setStatus("success");
+          setMessage("이미 처리된 결제입니다.");
+          return;
+        }
+
+        try {
+          const data = await confirmPayment({
+            paymentKey,
+            orderId,
+            amount: requestedAmount,
+          });
+          addProcessedOrder(orderId);
+          storePaymentResult(orderId, data);
+          setResult(data);
+          setStatus("success");
+          setMessage(data.idempotent ? "이미 승인 완료된 결제입니다." : "결제 승인이 완료되었습니다.");
+        } catch (error) {
+          console.error("Failed to confirm payment", error);
+          setStatus("error");
+          setMessage(error.message || "결제 승인 처리에 실패했습니다.");
+        }
       }
     }
 
     runConfirm();
-  }, [orderId, paymentKey, requestedAmount]);
+  }, [orderId, paymentKey, requestedAmount, searchParams]);
 
   return (
     <GarimPage bodyClass="page-app page-payment-success" screenLabel="Payment Success">

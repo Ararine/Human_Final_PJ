@@ -4,32 +4,18 @@ from sqlalchemy import text
 from utils.database import SessionLocal
 
 
+# DB 정책 데이터가 존재하므로 동적 구성을 위해 하드코딩된 기본 플랜 값들을 빈 사전으로 리셋합니다.
 DEFAULT_ADMIN_POLICIES = {
     "file_processing": {
-        "plans": {
-            "free":   {"fileSizeLimit": 50,   "maxJobs": 3,  "monthlyQuota": 5,    "resultRetention": 3,  "watermarkRequired": True},
-            "pro":    {"fileSizeLimit": 500,  "maxJobs": 10, "monthlyQuota": 50,   "resultRetention": 7,  "watermarkRequired": False},
-            "studio": {"fileSizeLimit": 2048, "maxJobs": 30, "monthlyQuota": None, "resultRetention": 30, "watermarkRequired": False},
-        },
+        "plans": {},
         "allowedFormats": ["jpg", "jpeg", "png", "webp", "mp4", "mov"],
     },
     "payment": {
-        "plans": {
-            "free":   {"credits": 5,   "price": 0},
-            "pro":    {"credits": 50,  "price": 2900},
-            "studio": {"credits": 500, "price": 19800},
-        },
-        "creditPlans": {
-            "credit_100": {"credits": 100, "bonusCredits": 0, "price": 5000},
-            "credit_500": {"credits": 500, "bonusCredits": 0, "price": 20000},
-        },
+        "plans": {},
+        "creditPlans": {},
     },
     "retention": {
-        "plans": {
-            "free":   {"autoDeleteOriginalHours": 12, "metadataRetentionDays": 90},
-            "pro":    {"autoDeleteOriginalHours": 12, "metadataRetentionDays": 90},
-            "studio": {"autoDeleteOriginalHours": 12, "metadataRetentionDays": 90},
-        },
+        "plans": {},
     },
     "notification": {
         "notifyAbuse": True,
@@ -545,10 +531,6 @@ def get_admin_subscriptions_list(
                 s.cancel_at_period_end,
                 s.cancelled_at,
                 s.billing_status,
-                s.carried_over_days,
-                s.superseded_by_subscription_id,
-                s.original_period_end,
-                s.upgraded_at,
                 p.plan_code,
                 p.plan_name,
                 p.plan_rank
@@ -594,22 +576,6 @@ def get_admin_subscriptions_list(
         ) scheduled_change ON TRUE
         LEFT JOIN LATERAL (
             SELECT
-                s.subscription_id,
-                p.plan_code,
-                p.plan_name,
-                s.current_period_end,
-                s.carried_over_days,
-                s.superseded_by_subscription_id
-            FROM subscriptions s
-            JOIN plans p ON p.plan_id = s.plan_id
-            WHERE s.user_id = u.user_id
-              AND current_sub.subscription_id IS NOT NULL
-              AND s.superseded_by_subscription_id = current_sub.subscription_id
-            ORDER BY s.current_period_end DESC NULLS LAST, s.created_at DESC
-            LIMIT 1
-        ) carried_over ON TRUE
-        LEFT JOIN LATERAL (
-            SELECT
                 attempted_at,
                 status,
                 attempt_type,
@@ -642,11 +608,6 @@ def get_admin_subscriptions_list(
                 current_sub.cancelled_at,
                 current_sub.billing_status,
                 COALESCE(active_counts.active_subscription_count, 0) AS active_subscription_count,
-                carried_over.subscription_id AS carried_over_subscription_id,
-                carried_over.plan_code AS carried_over_plan_code,
-                carried_over.plan_name AS carried_over_plan_name,
-                carried_over.current_period_end AS carried_over_period_end,
-                carried_over.carried_over_days,
                 scheduled_change.plan_change_id,
                 scheduled_change.change_type AS scheduled_change_type,
                 scheduled_change.status AS scheduled_change_status,
@@ -699,13 +660,7 @@ def get_admin_subscriptions_list(
                     "billing_status": m["billing_status"] or None,
                 },
                 "active_subscription_count": int(m["active_subscription_count"] or 0),
-                "carried_over_subscription": {
-                    "subscription_id": str(m["carried_over_subscription_id"]) if m["carried_over_subscription_id"] else None,
-                    "plan_code": m["carried_over_plan_code"],
-                    "plan_name": m["carried_over_plan_name"],
-                    "current_period_end": m["carried_over_period_end"].isoformat() if m["carried_over_period_end"] else None,
-                    "carried_over_days": int(m["carried_over_days"] or 0),
-                } if m["carried_over_subscription_id"] else None,
+
                 "scheduled_plan_change": {
                     "plan_change_id": str(m["plan_change_id"]) if m["plan_change_id"] else None,
                     "change_type": m["scheduled_change_type"],
@@ -754,8 +709,6 @@ def get_admin_subscription_detail(user_id: str):
                 cs.cancel_at_period_end,
                 cs.cancelled_at,
                 cs.billing_status,
-                cs.carried_over_days,
-                cs.superseded_by_subscription_id,
                 cp.plan_code AS current_plan_code,
                 cp.plan_name AS current_plan_name,
                 fp.plan_code AS free_plan_code,
@@ -795,10 +748,6 @@ def get_admin_subscription_detail(user_id: str):
                 s.cancel_at_period_end,
                 s.cancelled_at,
                 s.billing_status,
-                s.carried_over_days,
-                s.superseded_by_subscription_id,
-                s.original_period_end,
-                s.upgraded_at,
                 s.created_at,
                 p.plan_id,
                 p.plan_code,
@@ -840,6 +789,10 @@ def get_admin_subscription_detail(user_id: str):
                 pc.created_at,
                 pc.from_subscription_id,
                 pc.to_subscription_id,
+                pc.remaining_amount,
+                pc.target_plan_amount,
+                pc.discount_amount,
+                pc.charged_amount,
                 fp.plan_code AS from_plan_code,
                 fp.plan_name AS from_plan_name,
                 tp.plan_code AS to_plan_code,
@@ -870,10 +823,6 @@ def get_admin_subscription_detail(user_id: str):
                 "cancel_at_period_end": bool(m["cancel_at_period_end"]),
                 "cancelled_at": m["cancelled_at"].isoformat() if m["cancelled_at"] else None,
                 "billing_status": m["billing_status"],
-                "carried_over_days": int(m["carried_over_days"] or 0),
-                "superseded_by_subscription_id": str(m["superseded_by_subscription_id"]) if m["superseded_by_subscription_id"] else None,
-                "original_period_end": m["original_period_end"].isoformat() if m["original_period_end"] else None,
-                "upgraded_at": m["upgraded_at"].isoformat() if m["upgraded_at"] else None,
                 "created_at": m["created_at"].isoformat() if m["created_at"] else None,
             })
 
@@ -905,6 +854,10 @@ def get_admin_subscription_detail(user_id: str):
                 "created_at": m["created_at"].isoformat() if m["created_at"] else None,
                 "from_subscription_id": str(m["from_subscription_id"]) if m["from_subscription_id"] else None,
                 "to_subscription_id": str(m["to_subscription_id"]) if m["to_subscription_id"] else None,
+                "remaining_amount": int(m["remaining_amount"] or 0),
+                "target_plan_amount": int(m["target_plan_amount"] or 0),
+                "discount_amount": int(m["discount_amount"] or 0),
+                "charged_amount": int(m["charged_amount"] or 0),
                 "from_plan_code": m["from_plan_code"],
                 "from_plan_name": m["from_plan_name"],
                 "to_plan_code": m["to_plan_code"],
@@ -928,8 +881,6 @@ def get_admin_subscription_detail(user_id: str):
                 "cancel_at_period_end": bool(current["cancel_at_period_end"]) if current["subscription_id"] else False,
                 "cancelled_at": current["cancelled_at"].isoformat() if current["cancelled_at"] else None,
                 "billing_status": current["billing_status"],
-                "carried_over_days": int(current["carried_over_days"] or 0),
-                "superseded_by_subscription_id": str(current["superseded_by_subscription_id"]) if current["superseded_by_subscription_id"] else None,
             },
             "active_subscriptions": active_subscriptions,
             "billing_attempts": billing_attempts,
@@ -1107,20 +1058,28 @@ def get_admin_policies():
             }
 
         # 4. Query credit_plans table to populate creditPlans
+        # 활성 크레딧 플랜들에 대해 payments 테이블의 성공 결제 횟수(popularity_count)를 집계하여 가져옵니다.
         credit_plan_rows = db.execute(
             text("""
                 SELECT
-                    credit_plan_code,
-                    credit_plan_name,
-                    base_credits,
-                    bonus_credits,
-                    expires_days,
-                    price_amount,
-                    status,
-                    sort_order
-                FROM credit_plans
-                WHERE status = 'active'
-                ORDER BY sort_order ASC, created_at ASC
+                    cp.credit_plan_code,
+                    cp.credit_plan_name,
+                    cp.base_credits,
+                    cp.bonus_credits,
+                    cp.expires_days,
+                    cp.price_amount,
+                    cp.status,
+                    cp.sort_order,
+                    COALESCE(sub.payment_count, 0) AS popularity_count
+                FROM credit_plans cp
+                LEFT JOIN (
+                    SELECT credit_plan_id, COUNT(*) AS payment_count
+                    FROM payments
+                    WHERE status = 'success' AND product_type = 'credit' AND credit_plan_id IS NOT NULL
+                    GROUP BY credit_plan_id
+                ) sub ON sub.credit_plan_id = cp.credit_plan_id
+                WHERE cp.status = 'active'
+                ORDER BY cp.sort_order ASC, cp.created_at ASC
             """)
         ).fetchall()
 
@@ -1135,6 +1094,7 @@ def get_admin_policies():
                 "price": cm["price_amount"],
                 "status": cm["status"],
                 "sortOrder": cm["sort_order"],
+                "popularityCount": int(cm.get("popularity_count") or 0),
             }
 
         if credit_plans_map:
