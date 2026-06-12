@@ -94,3 +94,22 @@ def update_user_role_and_status(user_id, role_value, status_value):
     with engine.begin() as conn:
         row = user_model.update_user_role_and_status_query(conn, user_id, role_value, status_value)
         return normalize_user_row(row)
+
+
+# [한글 주석] 소셜 로그인 시도 시 즉시 DB에 계정을 생성하지 않고, 가입 여부 조회를 위한 단독 쿼리 함수입니다.
+def get_oauth_user_only(provider, provider_user_id, email):
+    with engine.begin() as conn:
+        row = user_model.get_user_by_provider_query(
+            conn,
+            provider,
+            provider_user_id,
+            email,
+        )
+        return normalize_user_row(row)
+
+
+# [한글 주석] 개인정보 수집 동의가 완료된 신규 회원에 대해 단독으로 회원 계정을 데이터베이스에 인서트하는 함수입니다.
+def create_oauth_user(oauth_user):
+    with engine.begin() as conn:
+        created = user_model.create_oauth_user_query(conn, oauth_user, USER, ACTIVE)
+        return normalize_user_row(created)

@@ -8,6 +8,7 @@ import {
   updateUserSettings,
   deleteAccount,
   getMyPaymentInfo, // 백엔드 결제 조회 API 함수 임포트
+  getMyLoginHistories, // 최근 로그인 히스토리 API 함수 임포트
 } from "../../utils/api";
 import "../../css/garim-pages/Settings.css";
 
@@ -53,6 +54,34 @@ function formatToKST(dateString, isDateOnly = false) {
 }
 // ----------------------------------------
 
+// --- 상대 시간 변환 유틸리티 함수 ---
+function formatRelativeTime(dateString) {
+  if (!dateString) return "-";
+
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  let diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 0) diffSec = 0;
+
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHour = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHour / 24);
+
+  if (diffSec < 60) return "방금 전";
+  if (diffMin < 60) return `${diffMin}분 전`;
+  if (diffHour < 24) return `${diffHour}시간 전`;
+  if (diffDay < 7) return `${diffDay}일 전`;
+
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+// ----------------------------------------
+
 export default function Settings() {
   useDocumentTitle("프로필·환경 설정 · Garim");
   const navigate = useNavigate();
@@ -71,6 +100,7 @@ export default function Settings() {
   const [planInfo, setPlanInfo] = useState({ name: "무료 플랜", date: null });
   const [isPremium, setIsPremium] = useState(false);
   const [selectedReceipt, setSelectedReceipt] = useState(null);
+  const [loginHistories, setLoginHistories] = useState([]);
 
   useEffect(() => {
     const syncActiveSection = () => {
@@ -113,6 +143,16 @@ export default function Settings() {
         }
       })
       .catch((error) => console.error("결제 정보 로드 실패", error));
+
+    // 백엔드 API로부터 로그인 히스토리 이력 조회 (최근 5건)
+    getMyLoginHistories()
+      .then((res) => {
+        if (!isMounted) return;
+        if (res && res.data) {
+          setLoginHistories(res.data);
+        }
+      })
+      .catch((error) => console.error("로그인 히스토리 로드 실패", error));
 
     return () => {
       isMounted = false;
@@ -486,13 +526,25 @@ export default function Settings() {
                 최근 로그인 (최근 5건)
               </label>
               <div className="login-list">
-                <div className="row">
-                  <span style={{ flex: "1" }}>방금 전 · Chrome / macOS</span>
-                  <span className="mui-chip mui-chip--soft-success">
-                    현재 세션
-                  </span>
-                  <span className="ip">211.123.***.***</span>
-                </div>
+                {loginHistories.length > 0 ? (
+                  loginHistories.map((hist) => (
+                    <div className="row" key={hist.login_history_id}>
+                      <span style={{ flex: "1" }}>
+                        {formatRelativeTime(hist.logged_in_at)} · {hist.browser_device}
+                      </span>
+                      {hist.is_current_session && (
+                        <span className="mui-chip mui-chip--soft-success">
+                          현재 세션
+                        </span>
+                      )}
+                      <span className="ip">{hist.ip_address}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ padding: "16px 0", color: "var(--fg-3)", fontSize: "13px" }}>
+                    로그인 이력이 없습니다.
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -534,8 +586,9 @@ export default function Settings() {
             <div className="danger">
               <h4>계정 삭제</h4>
               <p>
-                계정과 모든 데이터가 영구히 삭제됩니다. 결제 이력은 법적 보관
-                의무로 90일간 별도 보존됩니다.
+                작업에 사용된 모든 데이터는 삭제됩니다.
+                <br />
+                마지막 탈퇴일 기준 30일 내에 재가입시 무료 크래딧은 제공되지 않습니다.
               </p>
               <button
                 className="mui-btn mui-btn--outlined"
@@ -553,8 +606,9 @@ export default function Settings() {
           <div className="delete-modal" onClick={(e) => e.stopPropagation()}>
             <h3>계정 삭제</h3>
             <p>
-              계정과 모든 데이터가 영구히 삭제됩니다. 결제 이력은 법적 보관
-              의무로 90일간 별도 보존됩니다.
+              작업에 사용된 모든 데이터는 삭제됩니다.
+              <br />
+              마지막 탈퇴일 기준 30일 내에 재가입시 무료 크래딧은 제공되지 않습니다.
             </p>
             <p className="delete-modal-instruction">
               삭제를 진행하시려면 아래에 &lsquo;복구 안됨&rsquo; 이라는 메세지를

@@ -375,3 +375,23 @@ def record_login_attempt(
         db.rollback()
         import logging
         logging.getLogger(__name__).error("[auth] failed to record login attempt: %s", str(e))
+        return
+
+    if login_result != "success" or not user_id:
+        return
+
+    try:
+        db.execute(
+            text("""
+                UPDATE users
+                SET last_login_at = NOW(),
+                    updated_at = NOW()
+                WHERE user_id = CAST(:user_id AS uuid)
+            """),
+            {"user_id": user_id},
+        )
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        import logging
+        logging.getLogger(__name__).error("[auth] failed to update last_login_at cache: %s", str(e))

@@ -1,4 +1,5 @@
-import { Link, useSearchParams } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
 
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { getOAuthStartUrl, getOAuthReregisterUrl } from "../../utils/api";
@@ -47,10 +48,26 @@ const socialButtons = [
 
 export default function Login() {
   useDocumentTitle("로그인 · Garim");
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const [showSuspendedModal, setShowSuspendedModal] = useState(false); // [한글 주석] 정지 계정 안내 팝업 상태
+
   const isReregister = searchParams.get("reregister") === "true";
   const reregisterProvider = searchParams.get("provider") || "";
   const nextPath = searchParams.get("next") || "";
+
+  // [한글 주석] 로그인 실패 에러 코드가 suspended인 경우 정지 팝업을 노출합니다.
+  useEffect(() => {
+    if (searchParams.get("error") === "suspended") {
+      setShowSuspendedModal(true);
+    }
+  }, [searchParams]);
+
+  // [한글 주석] 정지 팝업 닫힘 시 메인 페이지("/")로 이동시킵니다.
+  const handleCloseSuspendedModal = () => {
+    setShowSuspendedModal(false);
+    navigate("/");
+  };
 
   const startOAuth = (provider) => {
     window.location.assign(getOAuthStartUrl(provider, nextPath));
@@ -85,6 +102,23 @@ export default function Login() {
             </div>
           </div>
         </main>
+        {showSuspendedModal && (
+          <div className="suspended-modal-overlay" onClick={handleCloseSuspendedModal}>
+            <div className="suspended-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="suspended-modal-icon">
+                <span className="material-icons">block</span>
+              </div>
+              <h2>계정 정지 안내</h2>
+              <p>
+                본 계정은 현재 정지 상태입니다.<br />
+                자세한 내용은 관리자에게 문의하세요.
+              </p>
+              <button className="mui-btn mui-btn--contained" onClick={handleCloseSuspendedModal}>
+                확인
+              </button>
+            </div>
+          </div>
+        )}
       </GarimPage>
     );
   }
@@ -116,6 +150,23 @@ export default function Login() {
           </div>
         </div>
       </main>
+      {showSuspendedModal && (
+        <div className="suspended-modal-overlay" onClick={handleCloseSuspendedModal}>
+          <div className="suspended-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="suspended-modal-icon">
+              <span className="material-icons">block</span>
+            </div>
+            <h2>계정 정지 안내</h2>
+            <p>
+              본 계정은 현재 정지 상태입니다.<br />
+              자세한 내용은 관리자에게 문의하세요.
+            </p>
+            <button className="mui-btn mui-btn--contained" onClick={handleCloseSuspendedModal}>
+              확인
+            </button>
+          </div>
+        </div>
+      )}
     </GarimPage>
   );
 }

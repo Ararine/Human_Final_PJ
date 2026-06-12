@@ -28,7 +28,7 @@ def test_get_my_settings_uses_authenticated_user(monkeypatch):
     response = client.get("/settings/me", cookies=auth_cookie(monkeypatch))
 
     assert response.status_code == 200
-    assert response.json()["data"]["user_id"] == "1"
+    assert response.json()["data"]["user_id"] == "00000000-0000-0000-0000-000000000001"
     assert response.json()["data"]["email_notification"] is True
     assert response.json()["data"]["browser_notification"] is False
     assert response.json()["data"]["data_usage_consent"] is True
@@ -59,7 +59,28 @@ def test_update_my_settings_persists_authenticated_user_settings(monkeypatch):
     )
 
     assert response.status_code == 200
-    assert updated == [(1, False, True, False)]
+    assert updated == [("00000000-0000-0000-0000-000000000001", False, True, False)]
     assert response.json()["data"]["email_notification"] is False
     assert response.json()["data"]["browser_notification"] is True
     assert response.json()["data"]["data_usage_consent"] is False
+
+
+def test_get_my_login_histories(monkeypatch):
+    monkeypatch.setattr(setting, "get_my_login_histories", lambda user_id, current_session_id=None, limit=5: [
+        {
+            "login_history_id": "hist-123",
+            "provider": "google",
+            "login_result": "success",
+            "ip_address": "211.***.12.8",
+            "browser_device": "Chrome · Windows",
+            "is_current_session": True,
+            "logged_in_at": "2026-06-12T14:52:03",
+        }
+    ])
+
+    response = client.get("/settings/me/login-histories", cookies=auth_cookie(monkeypatch))
+
+    assert response.status_code == 200
+    assert len(response.json()["data"]) == 1
+    assert response.json()["data"][0]["login_history_id"] == "hist-123"
+    assert response.json()["data"][0]["is_current_session"] is True

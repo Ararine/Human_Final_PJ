@@ -17,3 +17,4 @@ router.add_api_route("/admin/users/{user_id}/status", oauth.update_user_status, 
 router.add_api_route("/admin/users/{user_id}", oauth.update_user_role_and_status, methods=["PATCH"])
 router.add_api_route("/{provider}/start", oauth.start_oauth, methods=["GET"])
 router.add_api_route("/{provider}/callback", oauth.oauth_callback, methods=["GET"])
+router.add_api_route("/consent/confirm", oauth.confirm_consent, methods=["POST"])

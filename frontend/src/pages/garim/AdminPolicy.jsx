@@ -1254,13 +1254,22 @@ function SelectField({ label, value, onChange, options = STATUS_OPTIONS }) {
 
 function ToggleField({ label, checked, onChange }) {
   return (
-    <label className="pol-switch-wrap pol-switch-wrap--field">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-      />
+    <div className="pol-field">
       <span>{label}</span>
-    </label>
+      <div className="pol-input pol-input--switch">
+        <span className="pol-switch-state">
+          {checked ? "필수 적용" : "선택 적용"}
+        </span>
+        <button
+          type="button"
+          className={`pol-switch ${checked ? "on" : ""}`}
+          role="switch"
+          aria-checked={checked}
+          onClick={() => onChange(!checked)}
+        >
+          <span className="knob"></span>
+        </button>
+      </div>
+    </div>
   );
 }

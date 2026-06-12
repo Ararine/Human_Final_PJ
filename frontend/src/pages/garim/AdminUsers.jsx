@@ -427,16 +427,6 @@ export default function AdminUsers() {
                       />
                       정지
                     </label>
-                    <label className="usr-radio-label">
-                      <input
-                        type="radio"
-                        name="editStatus"
-                        value="deleted"
-                        checked={editStatus === "deleted"}
-                        onChange={() => setEditStatus("deleted")}
-                      />
-                      탈퇴
-                    </label>
                   </div>
                 </div>
               </div>

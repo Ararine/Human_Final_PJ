@@ -62,7 +62,7 @@ def fake_redis(monkeypatch):
 
 def active_user():
     return {
-        "id": 1,
+        "id": "00000000-0000-0000-0000-000000000001",
         "provider": "google",
         "provider_user_id": "google-user-1",
         "email": "user@example.com",
@@ -175,7 +175,7 @@ def test_delete_me_marks_user_deleted_and_deletes_all_user_sessions(monkeypatch,
     response = client.delete("/auth/me", cookies={"access_token": first["access_token"]})
 
     assert response.status_code == 200
-    assert deleted == [1]
+    assert deleted == ["00000000-0000-0000-0000-000000000001"]
     assert redis_store.get_session(first["session_id"]) is None
     assert redis_store.get_session(second["session_id"]) is None
 
@@ -199,10 +199,10 @@ def test_admin_suspend_user_deletes_all_user_sessions(monkeypatch, fake_redis):
         "status": status_value.lower(),
     })
 
-    response = client.patch("/auth/admin/users/1/status", json={"status": "SUSPENDED"})
+    response = client.patch("/auth/admin/users/00000000-0000-0000-0000-000000000001/status", json={"status": "SUSPENDED"})
 
     assert response.status_code == 200
-    assert updated == [(1, "SUSPENDED")]
+    assert updated == [("00000000-0000-0000-0000-000000000001", "SUSPENDED")]
     assert redis_store.get_session(first["session_id"]) is None
     assert redis_store.get_session(second["session_id"]) is None
 

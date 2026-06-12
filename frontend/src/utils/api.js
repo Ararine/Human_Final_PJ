@@ -60,6 +60,17 @@ export async function getCurrentUser() {
   return requestJson("/auth/me");
 }
 
+export async function confirmConsent(token, agreements) {
+  // [한글 주석] 동의 토큰과 함께 각 약관별 동의 여부를 백엔드로 전달합니다.
+  return requestJson("/auth/consent/confirm", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ token, agreements }),
+  });
+}
+
 export async function refreshAuthSession() {
   return requestJson("/auth/refresh", { method: "POST" });
 }
@@ -84,6 +95,10 @@ export async function updateUserSettings(settings) {
     },
     body: JSON.stringify(settings),
   });
+}
+
+export async function getMyLoginHistories() {
+  return requestJson("/settings/me/login-histories");
 }
 
 export async function getAdminUsers(params = {}) {

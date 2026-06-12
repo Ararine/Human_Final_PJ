@@ -1,0 +1,238 @@
+.consent-card {
+  max-width: 520px;
+  width: 100%;
+  padding: 40px 32px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.consent-card h1 {
+  font: 600 24px/1.3 var(--font-sans);
+  color: var(--fg-1);
+  margin: 0 0 8px;
+  letter-spacing: -0.5px;
+}
+
+.consent-card .sub {
+  font: 400 14px var(--font-sans);
+  color: var(--fg-2);
+  margin: 0 0 32px;
+}
+
+/* 에러 메시지 */
+.consent-error {
+  background-color: #ffebee;
+  color: #c62828;
+  padding: 12px 16px;
+  border-radius: 6px;
+  font: 400 13px var(--font-sans);
+  margin-bottom: 24px;
+  border-left: 4px solid #d32f2f;
+  animation: consent-shake 0.3s ease-in-out;
+}
+
+/* 전체 동의 박스 */
+.consent-all-box {
+  background: rgba(25, 118, 210, 0.03);
+  border: 1px solid rgba(25, 118, 210, 0.15);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.consent-all-box .all-agree {
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  color: #1976d2;
+  cursor: pointer;
+}
+
+.consent-all-box .all-agree-desc {
+  font: 400 12px var(--font-sans);
+  color: var(--fg-2);
+  margin: 6px 0 0 28px;
+}
+
+/* 커스텀 체크박스 스타일 */
+.consent-checkbox-label {
+  display: flex;
+  align-items: center;
+  position: relative;
+  cursor: pointer;
+  user-select: none;
+  font: 400 14px var(--font-sans);
+  color: var(--fg-1);
+}
+
+.consent-checkbox-label input {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  height: 0;
+  width: 0;
+}
+
+.checkbox-custom {
+  position: relative;
+  height: 18px;
+  width: 18px;
+  background-color: #f1f3f5;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  margin-right: 10px;
+  transition: all 0.2s ease;
+}
+
+.consent-checkbox-label:hover input ~ .checkbox-custom {
+  background-color: #e9ecef;
+  border-color: #adb5bd;
+}
+
+.consent-checkbox-label input:checked ~ .checkbox-custom {
+  background-color: #1976d2;
+  border-color: #1976d2;
+}
+
+.checkbox-custom:after {
+  content: "";
+  position: absolute;
+  display: none;
+  left: 5px;
+  top: 2px;
+  width: 5px;
+  height: 9px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.consent-checkbox-label input:checked ~ .checkbox-custom:after {
+  display: block;
+}
+
+.consent-checkbox-label .label-text {
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 배지 */
+.badge {
+  font: 500 10px/1 var(--font-sans);
+  padding: 3px 6px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.badge--required {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+.badge--optional {
+  background-color: #f1f3f5;
+  color: #495057;
+}
+
+/* 약관 스택 */
+.consent-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.consent-item {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  padding-bottom: 16px;
+}
+
+.consent-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.consent-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.detail-toggle-btn {
+  background: none;
+  border: none;
+  color: #1976d2;
+  font: 500 12px var(--font-sans);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.detail-toggle-btn:hover {
+  background-color: rgba(25, 118, 210, 0.05);
+}
+
+/* 상세 약관 텍스트박스 */
+.consent-detail-box {
+  background: #f8f9fa;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-top: 10px;
+  max-height: 120px;
+  overflow-y: auto;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  font: 400 12px/1.6 var(--font-sans);
+  color: var(--fg-2);
+}
+
+.consent-detail-box h4 {
+  font-weight: 600;
+  color: var(--fg-1);
+  margin: 12px 0 4px;
+}
+
+.consent-detail-box h4:first-child {
+  margin-top: 0;
+}
+
+.consent-detail-box p {
+  margin: 0 0 8px;
+}
+
+.consent-detail-box p:last-child {
+  margin-bottom: 0;
+}
+
+.consent-detail-box ul {
+  padding-left: 16px;
+  margin: 0 0 8px;
+}
+
+.consent-detail-box li {
+  margin-bottom: 4px;
+}
+
+/* 액션 영역 */
+.consent-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.consent-actions .mui-btn {
+  height: 44px;
+  font-weight: 500;
+  border-radius: 6px;
+}
+
+/* 흔들림 애니메이션 (에러 시) */
+@keyframes consent-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}

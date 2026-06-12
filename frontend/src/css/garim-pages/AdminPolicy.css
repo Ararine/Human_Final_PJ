@@ -149,10 +149,49 @@ body { background: #fafafa; }
 .pol-input { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--mui-border); border-radius: 4px; font: 400 14px var(--font-sans); outline: none; background: #fff; }
 .pol-input:focus { border-color: #1976d2; }
 .pol-textarea { min-height: 84px; resize: vertical; line-height: 1.5; }
-.pol-switch-wrap { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-.pol-switch-wrap input[type="checkbox"] { width: 16px; height: 16px; accent-color: #1976d2; cursor: pointer; }
-.pol-switch-wrap--field { min-height: 38px; padding-top: 18px; }
-.pol-switch-wrap--field span { font: 500 13px var(--font-sans); color: var(--fg-1); }
+.pol-input--switch {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  height: 38px;
+  box-sizing: border-box;
+  padding: 0 10px;
+}
+.pol-switch-state {
+  font: 400 13px var(--font-sans);
+  color: var(--fg-2);
+}
+.pol-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border: 1px solid var(--mui-border);
+  border-radius: 12px;
+  background: #e2e8f0;
+  cursor: pointer;
+  padding: 0;
+  outline: none;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+.pol-switch.on {
+  background: #1976d2;
+  border-color: #1976d2;
+}
+.pol-switch .knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  transition: transform 0.2s;
+}
+.pol-switch.on .knob {
+  transform: translateX(20px);
+}
 .pol-save-bar { display: flex; gap: 8px; justify-content: flex-end; padding: 16px 20px 20px; border-top: 1px solid var(--mui-divider); }
 
 .pol-preview-panel { position: sticky; top: 84px; }

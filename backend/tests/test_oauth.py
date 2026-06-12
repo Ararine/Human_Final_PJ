@@ -156,16 +156,27 @@ def test_oauth_callback_sets_auth_cookie_and_redirects(monkeypatch):
         )
 
     monkeypatch.setattr(oauth, "exchange_code_for_user", fake_exchange_code)
-    monkeypatch.setattr(users, "get_or_create_oauth_user", lambda oauth_user: {
-        "id": 1,
+    monkeypatch.setattr(users, "get_oauth_user_only", lambda provider, provider_user_id, email: {
+        "id": "00000000-0000-0000-0000-000000000001",
         "provider": "google",
         "provider_user_id": "google-user-1",
         "provider_email": "oauth-user@example.com",
         "email": "user@example.com",
         "name": "Garim User",
         "profile_image_url": None,
-        "role": "USER",
-        "status": "ACTIVE",
+        "role": "user",
+        "status": "active",
+    })
+    monkeypatch.setattr(users, "get_or_create_oauth_user", lambda oauth_user: {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "provider": "google",
+        "provider_user_id": "google-user-1",
+        "provider_email": "oauth-user@example.com",
+        "email": "user@example.com",
+        "name": "Garim User",
+        "profile_image_url": None,
+        "role": "user",
+        "status": "active",
     })
 
     response = client.get(f"/auth/google/callback?code=sample-code&state={state}")
@@ -195,15 +206,25 @@ def test_oauth_callback_redirects_to_safe_next_path(monkeypatch):
         oauth.consume_oauth_state(provider, state_value),
         "provider-token",
     ))
-    monkeypatch.setattr(users, "get_or_create_oauth_user", lambda oauth_user: {
-        "id": 1,
+    monkeypatch.setattr(users, "get_oauth_user_only", lambda provider, provider_user_id, email: {
+        "id": "00000000-0000-0000-0000-000000000001",
         "provider": "google",
         "provider_user_id": "google-user-1",
         "email": "user@example.com",
         "name": "Garim User",
         "profile_image_url": None,
-        "role": "USER",
-        "status": "ACTIVE",
+        "role": "user",
+        "status": "active",
+    })
+    monkeypatch.setattr(users, "get_or_create_oauth_user", lambda oauth_user: {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "provider": "google",
+        "provider_user_id": "google-user-1",
+        "email": "user@example.com",
+        "name": "Garim User",
+        "profile_image_url": None,
+        "role": "user",
+        "status": "active",
     })
 
     response = client.get(f"/auth/google/callback?code=sample-code&state={state}")
@@ -230,15 +251,25 @@ def test_oauth_callback_rejects_external_next_path(monkeypatch):
         oauth.consume_oauth_state(provider, state_value),
         "provider-token",
     ))
-    monkeypatch.setattr(users, "get_or_create_oauth_user", lambda oauth_user: {
-        "id": 1,
+    monkeypatch.setattr(users, "get_oauth_user_only", lambda provider, provider_user_id, email: {
+        "id": "00000000-0000-0000-0000-000000000001",
         "provider": "google",
         "provider_user_id": "google-user-1",
         "email": "user@example.com",
         "name": "Garim User",
         "profile_image_url": None,
-        "role": "USER",
-        "status": "ACTIVE",
+        "role": "user",
+        "status": "active",
+    })
+    monkeypatch.setattr(users, "get_or_create_oauth_user", lambda oauth_user: {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "provider": "google",
+        "provider_user_id": "google-user-1",
+        "email": "user@example.com",
+        "name": "Garim User",
+        "profile_image_url": None,
+        "role": "user",
+        "status": "active",
     })
 
     response = client.get(f"/auth/google/callback?code=sample-code&state={state}")
@@ -270,7 +301,7 @@ def test_oauth_me_reads_access_cookie(monkeypatch):
     from services import auth
 
     user = {
-        "id": 1,
+        "id": "00000000-0000-0000-0000-000000000001",
         "provider": "google",
         "provider_user_id": "google-user-1",
         "provider_email": "oauth-user@example.com",
