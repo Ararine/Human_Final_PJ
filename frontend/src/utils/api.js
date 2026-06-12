@@ -382,5 +382,41 @@ export async function refundAdminPayment(paymentId) {
   });
 }
 
+// [한글 주석] 로그인 히스토리 목록을 조회합니다.
+export async function getAdminLoginHistories(params = {}) {
+  const query = new URLSearchParams();
+  if (params.page) query.set("page", params.page);
+  if (params.limit) query.set("limit", params.limit);
+  if (params.keyword) query.set("keyword", params.keyword);
+  if (params.period) query.set("period", params.period);
+  if (params.result) query.set("result", params.result);
+  if (params.provider) query.set("provider", params.provider);
+  if (params.ip) query.set("ip", params.ip);
+  if (params.start_date) query.set("start_date", params.start_date);
+  if (params.end_date) query.set("end_date", params.end_date);
+  if (params.search_type) query.set("search_type", params.search_type);
+  if (params.search_keyword) query.set("search_keyword", params.search_keyword);
+  const qs = query.toString();
+  return requestJson(`/admin/login-histories${qs ? "?" + qs : ""}`);
+}
 
+// [한글 주석] 로그인 히스토리 상세 내역을 단건 조회합니다.
+export async function getAdminLoginHistoryDetail(loginHistoryId) {
+  return requestJson(`/admin/login-histories/${loginHistoryId}`);
+}
 
+// [한글 주석] CSV 다운로드를 위한 스트리밍 API 엔드포인트 URL을 가져옵니다.
+export function getAdminLoginHistoriesExportUrl(params = {}) {
+  const query = new URLSearchParams();
+  if (params.keyword) query.set("keyword", params.keyword);
+  if (params.period) query.set("period", params.period);
+  if (params.result) query.set("result", params.result);
+  if (params.provider) query.set("provider", params.provider);
+  if (params.ip) query.set("ip", params.ip);
+  if (params.start_date) query.set("start_date", params.start_date);
+  if (params.end_date) query.set("end_date", params.end_date);
+  if (params.search_type) query.set("search_type", params.search_type);
+  if (params.search_keyword) query.set("search_keyword", params.search_keyword);
+  const qs = query.toString();
+  return `${getApiBaseUrl()}/admin/login-histories/export${qs ? "?" + qs : ""}`;
+}

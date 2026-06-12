@@ -1,0 +1,65 @@
+/* 전역 화면 중앙 로딩 스피너 */
+.app-loading-container {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background-color: #ffffff;
+  z-index: 9999;
+}
+
+.app-loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #1976d2;
+  border-radius: 50%;
+  animation: app-spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+.app-loading-text {
+  font-family: var(--font-sans, sans-serif);
+  font-size: 14px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+@keyframes app-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* 사용자 페이지로 이동 버튼 스타일 및 인터랙션 */
+.gh__btn-user-page {
+  font-size: 12px;
+  background-color: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  margin-right: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.1s ease !important;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 마우스 호버(Hover) 시 피드백 */
+.gh__btn-user-page:hover {
+  background-color: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+}
+
+/* 마우스 클릭(Active) 시 피드백 */
+.gh__btn-user-page:active {
+  transform: scale(0.95) !important;
+  background-color: rgba(255, 255, 255, 0.25) !important;
+}

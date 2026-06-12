@@ -5,6 +5,7 @@ from fastapi import Body, Cookie, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from services import auth, oauth, redis_store, users
+from utils.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -37,51 +38,177 @@ def oauth_callback(
 ):
     ip = request.client.host if request.client else "unknown"
     ua = request.headers.get("user-agent", "")
+    db = SessionLocal()
 
-    if error:
-        logger.warning("[oauth] provider=%s ip=%s provider_error=%s", provider, ip, error)
-        return redirect_after_login_failure()
-    if not code or not state:
-        logger.warning("[oauth] provider=%s ip=%s error=missing_code_or_state", provider, ip)
-        return redirect_after_login_failure()
+    user_id = None
+    provider_user_id = None
+    provider_email = None
+    oauth_account_id = None
 
     try:
-        oauth_user, state_data, provider_token = oauth.exchange_code_for_user(provider, code, state)
-        if state_data.get("reregister"):
-            user = users.reactivate_or_create_user(oauth_user)
-            logger.info("[oauth] reregister provider=%s email=%s ip=%s", provider, oauth_user.get("email"), ip)
-        else:
-            user = users.get_or_create_oauth_user(oauth_user)
-            if user.get("status") == users.DELETED:
-                logger.info("[oauth] deleted_user provider=%s email=%s ip=%s → redirect reregister", provider, oauth_user.get("email"), ip)
-                if provider == "kakao":
-                    oauth.unlink_kakao_with_user_token(provider_token)
-                elif provider == "naver":
-                    oauth.unlink_naver_with_user_token(provider_token)
-                return redirect_to_reregister(provider)
-        token_pair = auth.create_login_session(
-            user,
-            user_agent=ua,
-            ip_address=ip,
-        )
-    except (oauth.OAuthStateError, oauth.OAuthExchangeError) as exc:
-        logger.error("[oauth] provider=%s ip=%s error=%s", provider, ip, exc, exc_info=True)
-        return redirect_after_login_failure()
-    except (KeyError, oauth.OAuthConfigError) as exc:
-        logger.error("[oauth] provider=%s ip=%s config_error=%s", provider, ip, exc, exc_info=True)
-        return redirect_after_login_failure()
-    except HTTPException:
-        logger.warning("[oauth] provider=%s email=%s ip=%s error=account_inactive", provider, oauth_user.get("email"), ip)
-        return redirect_after_login_failure()
-    except Exception as exc:
-        logger.error("[oauth] provider=%s ip=%s unhandled_error=%s", provider, ip, exc, exc_info=True)
-        return redirect_after_login_failure()
+        if error:
+            logger.warning("[oauth] provider=%s ip=%s provider_error=%s", provider, ip, error)
+            auth.record_login_attempt(
+                db=db,
+                user_id=None,
+                provider=provider,
+                provider_user_id=None,
+                provider_email=None,
+                login_result="failed",
+                failure_reason=f"provider_error: {error}",
+                ip_address=ip,
+                user_agent=ua,
+            )
+            return redirect_after_login_failure()
+        if not code or not state:
+            logger.warning("[oauth] provider=%s ip=%s error=missing_code_or_state", provider, ip)
+            auth.record_login_attempt(
+                db=db,
+                user_id=None,
+                provider=provider,
+                provider_user_id=None,
+                provider_email=None,
+                login_result="failed",
+                failure_reason="missing_code_or_state",
+                ip_address=ip,
+                user_agent=ua,
+            )
+            return redirect_after_login_failure()
 
-    role = user.get("role", users.USER)
-    logger.info("[oauth] login_success provider=%s user_id=%s role=%s ip=%s", provider, user.get("id"), role, ip)
-    response = redirect_to_frontend(role=role, next_path=state_data.get("next_path"))
-    auth.set_auth_cookies(response, token_pair)
-    return response
+        try:
+            oauth_user, state_data, provider_token = oauth.exchange_code_for_user(provider, code, state)
+            provider_user_id = oauth_user.get("provider_user_id")
+            provider_email = oauth_user.get("email")
+
+            if state_data.get("reregister"):
+                user = users.reactivate_or_create_user(oauth_user)
+                logger.info("[oauth] reregister provider=%s email=%s ip=%s", provider, oauth_user.get("email"), ip)
+            else:
+                user = users.get_or_create_oauth_user(oauth_user)
+
+                if user:
+                    user_id = str(user.get("id"))
+                    from sqlalchemy import text
+                    oa_row = db.execute(
+                        text("SELECT oauth_account_id FROM oauth_accounts WHERE user_id = CAST(:user_id AS uuid) AND provider = :provider"),
+                        {"user_id": user_id, "provider": provider}
+                    ).fetchone()
+                    if oa_row:
+                        oauth_account_id = str(oa_row._mapping["oauth_account_id"])
+
+                if user.get("status") == users.DELETED:
+                    logger.info("[oauth] deleted_user provider=%s email=%s ip=%s → redirect reregister", provider, oauth_user.get("email"), ip)
+                    auth.record_login_attempt(
+                        db=db,
+                        user_id=user_id,
+                        oauth_account_id=oauth_account_id,
+                        provider=provider,
+                        provider_user_id=provider_user_id,
+                        provider_email=provider_email,
+                        login_result="deleted",
+                        failure_reason="deleted_user",
+                        ip_address=ip,
+                        user_agent=ua,
+                    )
+                    if provider == "kakao":
+                        oauth.unlink_kakao_with_user_token(provider_token)
+                    elif provider == "naver":
+                        oauth.unlink_naver_with_user_token(provider_token)
+                    return redirect_to_reregister(provider)
+
+            user_id = str(user.get("id"))
+
+            if user.get("status") != users.ACTIVE:
+                auth.record_login_attempt(
+                    db=db,
+                    user_id=user_id,
+                    oauth_account_id=oauth_account_id,
+                    provider=provider,
+                    provider_user_id=provider_user_id,
+                    provider_email=provider_email,
+                    login_result="blocked",
+                    failure_reason="account_inactive",
+                    ip_address=ip,
+                    user_agent=ua,
+                )
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account inactive.")
+
+            token_pair = auth.create_login_session(
+                user,
+                user_agent=ua,
+                ip_address=ip,
+            )
+
+            auth.record_login_attempt(
+                db=db,
+                user_id=user_id,
+                oauth_account_id=oauth_account_id,
+                provider=provider,
+                provider_user_id=provider_user_id,
+                provider_email=provider_email,
+                login_result="success",
+                failure_reason=None,
+                ip_address=ip,
+                user_agent=ua,
+                session_id=token_pair.get("session_id"),
+            )
+
+        except (oauth.OAuthStateError, oauth.OAuthExchangeError) as exc:
+            logger.error("[oauth] provider=%s ip=%s error=%s", provider, ip, exc, exc_info=True)
+            auth.record_login_attempt(
+                db=db,
+                user_id=user_id,
+                oauth_account_id=oauth_account_id,
+                provider=provider,
+                provider_user_id=provider_user_id,
+                provider_email=provider_email,
+                login_result="failed",
+                failure_reason=f"oauth_exchange_error: {str(exc)}",
+                ip_address=ip,
+                user_agent=ua,
+            )
+            return redirect_after_login_failure()
+        except (KeyError, oauth.OAuthConfigError) as exc:
+            logger.error("[oauth] provider=%s ip=%s config_error=%s", provider, ip, exc, exc_info=True)
+            auth.record_login_attempt(
+                db=db,
+                user_id=user_id,
+                oauth_account_id=oauth_account_id,
+                provider=provider,
+                provider_user_id=provider_user_id,
+                provider_email=provider_email,
+                login_result="error",
+                failure_reason=f"config_error: {str(exc)}",
+                ip_address=ip,
+                user_agent=ua,
+            )
+            return redirect_after_login_failure()
+        except HTTPException:
+            logger.warning("[oauth] provider=%s ip=%s error=account_inactive", provider, ip)
+            return redirect_after_login_failure()
+        except Exception as exc:
+            logger.error("[oauth] provider=%s ip=%s unhandled_error=%s", provider, ip, exc, exc_info=True)
+            auth.record_login_attempt(
+                db=db,
+                user_id=user_id,
+                oauth_account_id=oauth_account_id,
+                provider=provider,
+                provider_user_id=provider_user_id,
+                provider_email=provider_email,
+                login_result="error",
+                failure_reason=f"unhandled_error: {str(exc)}",
+                ip_address=ip,
+                user_agent=ua,
+            )
+            return redirect_after_login_failure()
+
+        role = user.get("role", users.USER)
+        logger.info("[oauth] login_success provider=%s user_id=%s role=%s ip=%s", provider, user.get("id"), role, ip)
+        response = redirect_to_frontend(role=role, next_path=state_data.get("next_path"))
+        auth.set_auth_cookies(response, token_pair)
+        return response
+    finally:
+        db.close()
 
 
 def get_me(access_token: str | None = Cookie(default=None)):

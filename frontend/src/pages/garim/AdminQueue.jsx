@@ -40,11 +40,11 @@ export default function AdminQueue() {
             </span>
             사용자
           </a>
-          <a href="/admin/analytics">
+          <a href="/admin/login-history">
             <span className="material-icons">
-              analytics
+              manage_history
             </span>
-            분석
+            로그인 히스토리
           </a>
           <a href="/admin/policy">
             <span className="material-icons">
@@ -61,6 +61,12 @@ export default function AdminQueue() {
               payments
             </span>
             사용자 결제 확인
+          </a>
+          <a href="/admin/analytics">
+            <span className="material-icons">
+              analytics
+            </span>
+            분석
           </a>
         </aside>
         <main className="adm-main">

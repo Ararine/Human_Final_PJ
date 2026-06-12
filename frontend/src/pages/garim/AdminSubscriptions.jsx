@@ -100,7 +100,7 @@ export default function AdminSubscriptions() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
 
-  const [searchKey, setSearchKey] = useState("email");
+  const [searchKey, setSearchKey] = useState("all");
   const [searchValue, setSearchValue] = useState("");
   const [planCode, setPlanCode] = useState("");
   const [subscriptionStatus, setSubscriptionStatus] = useState("");
@@ -183,7 +183,7 @@ export default function AdminSubscriptions() {
   };
 
   const handleReset = () => {
-    setSearchKey("email");
+    setSearchKey("all");
     setSearchValue("");
     setPlanCode("");
     setSubscriptionStatus("");
@@ -237,9 +237,9 @@ export default function AdminSubscriptions() {
             <span className="material-icons">people</span>
             사용자
           </a>
-          <a href="/admin/analytics">
-            <span className="material-icons">analytics</span>
-            분석
+          <a href="/admin/login-history">
+            <span className="material-icons">manage_history</span>
+            로그인 히스토리
           </a>
           <a href="/admin/policy">
             <span className="material-icons">tune</span>
@@ -252,6 +252,10 @@ export default function AdminSubscriptions() {
           <a href="/admin/payments">
             <span className="material-icons">payments</span>
             사용자 결제 확인
+          </a>
+          <a href="/admin/analytics">
+            <span className="material-icons">analytics</span>
+            분석
           </a>
         </aside>
 
@@ -355,15 +359,21 @@ export default function AdminSubscriptions() {
                   <label>검색</label>
                   <div className="sb-search-input-wrap">
                     <select value={searchKey} onChange={(e) => setSearchKey(e.target.value)}>
+                      <option value="all">전체 검색</option>
                       <option value="email">이메일</option>
                       <option value="user_id">사용자 ID</option>
-                      <option value="all">전체 검색</option>
                     </select>
                     <input
                       type="search"
                       value={searchValue}
                       onChange={(e) => setSearchValue(e.target.value)}
-                      placeholder="사용자 검색"
+                      placeholder={
+                        searchKey === "email"
+                          ? "이메일 검색"
+                          : searchKey === "user_id"
+                          ? "사용자 ID 검색"
+                          : "전체 검색"
+                      }
                     />
                   </div>
                 </div>
@@ -448,9 +458,13 @@ export default function AdminSubscriptions() {
 
                   {/* 결제 상태 컬럼 */}
                   <span className="sb-status-cell">
-                    <span className={`mui-chip ${statusChipClass(row.current_subscription?.billing_status)}`}>
-                      {mapStatusLabel(row.current_subscription?.billing_status)}
-                    </span>
+                    {row.current_subscription?.billing_status ? (
+                      <span className={`mui-chip ${statusChipClass(row.current_subscription.billing_status)}`}>
+                        {mapStatusLabel(row.current_subscription.billing_status)}
+                      </span>
+                    ) : (
+                      "-"
+                    )}
                     {row.latest_billing_attempt?.failure_reason && (
                       <small className="sb-subtext">{row.latest_billing_attempt.failure_reason}</small>
                     )}
@@ -546,14 +560,18 @@ export default function AdminSubscriptions() {
                   <div className="sb-detail-summary-card">
                     <span className="sb-detail-label">다음 결제일</span>
                     <strong>{formatDateTime(detailData.current_applied_plan?.next_billing_at)}</strong>
-                    {/* 종료일 한글화 및 날짜 포맷 최적화로 깔끔한 두 줄 완성 */}
-                    <small>종료일: {formatDateOnly(detailData.current_applied_plan?.current_period_end)}</small>
+                    {/* 종료일 한글화 및 날짜 포맷 최적화로 깔끔한 두 줄 완성 - Free 플랜이 아닐 때만 렌더링 */}
+                    {detailData.current_applied_plan?.plan_code !== "free" && (
+                      <small>종료일: {formatDateOnly(detailData.current_applied_plan?.current_period_end)}</small>
+                    )}
                   </div>
                   <div className="sb-detail-summary-card">
                     <span className="sb-detail-label">자동결제 / 취소예약</span>
                     <strong>{boolLabel(detailData.current_applied_plan?.auto_renew)} / {boolLabel(detailData.current_applied_plan?.cancel_at_period_end)}</strong>
-                    {/* 영문 상태값을 한글로 매핑하여 표시 */}
-                    <small>결제 상태: {mapStatusLabel(detailData.current_applied_plan?.billing_status)}</small>
+                    {/* 영문 상태값을 한글로 매핑하여 표시 - Free 플랜이 아닐 때만 렌더링 */}
+                    {detailData.current_applied_plan?.plan_code !== "free" && (
+                      <small>결제 상태: {mapStatusLabel(detailData.current_applied_plan?.billing_status)}</small>
+                    )}
                   </div>
                 </section>
 

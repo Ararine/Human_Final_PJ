@@ -392,9 +392,9 @@ export default function AdminPolicy() {
             <span className="material-icons">people</span>
             사용자
           </a>
-          <a href="/admin/analytics">
-            <span className="material-icons">analytics</span>
-            분석
+          <a href="/admin/login-history">
+            <span className="material-icons">manage_history</span>
+            로그인 히스토리
           </a>
           <a href="/admin/policy" className="active">
             <span className="material-icons">tune</span>
@@ -407,6 +407,10 @@ export default function AdminPolicy() {
           <a href="/admin/payments">
             <span className="material-icons">payments</span>
             사용자 결제 확인
+          </a>
+          <a href="/admin/analytics">
+            <span className="material-icons">analytics</span>
+            분석
           </a>
         </aside>
 

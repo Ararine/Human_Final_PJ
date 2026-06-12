@@ -32,6 +32,7 @@ import AdminAnalytics from "../../pages/garim/AdminAnalytics";
 import AdminPolicy from "../../pages/garim/AdminPolicy";
 import AdminSubscriptions from "../../pages/garim/AdminSubscriptions";
 import AdminPaymentCheck from "../../pages/garim/AdminPaymentCheck";
+import AdminLoginHistory from "../../pages/garim/AdminLoginHistory";
 
 export const garimPages = [
   { path: "/", name: "Landing", component: Landing, file: "01-landing.html", layout: "public", current: "landing" },
@@ -70,4 +71,5 @@ export const garimPages = [
   { path: "/admin/policy", name: "AdminPolicy", component: AdminPolicy, file: "30-admin-policy.html", layout: "admin", current: "policy" },
   { path: "/admin/subscriptions", name: "AdminSubscriptions", component: AdminSubscriptions, file: "31-admin-subscriptions.html", layout: "admin", current: "subscriptions" },
   { path: "/admin/payments", name: "AdminPaymentCheck", component: AdminPaymentCheck, file: "31-admin-payment-check.html", layout: "admin", current: "payments" },
+  { path: "/admin/login-history", name: "AdminLoginHistory", component: AdminLoginHistory, file: "32-admin-login-history.html", layout: "admin", current: "login-history" },
 ];

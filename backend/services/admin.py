@@ -1477,3 +1477,399 @@ def refund_payment(payment_id: str, admin_user_id: str = None):
     finally:
         db.close()
 
+
+def _mask_ip(ip: str | None) -> str:
+    # [한글 주석] IP 주소의 2번째 옥텟을 마스킹하여 반환합니다. (예: 211.***.12.8)
+    if not ip:
+        return ""
+    parts = ip.split(".")
+    if len(parts) == 4:
+        return f"{parts[0]}.***.{parts[2]}.{parts[3]}"
+    return ip
+
+
+def _parse_user_agent_to_device(ua: str | None) -> str:
+    # [한글 주석] User-Agent 정보를 기반으로 브라우저와 OS를 파싱하여 가독성 있게 조합합니다.
+    if not ua:
+        return "Unknown"
+    ua_lower = ua.lower()
+
+    # OS 판단
+    os_name = "Unknown OS"
+    if "windows" in ua_lower:
+        os_name = "Windows"
+    elif "macintosh" in ua_lower or "mac os" in ua_lower:
+        if "iphone" in ua_lower or "ipad" in ua_lower:
+            os_name = "iOS"
+        else:
+            os_name = "macOS"
+    elif "android" in ua_lower:
+        os_name = "Android"
+    elif "linux" in ua_lower:
+        os_name = "Linux"
+
+    # 브라우저 판단
+    browser = "Unknown Browser"
+    if "edg/" in ua_lower:
+        browser = "Edge"
+    elif "chrome" in ua_lower or "crios" in ua_lower:
+        browser = "Chrome"
+    elif "safari" in ua_lower:
+        browser = "Safari"
+    elif "firefox" in ua_lower:
+        browser = "Firefox"
+    elif "trident" in ua_lower or "msie" in ua_lower:
+        browser = "IE"
+
+    return f"{browser} · {os_name}"
+
+
+def _parse_period_dates(period, start_date=None, end_date=None):
+    # [한글 주석] 기간 필터 값에 따라 시작일과 종료일을 datetime 객체로 변환합니다. 기본값은 30일입니다.
+    from datetime import datetime, timedelta
+    now = datetime.now()
+    if period == "7d":
+        return now - timedelta(days=7), now + timedelta(days=1)
+    elif period == "30d":
+        return now - timedelta(days=30), now + timedelta(days=1)
+    elif period == "90d":
+        return now - timedelta(days=90), now + timedelta(days=1)
+    elif period == "custom" and start_date and end_date:
+        try:
+            s_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            e_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
+            return s_dt, e_dt
+        except ValueError:
+            pass
+    return now - timedelta(days=30), now + timedelta(days=1)
+
+
+def _build_login_history_filter(
+    keyword=None,
+    period=None,
+    result=None,
+    provider=None,
+    ip=None,
+    start_date=None,
+    end_date=None,
+    search_type=None,
+    search_keyword=None,
+):
+    # [한글 주석] 로그인 히스토리 목록 및 엑셀 다운로드에 공통 적용할 SQL WHERE 절을 동적 생성합니다.
+    conditions = []
+    params = {}
+
+    if result and result != "all":
+        conditions.append("ulh.login_result = :result")
+        params["result"] = result
+
+    if provider and provider != "all":
+        conditions.append("ulh.provider = :provider")
+        params["provider"] = provider
+
+    # search_type과 search_keyword가 있는 경우 통합 검색 로직 사용
+    if search_type and search_keyword:
+        val = f"%{search_keyword}%"
+        if search_type == "email":
+            conditions.append("(u.email ILIKE :search_val OR ulh.provider_email ILIKE :search_val)")
+            params["search_val"] = val
+        elif search_type == "user_id":
+            conditions.append("CAST(ulh.user_id AS TEXT) ILIKE :search_val")
+            params["search_val"] = val
+        elif search_type == "ip":
+            conditions.append("ulh.ip_address ILIKE :search_val")
+            params["search_val"] = val
+        elif search_type == "all":
+            conditions.append(
+                "(u.email ILIKE :search_val OR CAST(ulh.user_id AS TEXT) ILIKE :search_val OR ulh.provider_email ILIKE :search_val OR ulh.ip_address ILIKE :search_val)"
+            )
+            params["search_val"] = val
+    else:
+        # 하위 호환성 유지
+        if ip:
+            conditions.append("ulh.ip_address ILIKE :ip")
+            params["ip"] = f"%{ip}%"
+        if keyword:
+            conditions.append("(u.email ILIKE :keyword OR CAST(ulh.user_id AS TEXT) ILIKE :keyword OR ulh.provider_email ILIKE :keyword)")
+            params["keyword"] = f"%{keyword}%"
+
+    s_dt, e_dt = _parse_period_dates(period, start_date, end_date)
+    conditions.append("ulh.logged_in_at >= :start_date AND ulh.logged_in_at < :end_date")
+    params["start_date"] = s_dt
+    params["end_date"] = e_dt
+
+    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+    return where_clause, params
+
+
+def get_login_histories_list(
+    page: int = 1,
+    limit: int = 20,
+    keyword: str = None,
+    period: str = None,
+    result: str = None,
+    provider: str = None,
+    ip: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    search_type: str = None,
+    search_keyword: str = None,
+):
+    # [한글 주석] 필터링 조건에 부합하는 로그인 히스토리 목록과 상단 KPI 통계 카드용 지표 데이터를 함께 반환합니다.
+    page, limit, offset = _normalize_page_params(page, limit)
+    where_clause, params = _build_login_history_filter(
+        keyword=keyword,
+        period=period,
+        result=result,
+        provider=provider,
+        ip=ip,
+        start_date=start_date,
+        end_date=end_date,
+        search_type=search_type,
+        search_keyword=search_keyword,
+    )
+
+    db = SessionLocal()
+    try:
+        # 전체 갯수 조회
+        total = db.execute(
+            text(f"""
+                SELECT COUNT(*)
+                FROM user_login_histories ulh
+                LEFT JOIN users u ON u.user_id = ulh.user_id
+                {where_clause}
+            """),
+            params
+        ).scalar() or 0
+
+        # 목록 아이템 조회 (페이징 적용)
+        rows = db.execute(
+            text(f"""
+                SELECT
+                    ulh.login_history_id,
+                    ulh.user_id,
+                    u.email AS user_email,
+                    u.display_name,
+                    ulh.provider,
+                    ulh.login_result,
+                    ulh.failure_reason,
+                    ulh.ip_address,
+                    ulh.user_agent,
+                    oa.provider_email AS oauth_account,
+                    ulh.logged_in_at
+                FROM user_login_histories ulh
+                LEFT JOIN users u ON u.user_id = ulh.user_id
+                LEFT JOIN oauth_accounts oa ON oa.oauth_account_id = ulh.oauth_account_id
+                {where_clause}
+                ORDER BY ulh.logged_in_at DESC, ulh.login_history_id DESC
+                LIMIT :limit OFFSET :offset
+            """),
+            {**params, "limit": limit, "offset": offset}
+        ).fetchall()
+
+        # KPI 통계 카드 데이터 집계
+        metrics_row = db.execute(
+            text(f"""
+                SELECT
+                    COUNT(*) AS total_attempts,
+                    COUNT(*) FILTER (WHERE login_result = 'success') AS success_count,
+                    COUNT(*) FILTER (WHERE login_result = 'failed') AS failed_count,
+                    COUNT(*) FILTER (WHERE login_result IN ('blocked', 'deleted', 'error')) AS blocked_count
+                FROM user_login_histories ulh
+                LEFT JOIN users u ON u.user_id = ulh.user_id
+                {where_clause}
+            """),
+            params
+        ).fetchone()
+
+        m = metrics_row._mapping if metrics_row else {}
+        total_attempts = m.get("total_attempts") or 0
+        success_count = m.get("success_count") or 0
+        failed_count = m.get("failed_count") or 0
+        blocked_count = m.get("blocked_count") or 0
+
+        def calc_rate(count, total_count):
+            if total_count == 0:
+                return "0.0%"
+            return f"{(count / total_count) * 100:.1f}%"
+
+        metrics = {
+            "total_attempts": total_attempts,
+            "success_count": success_count,
+            "failed_count": failed_count,
+            "blocked_count": blocked_count,
+            "success_rate": calc_rate(success_count, total_attempts),
+            "failed_rate": calc_rate(failed_count, total_attempts),
+            "blocked_rate": calc_rate(blocked_count, total_attempts),
+        }
+
+        items = []
+        for row in rows:
+            r = row._mapping
+            items.append({
+                "login_history_id": str(r["login_history_id"]),
+                "user_id": str(r["user_id"]) if r["user_id"] else None,
+                "user_email": r["user_email"] or "",
+                "display_name": r["display_name"] or "",
+                "provider": r["provider"] or "",
+                "login_result": r["login_result"],
+                "failure_reason": r["failure_reason"],
+                "ip_address": _mask_ip(r["ip_address"]),
+                "browser_device": _parse_user_agent_to_device(r["user_agent"]),
+                "user_agent": r["user_agent"],
+                "oauth_account": r["oauth_account"] or "",
+                "logged_in_at": r["logged_in_at"].isoformat() if r["logged_in_at"] else "",
+            })
+
+        return {
+            "metrics": metrics,
+            "items": items,
+            "page": page,
+            "limit": limit,
+            "total": total,
+        }
+    finally:
+        db.close()
+
+
+def get_login_history_detail(login_history_id: str):
+    # [한글 주석] 로그인 히스토리 ID 단건에 대한 마스킹이 해제된 상세 조회 정보(모달 노출용)를 가져옵니다.
+    db = SessionLocal()
+    try:
+        row = db.execute(
+            text("""
+                SELECT
+                    ulh.login_history_id,
+                    ulh.user_id,
+                    u.email AS user_email,
+                    u.display_name,
+                    ulh.provider,
+                    ulh.login_result,
+                    ulh.failure_reason,
+                    ulh.ip_address,
+                    ulh.user_agent,
+                    oa.provider_email AS oauth_account,
+                    ulh.logged_in_at
+                FROM user_login_histories ulh
+                LEFT JOIN users u ON u.user_id = ulh.user_id
+                LEFT JOIN oauth_accounts oa ON oa.oauth_account_id = ulh.oauth_account_id
+                WHERE ulh.login_history_id = CAST(:login_history_id AS uuid)
+            """),
+            {"login_history_id": login_history_id}
+        ).fetchone()
+
+        if not row:
+            raise ValueError("login history not found")
+
+        r = row._mapping
+        return {
+            "login_history_id": str(r["login_history_id"]),
+            "user_id": str(r["user_id"]) if r["user_id"] else None,
+            "user_email": r["user_email"] or "",
+            "display_name": r["display_name"] or "",
+            "provider": r["provider"] or "",
+            "login_result": r["login_result"],
+            "failure_reason": r["failure_reason"] or "",
+            "ip_address": r["ip_address"] or "",
+            "browser_device": _parse_user_agent_to_device(r["user_agent"]),
+            "user_agent": r["user_agent"] or "",
+            "oauth_account": r["oauth_account"] or "",
+            "logged_in_at": r["logged_in_at"].isoformat() if r["logged_in_at"] else "",
+            "note": "",
+        }
+    finally:
+        db.close()
+
+
+def export_login_histories_csv_stream(
+    keyword: str = None,
+    period: str = None,
+    result: str = None,
+    provider: str = None,
+    ip: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    search_type: str = None,
+    search_keyword: str = None,
+):
+    # [한글 주석] 필터링 조건에 부합하는 로그인 히스토리 전체를 CSV 포맷으로 실시간 스트리밍 제너레이터로 생성합니다.
+    where_clause, params = _build_login_history_filter(
+        keyword=keyword,
+        period=period,
+        result=result,
+        provider=provider,
+        ip=ip,
+        start_date=start_date,
+        end_date=end_date,
+        search_type=search_type,
+        search_keyword=search_keyword,
+    )
+
+    db = SessionLocal()
+    try:
+        rows = db.execute(
+            text(f"""
+                SELECT
+                    ulh.login_history_id,
+                    ulh.user_id,
+                    u.email AS user_email,
+                    u.display_name,
+                    ulh.provider,
+                    ulh.login_result,
+                    ulh.failure_reason,
+                    ulh.ip_address,
+                    ulh.user_agent,
+                    oa.provider_email AS oauth_account,
+                    ulh.logged_in_at
+                FROM user_login_histories ulh
+                LEFT JOIN users u ON u.user_id = ulh.user_id
+                LEFT JOIN oauth_accounts oa ON oa.oauth_account_id = ulh.oauth_account_id
+                {where_clause}
+                ORDER BY ulh.logged_in_at DESC
+            """),
+            params
+        ).fetchall()
+
+        import csv
+        import io
+
+        # 엑셀 오프라인 인코딩(BOM) 추가
+        yield "\ufeff"
+
+        headers = [
+            "로그인 이력 ID", "사용자 ID", "사용자 이메일", "사용자 이름",
+            "제공자", "결과", "실패 사유", "로그인 시각", "IP",
+            "브라우저/기기", "User-Agent", "OAuth 계정"
+        ]
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(headers)
+        yield output.getvalue()
+        output.truncate(0)
+        output.seek(0)
+
+        for row in rows:
+            r = row._mapping
+            writer.writerow([
+                str(r["login_history_id"]),
+                str(r["user_id"]) if r["user_id"] else "",
+                r["user_email"] or "",
+                r["display_name"] or "",
+                r["provider"] or "",
+                r["login_result"],
+                r["failure_reason"] or "",
+                r["logged_in_at"].strftime("%Y-%m-%d %H:%M:%S") if r["logged_in_at"] else "",
+                _mask_ip(r["ip_address"]),
+                _parse_user_agent_to_device(r["user_agent"]),
+                r["user_agent"] or "",
+                r["oauth_account"] or "",
+            ])
+            yield output.getvalue()
+            output.truncate(0)
+            output.seek(0)
+
+    finally:
+        db.close()
+
+

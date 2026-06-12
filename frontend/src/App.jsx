@@ -20,13 +20,10 @@ function ProtectedRoute({ children }) {
 
   if (loading) {
     return (
-      <main className="garim-page">
-        <section className="garim-page__section">
-          <p role="status" aria-live="polite">
-            세션 확인 중...
-          </p>
-        </section>
-      </main>
+      <div className="app-loading-container">
+        <div className="app-loading-spinner" role="progressbar" aria-label="로딩 중" />
+        <div className="app-loading-text">세션 확인 중...</div>
+      </div>
     );
   }
 

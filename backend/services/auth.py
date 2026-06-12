@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import Cookie, HTTPException, status
+from sqlalchemy import text
 
 from services import redis_store, users
 
@@ -306,3 +307,71 @@ def ensure_active_user(user):
 
 def raise_auth_error():
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required.")
+
+
+def record_login_attempt(
+    db,
+    user_id: str | None,
+    provider: str,
+    provider_user_id: str | None,
+    provider_email: str | None,
+    login_result: str,  # success, failed, blocked, deleted, error
+    failure_reason: str | None,
+    ip_address: str,
+    user_agent: str,
+    session_id: str | None = None,
+    refresh_jti: str | None = None,
+    oauth_account_id: str | None = None,
+):
+    # [한글 주석] 로그인 성공/실패 시도 이력을 DB의 user_login_histories 테이블에 적재합니다.
+    try:
+        db.execute(
+            text("""
+                INSERT INTO user_login_histories (
+                    user_id,
+                    oauth_account_id,
+                    provider,
+                    provider_user_id,
+                    provider_email,
+                    login_result,
+                    failure_reason,
+                    ip_address,
+                    user_agent,
+                    session_id,
+                    refresh_jti,
+                    logged_in_at
+                )
+                VALUES (
+                    CAST(:user_id AS uuid),
+                    CAST(:oauth_account_id AS uuid),
+                    :provider,
+                    :provider_user_id,
+                    :provider_email,
+                    :login_result,
+                    :failure_reason,
+                    :ip_address,
+                    :user_agent,
+                    CAST(:session_id AS uuid),
+                    CAST(:refresh_jti AS uuid),
+                    NOW()
+                )
+            """),
+            {
+                "user_id": user_id if user_id else None,
+                "oauth_account_id": oauth_account_id if oauth_account_id else None,
+                "provider": provider,
+                "provider_user_id": provider_user_id,
+                "provider_email": provider_email,
+                "login_result": login_result,
+                "failure_reason": failure_reason,
+                "ip_address": ip_address,
+                "user_agent": user_agent,
+                "session_id": session_id if session_id else None,
+                "refresh_jti": refresh_jti if refresh_jti else None,
+            }
+        )
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        import logging
+        logging.getLogger(__name__).error("[auth] failed to record login attempt: %s", str(e))

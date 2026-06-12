@@ -38,6 +38,12 @@ export default function GarimHeader({ layout = "public", current = "" }) {
         </span>
         <div className="spacer" />
         <div className="gh__right">
+          <Link
+            to="/"
+            className="mui-btn mui-btn--contained mui-btn--sm gh__btn-user-page"
+          >
+            사용자 페이지로 이동
+          </Link>
           <button className="gh__icon" title="알림" type="button">
             <span className="material-icons">notifications</span>
           </button>

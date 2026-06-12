@@ -21,6 +21,9 @@ router.add_api_route("/subscriptions/{user_id}", admin.get_admin_subscription_de
 router.add_api_route("/payments", admin.list_payments, methods=["GET"])
 router.add_api_route("/payments/{payment_id}", admin.get_payment_detail, methods=["GET"])
 router.add_api_route("/payments/{payment_id}/refund", admin.refund_payment, methods=["POST"])
+router.add_api_route("/login-histories", admin.list_login_histories, methods=["GET"])
+router.add_api_route("/login-histories/export", admin.export_login_histories_csv, methods=["GET"])
+router.add_api_route("/login-histories/{login_history_id}", admin.get_login_history_detail, methods=["GET"])
 
 
 
