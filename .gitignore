@@ -31,6 +31,7 @@ reports/
 
 # LLM 공통 설정
 GEMINI.md
+AGENTS.md
 
 # Backend 이미지/영상 업로드 폴더
 storage/

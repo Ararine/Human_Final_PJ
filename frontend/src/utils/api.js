@@ -1,4 +1,5 @@
 const DEFAULT_API_PORT = "8000";
+let refreshSessionPromise = null;
 
 export function getApiBaseUrl() {
   if (import.meta.env.VITE_API_BASE_URL) {
@@ -254,15 +255,11 @@ export async function uploadChunk(
   const headers = {};
   if (chunkHash) headers["X-Chunk-Hash"] = chunkHash;
 
-  const response = await fetch(
-    `${getApiBaseUrl()}/uploads/${uploadId}/chunks/${chunkIndex}`,
-    {
-      method: "POST",
-      credentials: "include",
-      headers,
-      body: formData,
-    },
-  );
+  const response = await fetchWithAuthRetry(`/uploads/${uploadId}/chunks/${chunkIndex}`, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
 
   const body = await response.json().catch(() => ({}));
 
@@ -303,9 +300,8 @@ export async function uploadFile(file) {
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch(`${getApiBaseUrl()}/uploads`, {
+  const response = await fetchWithAuthRetry("/uploads", {
     method: "POST",
-    credentials: "include",
     body: formData,
   });
 
@@ -319,29 +315,47 @@ export async function uploadFile(file) {
 }
 
 async function requestJson(path, options = {}, isRetry = false) {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    credentials: "include",
-    ...options,
-  });
+  const response = await fetchWithAuthRetry(path, options, isRetry);
   const body = await response.json().catch(() => ({}));
-
-  if (response.status === 401 && !isRetry) {
-    try {
-      await fetch(`${getApiBaseUrl()}/auth/refresh`, {
-        method: "POST",
-        credentials: "include",
-      });
-      return requestJson(path, options, true);
-    } catch {
-      throw new Error("세션이 만료되었습니다. 다시 로그인해주세요.");
-    }
-  }
 
   if (!response.ok) {
     throw new Error(body.message || body.detail || "API request failed.");
   }
 
   return body;
+}
+
+async function fetchWithAuthRetry(path, options = {}, isRetry = false) {
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+    credentials: "include",
+    ...options,
+  });
+
+  if (response.status !== 401 || isRetry || path === "/auth/refresh") {
+    return response;
+  }
+
+  await ensureFreshSession();
+  return fetchWithAuthRetry(path, options, true);
+}
+
+async function ensureFreshSession() {
+  if (!refreshSessionPromise) {
+    refreshSessionPromise = fetch(`${getApiBaseUrl()}/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+    }).then((refreshResponse) => {
+      if (!refreshResponse.ok) {
+        throw new Error("세션이 만료되었습니다. 다시 로그인해주세요.");
+      }
+    });
+
+    refreshSessionPromise = refreshSessionPromise.finally(() => {
+      refreshSessionPromise = null;
+    });
+  }
+
+  return refreshSessionPromise;
 }
 
 export async function getAdminPayments(params = {}) {

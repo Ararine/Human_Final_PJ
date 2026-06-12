@@ -1,11 +1,9 @@
+import { useEffect, useState } from "react";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { useAuthStatus } from "../../hooks/useAuthStatus";
-import {
-  formatFileSize,
-  formatPrice,
-  formatQuota,
-  usePricingPlans,
-} from "../../hooks/usePricingPlans";
+import { usePricingPlans } from "../../hooks/usePricingPlans";
+import { getMyPaymentInfo } from "../../utils/api";
+import PricingCard from "../../components/garim/PricingCard";
 import "../../css/garim-pages/Landing.css";
 
 import GarimPage from "../../components/garim/GarimPage";
@@ -17,6 +15,35 @@ export default function Landing() {
     ? "/upload"
     : `/login?next=${encodeURIComponent("/upload")}`;
   const { plans } = usePricingPlans();
+  const [currentPlanCode, setCurrentPlanCode] = useState("");
+
+  // [한글 주석] 사용자가 로그인한 상태라면 현재 구독 중인 요금제 정보를 가져와 하이라이트할 카드 키를 식별합니다.
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!isAuthed) {
+      setCurrentPlanCode("");
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    getMyPaymentInfo()
+      .then((info) => {
+        if (!cancelled) {
+          setCurrentPlanCode((info.plan_code || "").toLowerCase());
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCurrentPlanCode("");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthed]);
 
   return (
     <GarimPage bodyClass="page-public" screenLabel="01 Landing">
@@ -276,67 +303,35 @@ export default function Landing() {
           관리자 정책에서 설정한 크레딧, 금액, 파일 처리 한도, 데이터 보존 기간을 기준으로 표시합니다.
         </p>
         <div className="pricing-grid">
-          {plans.map((plan) => (
-            <div
-              key={plan.key}
-              className={`price-card${plan.featured ? " price-card--featured" : ""}`}
-            >
-              <span className={`mui-chip ${plan.badgeClass} price-card__badge`}>
-                {plan.badge}
-              </span>
-              <span className="overline-k">{plan.name}</span>
-              <div className="price-card__price">
-                {formatPrice(plan.payment.price)}
-                <small>원</small>
-              </div>
-              <p className="caption-k" style={{ fontSize: "13px" }}>
-                {plan.description}
-              </p>
-              <ul className="price-card__feats">
-                <li>
-                  <span className="material-icons">check</span>크레딧{" "}
-                  {formatQuota(plan.payment.credits, "개")}
-                </li>
-                <li>
-                  <span className="material-icons">check</span>월 처리 한도{" "}
-                  {formatQuota(plan.file.monthlyQuota)}
-                </li>
-                <li>
-                  <span className="material-icons">check</span>최대 파일 크기{" "}
-                  {formatFileSize(plan.file.fileSizeLimit)}
-                </li>
-                <li>
-                  <span className="material-icons">check</span>동시 처리 최대{" "}
-                  {formatQuota(plan.file.maxJobs)}
-                </li>
-                <li>
-                  <span className="material-icons">check</span>결과 파일{" "}
-                  {formatQuota(plan.file.resultRetention, "일")} 보관
-                </li>
-                <li>
-                  <span className="material-icons">check</span>원본 파일{" "}
-                  {formatQuota(plan.retention.autoDeleteOriginalHours, "시간")}{" "}
-                  후 삭제
-                </li>
-                <li>
-                  <span className="material-icons">check</span>메타데이터{" "}
-                  {formatQuota(plan.retention.metadataRetentionDays, "일")} 보존
-                </li>
-              </ul>
-              {plan.key === "free" ? (
-                <a
-                  href={startHref}
-                  className="mui-btn mui-btn--contained mui-btn--block"
-                >
-                  {plan.cta}
-                </a>
-              ) : (
-                <a href="/pricing" className="mui-btn mui-btn--outlined mui-btn--block">
-                  자세히 보기
-                </a>
-              )}
-            </div>
-          ))}
+          {plans.map((plan) => {
+            const isFree = plan.key === "free";
+            // [한글 주석] 랜딩 페이지에 맞는 하단 액션 버튼을 생성합니다.
+            const actionButton = isFree ? (
+              <a
+                href={startHref}
+                className="mui-btn mui-btn--contained mui-btn--block"
+              >
+                {plan.cta}
+              </a>
+            ) : (
+              <a href="/pricing" className="mui-btn mui-btn--outlined mui-btn--block">
+                자세히 보기
+              </a>
+            );
+
+            const isCurrentPlan = plan.key === currentPlanCode;
+            const isHighlighted = currentPlanCode ? isCurrentPlan : plan.featured;
+
+            return (
+              <PricingCard
+                key={plan.key}
+                plan={plan}
+                isCurrentPlan={isCurrentPlan}
+                isHighlighted={isHighlighted}
+                actionButton={actionButton}
+              />
+            );
+          })}
         </div>
       </section>
       <section className="closing-cta">

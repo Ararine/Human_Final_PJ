@@ -106,6 +106,26 @@ if (!apiSource.includes('credentials: "include"')) {
   throw new Error("Auth API helpers must include HttpOnly cookies.");
 }
 
+if (!apiSource.includes("ensureFreshSession()")) {
+  throw new Error("API helper must centralize refresh-token retry handling.");
+}
+
+if (!apiSource.includes("if (!refreshResponse.ok)")) {
+  throw new Error("Auth refresh retry must verify the refresh response before retrying.");
+}
+
+if (!apiSource.includes("let refreshSessionPromise = null")) {
+  throw new Error("Auth refresh retry must share one in-flight refresh request.");
+}
+
+if (!apiSource.includes("refreshSessionPromise.finally")) {
+  throw new Error("Auth refresh retry must clear the shared refresh promise after completion.");
+}
+
+if (apiSource.includes("export async function uploadChunk") && !apiSource.includes("return fetchWithAuthRetry(")) {
+  throw new Error("Upload chunk requests must use refresh-token retry handling.");
+}
+
 if (apiSource.includes("getMetaOAuthStartUrl") || apiSource.includes("/auth/instagram")) {
   throw new Error("Instagram OAuth API helper should not be present.");
 }
@@ -134,6 +154,22 @@ if (!appSource.includes("garimPages")) {
 
 if (!appSource.includes("GarimRouteProvider")) {
   throw new Error("App.jsx does not provide Garim route metadata through context.");
+}
+
+if (!appSource.includes("function ProtectedRoute")) {
+  throw new Error("App.jsx does not protect authenticated route layouts.");
+}
+
+if (!appSource.includes("useAuthUser")) {
+  throw new Error("Protected routes must verify the current auth session.");
+}
+
+if (!appSource.includes("PROTECTED_LAYOUTS")) {
+  throw new Error("Protected routes must derive auth requirements from route layout metadata.");
+}
+
+if (!appSource.includes("encodeURIComponent(nextPath)")) {
+  throw new Error("Protected routes must preserve the requested path when redirecting to login.");
 }
 
 const garimPageSource = fs.readFileSync(garimPageFile, "utf8");
