@@ -146,7 +146,7 @@ body { background: #fafafa; }
 .pol-field { display: flex; flex-direction: column; gap: 6px; }
 .pol-field--full { grid-column: 1 / -1; }
 .pol-field span { font: 500 12px var(--font-sans); color: var(--fg-2); }
-.pol-input { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--mui-border); border-radius: 4px; font: 400 14px var(--font-sans); outline: none; background: #fff; }
+.pol-input { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--mui-border); border-radius: 4px; font: 400 14px var(--font-sans); outline: none; background: #fff; color: var(--fg-1); }
 .pol-input:focus { border-color: #1976d2; }
 .pol-textarea { min-height: 84px; resize: vertical; line-height: 1.5; }
 .pol-switch-wrap { display: flex; align-items: center; gap: 8px; cursor: pointer; }
@@ -220,6 +220,28 @@ body { background: #fafafa; }
   font: 600 16px var(--font-sans) !important;
   color: #64748b;
   margin-left: 4px;
+}
+
+/* 미리보기 — 연 결제 파생 금액 라인 */
+.pol-preview-yearly {
+  margin: 6px 0 2px;
+  font: 600 13px var(--font-sans);
+  color: #b08d57;
+}
+.pol-preview-yearly span {
+  font-weight: 400;
+  color: var(--fg-3);
+}
+
+/* 구독 목록 — 월 결제 금액 셀 + 연 결제 파생 보조 표기 */
+.pol-price-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pol-price-cell .pol-subprice {
+  font: 400 11.5px var(--font-sans);
+  color: var(--fg-3);
 }
 
 /* Description text */
@@ -581,3 +603,73 @@ body { background: #fafafa; }
   align-items: center;
   gap: 8px;
 }
+
+/* =========================================================
+   다크 모드 보정 (사용자 화면과 동일한 중성 톤)
+   - 네이비 사이드바(.adm-side)는 라이트/다크 공통 디자인이라 유지
+   - 흰 표면/밝은 회색 배경 → 다크 표면 변수로 교체
+   - 미리보기 글래스 카드의 밝은 흰색/고정 텍스트색 → 다크 톤
+   ========================================================= */
+:root[data-theme="dark"] body { background: var(--bg-2); }
+:root[data-theme="dark"] .pol-adm-main { background: var(--bg-2); }
+
+/* 패널/카드/입력/모달 등 흰 표면 → 다크 표면색 */
+:root[data-theme="dark"] .pol-list-panel,
+:root[data-theme="dark"] .pol-edit-panel,
+:root[data-theme="dark"] .pol-preview-panel,
+:root[data-theme="dark"] .pol-list-panel .pol-card-head,
+:root[data-theme="dark"] .pol-icon-btn,
+:root[data-theme="dark"] .pol-modal,
+:root[data-theme="dark"] .pol-search,
+:root[data-theme="dark"] .pol-input,
+:root[data-theme="dark"] .pol-status-select,
+:root[data-theme="dark"] .pol-limit-select,
+:root[data-theme="dark"] .pol-pagination { background: var(--bg-1); }
+
+/* 보조 회색 배경(테이블 헤더/미리보기 영역) → 다크 보조 표면 */
+:root[data-theme="dark"] .pol-data-head,
+:root[data-theme="dark"] .pol-preview-body { background: var(--surface-alt); }
+
+/* 카드 헤더 고정 텍스트색 → 변수 */
+:root[data-theme="dark"] .pol-list-panel .pol-card-head h2 { color: var(--fg-1); }
+:root[data-theme="dark"] .pol-list-panel .pol-card-head p,
+:root[data-theme="dark"] .pol-pagination .meta { color: var(--fg-2); }
+
+/* 상태 배지(사용중/미사용/삭제) — 라이트 파스텔이 다크에서 흰색처럼 보이므로
+   반투명 틴트 + 밝은 글자색으로 교체 */
+:root[data-theme="dark"] .pol-status { background: rgba(46,125,50,0.22); color: #bce0bd; }
+:root[data-theme="dark"] .pol-status.inactive { background: rgba(237,108,2,0.22); color: #f3cda0; }
+:root[data-theme="dark"] .pol-status.deleted { background: rgba(211,47,47,0.22); color: #f1b7b5; }
+
+/* 행 호버/선택 강조 — 약하게 밝은 음영 */
+:root[data-theme="dark"] .pol-data-row:hover { background: rgba(255,255,255,0.04); }
+:root[data-theme="dark"] .pol-data-row.selected { background: rgba(25,118,210,0.18); }
+:root[data-theme="dark"] .pol-modal-close:hover { background: rgba(255,255,255,0.08); }
+
+/* ── 미리보기(글래스) 카드 다크 보정 ── */
+:root[data-theme="dark"] .pol-modal-preview-col {
+  background: linear-gradient(135deg, #1a1a1d 0%, #141417 100%);
+}
+:root[data-theme="dark"] .pol-price-preview,
+:root[data-theme="dark"] .pol-credit-preview {
+  background: rgba(255,255,255,0.05) !important;
+  border-color: var(--mui-border) !important;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.4) !important;
+}
+/* 미리보기 내부 고정 텍스트색 → 변수 */
+:root[data-theme="dark"] .price-card__price,
+:root[data-theme="dark"] .pol-credit-preview__title h3,
+:root[data-theme="dark"] .pol-credit-preview__price { color: var(--fg-1); }
+:root[data-theme="dark"] .price-card__price small,
+:root[data-theme="dark"] .pol-credit-preview__price small,
+:root[data-theme="dark"] .pol-price-preview .caption-k,
+:root[data-theme="dark"] .pol-credit-preview p { color: var(--fg-2); }
+:root[data-theme="dark"] .pol-price-preview .overline-k,
+:root[data-theme="dark"] .pol-preview-panel--modal .pol-card-head h3 { color: #a5b4fc; }
+/* 특징 li — 흰 반투명 박스 → 다크 반투명 */
+:root[data-theme="dark"] .price-card__feats li {
+  background: rgba(255,255,255,0.05);
+  border-color: var(--mui-border);
+  color: var(--fg-1);
+}
+:root[data-theme="dark"] .price-card__feats li:hover { background: rgba(255,255,255,0.1); }

@@ -64,6 +64,18 @@ def oauth_callback(
             user_agent=ua,
             ip_address=ip,
         )
+        
+        # auth.create_login_session returns (access_token, refresh_token, garim_auth)
+        # Session ID is typically inside garim_auth token or we can just pass None and it won't be recorded
+        users.record_login_history(
+            user_id=user["id"],
+            provider=provider,
+            provider_email=oauth_user.get("email"),
+            login_result="success",
+            ip_address=ip,
+            user_agent=ua,
+            session_id=None
+        )
     except (oauth.OAuthStateError, oauth.OAuthExchangeError) as exc:
         logger.error("[oauth] provider=%s ip=%s error=%s", provider, ip, exc, exc_info=True)
         return redirect_after_login_failure()
@@ -163,7 +175,7 @@ def safe_frontend_path(path: str | None) -> str:
 
 def redirect_to_frontend(role=None, next_path=None):
     base_url = oauth.get_frontend_base_url()
-    path = "/admin/monitoring" if role == "admin" else safe_frontend_path(next_path)
+    path = safe_frontend_path(next_path)
     return RedirectResponse(f"{base_url}{path}", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 
 
@@ -177,3 +189,30 @@ def redirect_to_reregister(provider):
         f"{base_url}/login?reregister=true&provider={provider}",
         status_code=status.HTTP_307_TEMPORARY_REDIRECT,
     )
+
+
+def get_consents(access_token: str | None = Cookie(default=None)):
+    current_user = auth.authenticate_access_token(access_token)
+    consent = users.get_user_consent(current_user["id"])
+    if consent and consent["is_agreed"]:
+        return {"consented": True, "version": consent["version"]}
+    return {"consented": False}
+
+
+def save_consents(
+    request: Request,
+    is_agreed: bool = Body(...),
+    version: str = Body(...),
+    access_token: str | None = Cookie(default=None)
+):
+    current_user = auth.authenticate_access_token(access_token)
+    ip = request.client.host if request.client else "unknown"
+    ua = request.headers.get("user-agent", "")
+    consent = users.save_user_consent(
+        current_user["id"],
+        is_agreed,
+        version,
+        ip_address=ip,
+        user_agent=ua,
+    )
+    return {"success": True, "consent": consent}

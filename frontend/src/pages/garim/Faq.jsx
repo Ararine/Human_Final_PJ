@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import "../../css/garim-pages/Faq.css";
 
@@ -26,7 +27,7 @@ export default function Faq() {
               카테고리
             </h3>
             <a href="#" className="active">
-              <span className="material-icons" style={{ fontSize: "18px" }}>
+              <span className="material-icons faq-ico">
                 apps
               </span>
               전체
@@ -35,7 +36,7 @@ export default function Faq() {
               </span>
             </a>
             <a href="#">
-              <span className="material-icons" style={{ fontSize: "18px" }}>
+              <span className="material-icons faq-ico">
                 play_arrow
               </span>
               시작하기
@@ -44,7 +45,7 @@ export default function Faq() {
               </span>
             </a>
             <a href="#">
-              <span className="material-icons" style={{ fontSize: "18px" }}>
+              <span className="material-icons faq-ico">
                 visibility
               </span>
               검출 기능
@@ -53,7 +54,7 @@ export default function Faq() {
               </span>
             </a>
             <a href="#">
-              <span className="material-icons" style={{ fontSize: "18px" }}>
+              <span className="material-icons faq-ico">
                 visibility_off
               </span>
               치환 기능
@@ -62,7 +63,7 @@ export default function Faq() {
               </span>
             </a>
             <a href="#">
-              <span className="material-icons" style={{ fontSize: "18px" }}>
+              <span className="material-icons faq-ico">
                 payment
               </span>
               결제·환불
@@ -71,7 +72,7 @@ export default function Faq() {
               </span>
             </a>
             <a href="#">
-              <span className="material-icons" style={{ fontSize: "18px" }}>
+              <span className="material-icons faq-ico">
                 lock
               </span>
               데이터·보안
@@ -80,7 +81,7 @@ export default function Faq() {
               </span>
             </a>
             <a href="#">
-              <span className="material-icons" style={{ fontSize: "18px" }}>
+              <span className="material-icons faq-ico">
                 share
               </span>
               SNS 연동
@@ -89,7 +90,7 @@ export default function Faq() {
               </span>
             </a>
             <a href="#">
-              <span className="material-icons" style={{ fontSize: "18px" }}>
+              <span className="material-icons faq-ico">
                 tune
               </span>
               입력 사양
@@ -141,13 +142,13 @@ export default function Faq() {
                   도움이 되었나요?
                 </span>
                 <button>
-                  <span className="material-icons" style={{ fontSize: "18px" }}>
+                  <span className="material-icons faq-ico">
                     thumb_up
                   </span>
                   도움됨
                 </button>
                 <button>
-                  <span className="material-icons" style={{ fontSize: "18px" }}>
+                  <span className="material-icons faq-ico">
                     thumb_down
                   </span>
                   아니요
@@ -207,12 +208,12 @@ export default function Faq() {
               </div>
             </details>
             <div className="contact-card">
-              <div style={{ width: "48px", height: "48px", borderRadius: "50%", background: "rgba(151,71,255,0.1)", color: "#9747ff", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+              <div className="faq-contact-ico">
                 <span className="material-icons">
                   support_agent
                 </span>
               </div>
-              <div style={{ flex: "1" }}>
+              <div className="faq-contact-body">
                 <h3>
                   원하는 답을 못 찾으셨나요?
                 </h3>
@@ -220,9 +221,9 @@ export default function Faq() {
                   support@garim.kr 로 문의해주세요. 평균 4시간 이내 답변 드립니다.
                 </p>
               </div>
-              <a href="mailto:support@garim.kr" className="mui-btn mui-btn--contained">
+              <Link to="/support" className="mui-btn mui-btn--contained">
                 문의하기
-              </a>
+              </Link>
             </div>
           </main>
         </div>

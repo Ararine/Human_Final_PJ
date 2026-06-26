@@ -1,73 +1,65 @@
-## Python 가상환경 세팅
+# Garim Backend (FastAPI)
 
-### 가상환경 세팅이 완전 처음이라면!
+가림(GARIM) 서비스의 핵심 비즈니스 로직, 데이터베이스 통신, 외부 AI 워커 연동을 담당하는 FastAPI 백엔드입니다.
 
-- anaconda / miniconda 설치
-- anaconda / miniconda 실행 후, conda init
-- environment.yml 이 있는 위치까지 폴더 이동
-- conda env create -f environment.yml -n 가상환경명 입력
-  -> environment.yml 을 기준으로 가상환경 설치(이미 만들어진 가상환경을 복제하는 개념)
-  -> -n 가상환경명 누락시, environment.yml 에 있는 name 값으로 가상환경명 생성
+## 🚀 서버 실행 방법
 
-### 이미 가상환경 세팅이 되어있다면!
+현재 프로젝트는 **Docker Compose**를 이용한 통합 환경 실행을 권장합니다.
+로컬 환경에서 직접 실행하려면 아래 가이드를 참고하세요.
 
-- (초기 가상환경이 존재하지 않는다면) conda create -n 가상환경명 python=3.10
-- conda activate 가상환경명
-- requirements.txt 이 있는 위치까지 폴더 이동
-- pip install -r requirements.txt
+### 방법 1. Docker 통합 환경 (권장)
+프로젝트 최상단 폴더에서 아래 명령어를 실행하면 DB, Redis, 백엔드 전체가 한 번에 실행됩니다.
+```bash
+docker-compose up -d --build
+```
 
-## backend 서버 실행 방법
+### 방법 2. 로컬 직접 실행
+Python 3.10 이상의 환경에서 가상환경을 세팅한 후 실행합니다.
+```bash
+# 패키지 설치
+pip install -r requirements.txt
 
-1. backend 폴더로 이동
-2. uvicorn main:app --host 0.0.0.0 --port 8000 --reload 로 서버 실행
-3. ** nodemon main.py 로 실행 안 하는 이유 ** : 1. logging이 두번씩 찍힘 2. 파일 경로 일원화
+# 서버 실행 (uvicorn)
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+> **참고**: `main.py`를 직접 실행하지 않고 uvicorn 명령어로 실행하는 이유는, 로깅 중복 출력 방지 및 파일 상대 경로 일원화를 위해서입니다.
 
-## cloudflare 서버 실행 방법
+## ☁️ 외부 코랩(Colab) 워커 통신 방법 (Cloudflare Tunnel)
 
-1. backend 폴더로 이동
-2. python cloudflare_tunnel.py 로 서버 실행
+백엔드 서버와 구글 코랩에 있는 GPU 워커가 양방향 통신을 하려면 백엔드 주소가 외부에 노출되어야 합니다.
 
-### Colab 과 연결
+- **[옵션 1] 정식 도메인이 있는 경우 (권장)**
+  이미 `garim.shop`과 같은 정식 도메인이 Cloudflare Zero Trust에 연결되어 있다면, **백엔드에서 따로 스크립트를 실행할 필요가 없습니다.** (코랩 설정 파일에 정식 도메인 주소 기입)
 
-3. prompt 에 아래 주소 나오는 주소 저장
-   ex) Colab BACKEND_URL 에 아래 주소를 넣으세요:
-   https://href-dui-marketplace-facilities.trycloudflare.com
-4. BACKEND_URL 부분에 복사한 주소 붙여넣기
-5. .env 파일 내 WORKER_SECRET 키 붙여넣기
+- **[옵션 2] 정식 도메인이 없는 경우 (일회성 임시 터널)**
+  로컬 환경에서 정식 도메인 없이 테스트 중이라면, 아래 스크립트를 실행해 1회용 임시 터널을 개통합니다.
+  ```bash
+  python cloudflare_tunnel.py
+  ```
+  출력된 `https://xxx.trycloudflare.com` 형태의 주소를 코랩 워커 설정(`BACKEND_URL`)에 입력하시면 됩니다.
 
-## 깃 사용법
+## 📂 폴더 구조도
 
-    - 1. git pull(최신 소스 받아오기)
-    - (소스 출동시 backend 담당자와 확인)
-    - 2. 방법1: git add .(전체) /방법2: git add 업로드할 파일1, 업로드할 파일2(부분)
-        **주의 사항** 작업한 내용중 필요한 파일만 업로드(충돌 방지), git add .(전체) 로 할 경우, 전체 확인 후 업로드
-    - 3. git commit -m "커밋할 내용"
-    - 4. git push -u origin main(최소 commit 시에만) / git push(2번째부터)
-
-## 폴더 구조도
-
+```text
 backend/
-├── controllers/ # 요청 처리 로직 (Controller 계층)
-│
-├── core/ # 핵심 설정 및 공통 기능
-│ └── logging.py # 로깅 설정
-│
-├── data/ # 데이터 파일 / 초기 데이터 / 저장소
-│
-├── models/ # DB 모델(SQLAlchemy 등)
-│
-├── routes/ # API 라우터 정의
-│
-├── schemas/ # Pydantic 요청/응답 스키마
-│
-├── services/ # 비즈니스 로직 계층
-│
-├── utils/ # 유틸 함수 모음
-│
-├── .env # 실제 환경변수
-│
-├── main.py # FastAPI 엔트리포인트
-│
-├── README.md # Backend 가이드
-│
-└── requirements.txt # Python 패키지 목록
+├── controllers/        # API 요청/응답 처리 (Controller 계층)
+├── core/               # DB 설정, 로깅, 환경변수, 보안 등 공통 모듈
+├── docker/             # DB 초기화 SQL 스크립트 및 도커 관련 설정
+├── local_worker/       # 로컬 컴퓨터 리소스를 활용하는 백그라운드 워커
+├── models/             # 데이터베이스 테이블 매핑 (SQLAlchemy ORM)
+├── routes/             # 도메인별 API 라우터 (엔드포인트) 정의
+├── schemas/            # 데이터 검증 및 직렬화 (Pydantic DTO)
+├── services/           # 핵심 비즈니스 로직 및 외부 API 호출 계층
+├── storage/            # 사용자 업로드 파일 및 처리 결과물 임시 저장소
+├── tools/              # 개발 지원용 외부 도구 및 스크립트 모음
+├── utils/              # 프로젝트 전반에 걸쳐 재사용 가능한 유틸 함수들
+├── cloudflare_tunnel.py # 로컬-코랩 연동을 위한 1회용 터널 발급 스크립트
+├── Dockerfile          # 백엔드 컨테이너 생성을 위한 도커 빌드 파일
+├── main.py             # FastAPI 앱 진입점 및 서버 실행 파일
+└── requirements.txt    # 백엔드 필수 파이썬 패키지 목록
+```
+
+## ⚙️ 깃(Git) 사용 가이드 (충돌 방지)
+- 코드를 업로드(push)하기 전에 반드시 `git pull`을 받아 최신 상태를 유지하세요.
+- `git add .` (전체 추가) 대신, 가급적 **본인이 수정한 파일만 명시적으로 지정**(`git add 경로/파일명`)해서 커밋하는 것을 권장합니다.
+- 커밋 메시지 작성 시 반드시 [가림 프로젝트 Git 커밋 메시지 규칙](../docs/guides/GIT_메세지작성.md)을 준수해 주세요.

@@ -381,3 +381,94 @@
     transform: translateY(0);
   }
 }
+
+/* Dark Mode */
+:root[data-theme="dark"] .set-page { background: var(--bg-2); }
+:root[data-theme="dark"] .set-nav { background: var(--bg-1); border-color: var(--mui-border); }
+:root[data-theme="dark"] .set-nav a { color: var(--fg-1); }
+:root[data-theme="dark"] .set-nav a:hover { background: rgba(255, 255, 255, 0.04); }
+:root[data-theme="dark"] .set-nav a.active { background: rgba(25, 118, 210, 0.15); color: #42a5f5; }
+:root[data-theme="dark"] .set-nav a.active .material-icons { color: #42a5f5; }
+:root[data-theme="dark"] .set-main h1 { color: var(--fg-1); }
+:root[data-theme="dark"] .set-section { background: var(--bg-1); box-shadow: var(--mui-elev-1); }
+:root[data-theme="dark"] .set-section h3 { color: var(--fg-1); }
+:root[data-theme="dark"] .set-field label { color: var(--fg-1); }
+:root[data-theme="dark"] .set-field input { background: var(--bg-1); color: var(--fg-1); border-color: var(--mui-border); }
+:root[data-theme="dark"] .set-field input:focus { border-color: #42a5f5; }
+:root[data-theme="dark"] .set-field input:disabled { background: var(--bg-2); color: var(--fg-3); }
+:root[data-theme="dark"] .row-toggle .t { color: var(--fg-1); }
+:root[data-theme="dark"] .row-toggle { border-color: var(--mui-divider); }
+:root[data-theme="dark"] .switch { background: rgba(255, 255, 255, 0.3); }
+:root[data-theme="dark"] .switch.on { background: rgba(66, 165, 245, 0.5); }
+:root[data-theme="dark"] .switch.on .knob { background: #42a5f5; }
+:root[data-theme="dark"] .login-list .row { border-color: var(--mui-divider); }
+:root[data-theme="dark"] .danger { background: rgba(211, 47, 47, 0.1); border-color: rgba(211, 47, 47, 0.3); }
+:root[data-theme="dark"] .danger h4 { color: #ef5350; }
+:root[data-theme="dark"] .save-bar { background: var(--bg-2); }
+:root[data-theme="dark"] .delete-modal { background: var(--bg-1); }
+:root[data-theme="dark"] .delete-modal h3 { color: #ef5350; }
+:root[data-theme="dark"] .delete-modal-input { background: var(--bg-2); color: var(--fg-1); border-color: var(--mui-border); }
+:root[data-theme="dark"] .receipt-modal { background: var(--bg-1); box-shadow: var(--mui-elev-24); }
+:root[data-theme="dark"] .receipt-modal-head h3 { color: var(--fg-1); }
+:root[data-theme="dark"] .receipt-modal-body { border-color: var(--mui-divider); }
+:root[data-theme="dark"] .receipt-modal-body .row.total { border-color: var(--mui-divider); }
+:root[data-theme="dark"] .receipt-modal-body .row.total .price { color: #42a5f5; }
+
+/* 위험 아이콘/타이틀 */
+.set-ico-danger {
+  color: #d32f2f;
+}
+.set-danger-title {
+  color: #d32f2f;
+}
+.set-danger-btn {
+  color: #d32f2f;
+  border-color: rgba(211, 47, 47, 0.5);
+}
+/* 행/간격 유틸 */
+.set-row-12 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.set-mt-32 {
+  margin-top: 32px;
+}
+.set-mt-24 {
+  margin-top: 24px;
+}
+.set-subhead {
+  font-size: 15px;
+  margin-bottom: 12px;
+}
+.set-flex1 {
+  flex: 1;
+}
+.set-flex1-muted {
+  flex: 1;
+  color: var(--fg-3);
+}
+.set-chip-mr {
+  margin-right: 8px;
+}
+.set-policy-strong {
+  color: #1976d2;
+}
+.set-val-bold {
+  font-weight: 600;
+}
+.set-w-full {
+  width: 100%;
+}
+/* 영수증 주문번호 */
+.set-order-id {
+  font-size: 12px;
+  color: var(--fg-2);
+  word-break: break-all;
+}
+/* 로그인 이력 라벨 */
+.set-login-label {
+  font: 500 13px var(--font-sans);
+  display: block;
+  margin-bottom: 12px;
+}

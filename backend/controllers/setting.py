@@ -31,6 +31,18 @@ def get_my_setting(access_token: str | None = Cookie(default=None)):
     )
 
 
+def get_my_login_histories(access_token: str | None = Cookie(default=None)):
+    current_user = auth.authenticate_access_token(access_token)
+    histories = users.get_login_histories(current_user["id"], limit=5)
+    return JSONResponse(
+        {
+            "data": histories,
+            "message": "최근 로그인 이력 조회 성공",
+        },
+        status_code=status.HTTP_200_OK,
+    )
+
+
 def update_my_setting(
     payload: dict = Body(...),
     access_token: str | None = Cookie(default=None),

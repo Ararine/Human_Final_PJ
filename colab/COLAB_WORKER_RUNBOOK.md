@@ -16,149 +16,69 @@
 
 ---
 
-## 1단계: DB / Redis 실행
+## 1단계: 통합 서버 환경 실행
 
-```bash
-cd docker
-docker compose up -d
-```
+이제 DB, Redis, 백엔드, 프론트엔드가 프로젝트 최상위 폴더에서 Docker Compose 하나로 통합 실행됩니다.
 
-컨테이너 상태 확인:
+1. 프로젝트 최상위 폴더(`Human_Final_PJ-main`)에서 `docker-compose -f docker-compose.dev.yml up -d --build` 실행
+2. `http://localhost` 에 접속하여 프론트엔드와 백엔드가 정상 동작하는지 확인
 
-```bash
-docker compose ps
-# final_db, final_redis 모두 healthy 여야 한다.
-```
-
-> `docker/.env` 에 `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `DB_PORT`, `REDIS_PORT` 가 설정되어 있어야 한다.
-> 초기 실행 시 `docker/database/init/0_init_table_v6.sql` 이 자동으로 적용된다.
+> `.env.development` 파일에 `WORKER_SECRET`이 설정되어 있어야 합니다. (기본값 제공됨)
 
 ---
 
-## 2단계: 백엔드 .env 설정
+## 2단계: 백엔드 접속 URL 확인 및 외부 공개 (Cloudflare Tunnel)
 
-`backend/.env` 파일을 `backend/.env.sample` 기준으로 생성하고 아래 항목을 반드시 설정한다.
+구글 코랩(Colab) 환경에서 내 컴퓨터에서 실행 중인 백엔드에 접근하려면 외부에서 접속 가능한 도메인이나 터널 주소가 필요합니다.
 
-```dotenv
-# DB 연결 (docker/.env 와 일치시킬 것)
-DB_HOST=localhost
-DB_PORT=5433
-DB_USER=1team
-DB_PASSWORD=1team
-DB_NAME=1team
+**✅ [옵션 1] 정식 도메인이 있는 경우 (권장)**
+이미 Cloudflare Zero Trust 등으로 도커 환경과 `garim.shop` 같은 정식 도메인이 영구적으로 연결되어 있다면, 별도의 스크립트 실행 없이 **이 단계를 건너뛰셔도 됩니다.** 
+코랩 설정에서 백엔드 주소(`https://garim.shop/api/v1`)를 그대로 입력하시면 됩니다.
 
-# Redis
-REDIS_URL=redis://localhost:6379/0
-
-# 백엔드 서버
-HOST=0.0.0.0
-PORT=8000
-
-# Colab Worker 인증 시크릿 — Worker 와 반드시 동일한 값 사용
-WORKER_SECRET=여기에_긴_임의_문자열_입력
-
-# Cloudflare Tunnel은 별도 계정 토큰 없이 실행 가능
-```
-
-`WORKER_SECRET` 생성 예시:
-
-```bash
-python -c "import secrets; print(secrets.token_urlsafe(32))"
-```
-
----
-
-## 3단계: 로컬 백엔드 실행
-
-```bash
-cd backend
-pip install -r requirements.txt   # 최초 1회
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-서버 정상 확인:
-
-```
-http://localhost:8000/docs
-```
-
----
-
-## 4단계: Cloudflare Tunnel로 8000 포트 공개
-
-**방법 A — 백엔드 스크립트 사용 (권장)**
+**⚠️ [옵션 2] 정식 도메인이 없는 경우 (일회성 임시 터널 사용)**
+도메인이 없다면 `cloudflare_tunnel.py` 스크립트를 실행하여 1회용 임시 터널을 개통해야 합니다.
+새 터미널을 열고 `backend` 폴더로 이동한 뒤 스크립트를 실행합니다.
 
 ```bash
 cd backend
 python cloudflare_tunnel.py
 ```
 
-출력 예시:
-
-```
-Cloudflare Tunnel URL: https://xxxx.trycloudflare.com
-Colab garim_colab_worker.py 의 BACKEND_URL 에 위 URL 을 입력하세요.
-```
-
-**방법 B — cloudflared 직접 실행**
-
-```bash
-cloudflared tunnel --url http://localhost:8000
-```
-
-> Cloudflare Tunnel 세션이 종료되면 URL이 바뀐다. 새 URL을 Colab 에 다시 입력해야 한다.
+출력 예시에서 `https://xxxx.trycloudflare.com` 형태의 임시 터널 주소를 복사해 둡니다.
+> **참고**: 임시 터널 세션이 종료되면 URL이 바뀝니다. 코랩을 다시 시작할 때마다 새 URL을 복사해서 코랩 설정에 입력해야 합니다.
 
 ---
 
-## 5단계: Colab worker 설정 및 실행
+## 3단계: Colab worker 설정 및 실행
 
-### 5-1. 분석 파이프라인 파일을 Drive에 업로드
+### 3-1. 분석 파이프라인 파일을 Drive에 업로드
 
-Google Drive의 `MyDrive/garim_colab` 폴더에 아래 파일을 업로드한다.
+Google Drive의 `MyDrive/garim_colab` 폴더에 아래 2개 파이프라인 파일을 업로드합니다.
 
 ```text
-garim_pipeline.py
-garim_visual_pii_ocr_pipeline.py
+colab_pipeline_stt.py
+colab_pipeline_mask.py
 ```
 
-worker가 `garim_pipeline.py`를 import하면 필요한 패키지를 설치하고
-`VisualOCR → AudioExtract → STT → PIIDetect → BeepRender` analyzer를 등록한다.
-`WHISPER_MODEL_SIZE`는 `garim_pipeline.py`에서 `medium` 정도로 낮춰도 된다.
+### 3-2. garim_colab_worker.py 파이썬 실행 혹은 Colab 셀에 붙여넣기
 
-### 5-2. garim_colab_worker.py 셀 순서대로 실행
-
-`docs/colab/garim_colab_worker.py` 를 Colab에 올리고 순서대로 실행한다.
-
-1. `[설치]` 셀
-2. `[Config]` 셀 — **아래 3개 값 반드시 수정**
+`colab/garim_colab_worker.py` 코드를 열고 상단의 환경 설정 변수들을 반드시 수정해야 합니다.
 
 ```python
-BACKEND_URL   = "https://xxxx.trycloudflare.com"   # 4단계에서 복사한 URL (슬래시 없이)
+# ===== 환경설정 (모든 환경설정은 이부분에서 변경) =====
+# 정식 도메인이 있으면 정식 도메인 입력, 없으면 2단계에서 복사한 trycloudflare 임시 URL 입력 (마지막 슬래시 제외)
+BACKEND_URL   = "https://garim.shop/api/v1"      
 WORKER_SECRET = "여기에_백엔드_env와_동일한_값"
 WORKER_ID     = "colab-worker-01"                # 식별 이름 (자유)
 ```
 
-3. `[API 헬퍼]` 셀
-4. `[Heartbeat 스레드]` 셀
-5. `[파이프라인 연동]` 셀
-6. `[Worker Loop]` 셀
-7. `[실행]` 셀 — `run_loop()` 실행
+수정 후 코드를 Colab 노트북에 붙여넣고 전체 실행하거나, `python garim_colab_worker.py` 명령어로 스크립트를 직접 실행합니다.
 
-```python
-run_loop()   # job을 계속 polling (■ 버튼으로 중단)
-```
+## 4단계: 업로드 확인 및 진행률 모니터링
 
----
+통합 환경에 포함된 Nginx 및 프론트엔드를 사용해 테스트합니다.
 
-## 6단계: 프론트 dev server 실행 및 업로드 확인
-
-```bash
-cd frontend
-npm install   # 최초 1회
-npm run dev
-```
-
-브라우저에서 `http://localhost:3000` 접속 후:
+브라우저에서 `http://localhost` 접속 후:
 
 1. 로그인
 2. `업로드` 페이지에서 영상 파일 업로드
@@ -176,6 +96,17 @@ Colab 콘솔에서도 아래와 같은 로그가 출력되어야 한다:
 09:02:11 [INFO] STT 결과 저장 완료: 42개 세그먼트
 09:02:11 [INFO] job 완료: <job_id>
 ```
+
+---
+
+## 💡 구글 드라이브 용량 관리 주의사항 (테스트 목적 시)
+
+본인 계정의 구글 드라이브를 연동하여 테스트하는 경우 다음 사항을 반드시 주의해야 합니다:
+
+1. 파이프라인에서 추출/생성된 최종 결과물(특히 마스킹된 원본 영상 등 대용량 파일)은 **본인 구글 드라이브에 자동으로 생성된 폴더 내에 저장**됩니다.
+2. 웹 플랫폼 히스토리 페이지에서 파일을 삭제하면 드라이브에서도 연동되어 자동 삭제됩니다.
+3. **[핵심 주의사항]** 구글 드라이브 정책상 연동 삭제된 파일은 영구 삭제가 아닌 **'휴지통'**으로 이동합니다. 즉, 휴지통을 비우지 않으면 구글 드라이브 용량을 계속 차지합니다.
+4. 따라서 본인 계정의 용량이 작을 경우, 수차례 테스트 시 용량 부족으로 오류가 발생할 수 있으므로 **주기적으로 구글 드라이브에 접속하여 '휴지통 비우기'**를 진행해야 합니다.
 
 ---
 
@@ -226,8 +157,9 @@ WHERE job_id = '<job_id>';
 
 | 오류                              | 원인                                          | 해결                                                        |
 | --------------------------------- | --------------------------------------------- | ----------------------------------------------------------- |
-| `401 Unauthorized`                | WORKER_SECRET 불일치                          | 백엔드 `.env` 와 Colab Config 셀의 `WORKER_SECRET` 비교     |
-| `Connection refused`              | Cloudflare Tunnel URL 만료 또는 백엔드 미실행 | Cloudflare Tunnel URL 재발급 후 Colab Config 셀 재실행      |
-| `파일이 아직 준비되지 않았습니다` | 업로드 status 가 `uploaded` 아님              | `uploads` 테이블 status 컬럼 확인                           |
-| `대기 중인 작업 없음`             | job이 큐에 없음                               | `analysis_jobs` 테이블 status=`queued` 확인                 |
-| STT 매우 느림                     | Colab CPU 런타임                              | GPU 런타임으로 변경, 또는 `WHISPER_MODEL_SIZE=base` 로 축소 |
+| `401 Unauthorized`                | WORKER_SECRET 불일치                          | 프로젝트 최상위 `.env.development`의 값과 워커 코드 상단의 `WORKER_SECRET` 일치 여부 확인 |
+| `Connection refused`              | Cloudflare Tunnel URL 만료 또는 백엔드 미실행 | Cloudflare Tunnel URL 재발급 후 워커 코드 `BACKEND_URL` 수정 및 재실행 |
+| 저장/업로드 실패 또는 용량 오류   | 구글 드라이브 용량 초과 (휴지통 포함)         | 본인 구글 드라이브에 접속하여 파일 삭제 및 **'휴지통 비우기'** 완료 후 재실행 |
+| `파일이 아직 준비되지 않았습니다` | 업로드 status 가 `uploaded` 아님              | DB `uploads` 테이블의 status 컬럼 상태 확인                 |
+| `대기 중인 작업 없음`             | job이 큐에 없음                               | DB `analysis_jobs` 테이블의 status=`queued` 상태 확인       |
+| 분석/마스킹 속도가 매우 느림      | Colab이 CPU 런타임으로 동작 중                | Colab 상단 메뉴 [런타임] > [런타임 유형 변경]에서 **T4 GPU**로 변경 후 재실행 |

@@ -247,7 +247,7 @@ def set_auth_cookies(response, token_pair):
         httponly=True,
         secure=get_cookie_secure(),
         samesite=get_cookie_samesite(),
-        path="/auth/refresh",
+        path="/api/v1/auth/refresh",
         max_age=get_refresh_ttl_seconds(),
     )
 
@@ -259,7 +259,7 @@ def delete_auth_cookies(response):
         "samesite": get_cookie_samesite(),
     }
     response.delete_cookie(ACCESS_COOKIE_NAME, path="/", **cookie_options)
-    response.delete_cookie(REFRESH_COOKIE_NAME, path="/auth/refresh", **cookie_options)
+    response.delete_cookie(REFRESH_COOKIE_NAME, path="/api/v1/auth/refresh", **cookie_options)
     response.delete_cookie(REFRESH_COOKIE_NAME, path="/", **cookie_options)
     for cookie_name in LEGACY_AUTH_COOKIE_NAMES:
         response.delete_cookie(cookie_name, path="/", **cookie_options)

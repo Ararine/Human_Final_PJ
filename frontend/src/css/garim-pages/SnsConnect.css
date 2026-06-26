@@ -87,6 +87,10 @@
   margin-top: 24px;
 }
 
+/* ── 다크 모드 보정 ── 상태/안내 카드 흰 배경 → 다크 표면색 */
+:root[data-theme="dark"] .sns-status-card,
+:root[data-theme="dark"] .sns-info-card { background: var(--bg-1); }
+
 @media (max-width: 640px) {
   .sns-page {
     padding: 32px 16px 64px;

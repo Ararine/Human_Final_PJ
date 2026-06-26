@@ -403,6 +403,10 @@ export default function AdminPolicy() {
             <span className="material-icons">payments</span>
             사용자 결제 확인
           </a>
+                  <a href="/admin/reports">
+            <span className="material-icons">report_problem</span>
+            문의 내역
+          </a>
         </aside>
 
         <main className="adm-main pol-adm-main">
@@ -542,7 +546,14 @@ export default function AdminPolicy() {
                             {statusLabel(plan.status)}
                           </span>
                         </span>
-                        <span>₩{formatMoney(plan.price_amount)}</span>
+                        <span className="pol-price-cell">
+                          ₩{formatMoney(plan.price_amount)}
+                          {Number(plan.price_amount) > 0 && (
+                            <small className="pol-subprice">
+                              연 ₩{formatMoney(Number(plan.price_amount) * 10)} (2개월 무료)
+                            </small>
+                          )}
+                        </span>
                         <span>{formatMoney(plan.credits)} 크레딧</span>
                         <span>{formatMoney(plan.file_size_limit)}MB</span>
                         <span>{plan.result_retention_days ?? "-"}일</span>
@@ -968,7 +979,11 @@ function PlanFormPanel({ title, form, onChange, onSave, onReset, onClose }) {
           저장
         </button>
       </div>
-    </aside>
+              <a href="/admin/reports">
+            <span className="material-icons">report_problem</span>
+            문의 내역
+          </a>
+        </aside>
   );
 }
 
@@ -1040,7 +1055,11 @@ function CreditFormPanel({ title, form, onChange, onSave, onReset, onClose }) {
           저장
         </button>
       </div>
-    </aside>
+              <a href="/admin/reports">
+            <span className="material-icons">report_problem</span>
+            문의 내역
+          </a>
+        </aside>
   );
 }
 
@@ -1066,8 +1085,15 @@ function PlanPreviewPanel({ form }) {
           <span className="overline-k">{planName}</span>
           <div className="price-card__price">
             {formatMoney(form.price_amount)}
-            <small>원</small>
+            <small>원 / 월</small>
           </div>
+          {/* 연 결제 파생 금액 — 월 × 10 (2개월 무료), pricing 페이지와 동일 공식 */}
+          {Number(form.price_amount || 0) > 0 && (
+            <div className="pol-preview-yearly">
+              연 결제 {formatMoney(Number(form.price_amount) * 10)}원
+              <span> (2개월 무료 · 월 {formatMoney(Math.round(Number(form.price_amount) * 10 / 12))}원 상당)</span>
+            </div>
+          )}
           <p className="caption-k">{description}</p>
           <ul className="price-card__feats">
             <li>
@@ -1095,7 +1121,11 @@ function PlanPreviewPanel({ form }) {
           </button>
         </div>
       </div>
-    </aside>
+              <a href="/admin/reports">
+            <span className="material-icons">report_problem</span>
+            문의 내역
+          </a>
+        </aside>
   );
 }
 
@@ -1134,7 +1164,11 @@ function CreditPreviewPanel({ form }) {
           </button>
         </div>
       </div>
-    </aside>
+              <a href="/admin/reports">
+            <span className="material-icons">report_problem</span>
+            문의 내역
+          </a>
+        </aside>
   );
 }
 

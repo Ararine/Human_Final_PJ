@@ -1,3 +1,8 @@
+/*
+코드 설명:
+요금/크레딧 정책의 기본값과 포맷 유틸, 정책→플랜 변환 로직을 모은 모듈. usePricingPlans 훅은 관리자 정책을
+불러와 기본값과 병합한 뒤 정렬된 구독/크레딧 플랜 목록을 제공한다.
+*/
 import { useEffect, useMemo, useState } from "react";
 import { getAdminPolicySettings } from "../utils/api";
 
@@ -10,7 +15,7 @@ export const DEFAULT_POLICY = {
         fileSizeLimit: 50,
         maxJobs: 3,
         monthlyQuota: 5,
-        resultRetention: 3,
+        resultRetention: 0,
       },
       pro: {
         fileSizeLimit: 500,
@@ -22,7 +27,7 @@ export const DEFAULT_POLICY = {
         fileSizeLimit: 2048,
         maxJobs: 30,
         monthlyQuota: null,
-        resultRetention: 30,
+        resultRetention: 14,
       },
     },
     allowedFormats: ["jpg", "jpeg", "png", "webp", "mp4", "mov"],
@@ -30,39 +35,47 @@ export const DEFAULT_POLICY = {
   payment: {
     plans: {
       free: {
-        credits: 5,
+        credits: 10,
         price: 0,
         sortOrder: 10,
         status: "active",
       },
       pro: {
-        credits: 50,
-        price: 2900,
+        credits: 60,
+        price: 9900,
         sortOrder: 20,
         status: "active",
       },
       studio: {
-        credits: 500,
+        credits: 150,
         price: 19800,
         sortOrder: 30,
         status: "active",
       },
     },
     creditPlans: {
-      credit_100: {
-        name: "100 크레딧",
-        credits: 100,
+      credit_25: {
+        name: "25 크레딧",
+        credits: 25,
         bonusCredits: 0,
         price: 5000,
         sortOrder: 10,
         status: "active",
       },
-      credit_500: {
-        name: "500 크레딧",
-        credits: 500,
+      credit_80: {
+        name: "80 크레딧",
+        credits: 80,
         bonusCredits: 0,
-        price: 20000,
+        price: 15000,
         sortOrder: 20,
+        status: "active",
+      },
+      credit_150: {
+        name: "150 크레딧",
+        credits: 150,
+        bonusCredits: 0,
+        price: 25000,
+        sortOrder: 30,
         status: "active",
       },
     },
@@ -79,25 +92,25 @@ export const DEFAULT_POLICY = {
 export const PLAN_META = {
   free: {
     name: "Free",
-    badge: "기본",
+    badge: "Basic",
     badgeClass: "mui-chip--primary",
-    featured: true,
-    description: "개인 테스트와 가벼운 분석을 위한 무료 플랜입니다.",
+    description: "개인 진단과 가벼운 체험을 위한 무료 플랜.",
     cta: "무료로 시작",
   },
   pro: {
-    name: "PRO",
-    badge: "추천",
+    name: "Pro",
+    badge: "Most Popular",
     badgeClass: "mui-chip--soft-warning",
-    description: "정기적으로 영상을 분석하는 개인 사용자에게 적합합니다.",
-    cta: "결제하기",
+    featured: true,
+    description: "정기적으로 영상을 다루는 크리에이터를 위한 플랜.",
+    cta: "Pro 시작하기",
   },
   studio: {
-    name: "STUDIO",
-    badge: "팀/스튜디오",
+    name: "Studio",
+    badge: "Team",
     badgeClass: "mui-chip--secondary",
-    description: "팀 단위 작업과 대량 분석을 위한 플랜입니다.",
-    cta: "결제하기",
+    description: "팀 단위 작업과 대량 분석을 위한 최상위 플랜.",
+    cta: "Studio 시작하기",
   },
 };
 
@@ -162,8 +175,8 @@ export function buildPricingPlans(policy) {
         badge: payment.badgeLabel || meta.badge,
         badgeClass: payment.badgeClass || meta.badgeClass,
         description: payment.description || meta.description,
-        // 버튼 문구는 price 기준 고정 분기값 (cta_label 제거됨)
-        cta: Number(payment.price || 0) === 0 ? "무료로 시작" : "결제하기",
+        // 버튼 문구: 플랜 메타(cta)를 우선 사용, 없으면 price 기준 기본값
+        cta: meta.cta || (Number(payment.price || 0) === 0 ? "무료로 시작" : "결제하기"),
         sortOrder: Number(payment.sortOrder ?? 0),
         status: payment.status || "active",
         file:

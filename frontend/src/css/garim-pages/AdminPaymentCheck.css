@@ -1307,3 +1307,167 @@
     justify-content: flex-start;
   }
 }
+
+/* =========================================================
+   다크 모드 보정 (사용자와 동일 중성 톤)
+   v3 mockup에서 하드코딩된 흰/연회색 표면·고정 텍스트색을
+   다크 변수로 교체. 상태 배지/탭 활성 색 등 의미색은 유지.
+   ========================================================= */
+:root[data-theme="dark"] .pm-adm-main { background: var(--bg-2); }
+
+/* 카드/표면/입력/버튼/모달 흰 배경 → 다크 표면색 */
+:root[data-theme="dark"] .pm-metric,
+:root[data-theme="dark"] .pm-card,
+:root[data-theme="dark"] .pm-card-head,
+:root[data-theme="dark"] .pm-tabs,
+:root[data-theme="dark"] .pm-filter-group select,
+:root[data-theme="dark"] .pm-filter-group input,
+:root[data-theme="dark"] .pm-limit-select,
+:root[data-theme="dark"] .pm-btn-detail,
+:root[data-theme="dark"] .pm-modal,
+:root[data-theme="dark"] .pm-modal-header,
+:root[data-theme="dark"] .pm-modal-footer,
+:root[data-theme="dark"] .pm-detail-kv,
+:root[data-theme="dark"] .pm-detail-payment-row,
+:root[data-theme="dark"] .pm-detail-result-grid,
+:root[data-theme="dark"] .pm-detail-refund-line,
+:root[data-theme="dark"] .pm-detail-section,
+:root[data-theme="dark"] .pm-pagination { background: var(--bg-1); }
+
+/* 테이블 헤더/정보 카드/노트 등 보조 표면 */
+:root[data-theme="dark"] .pm-data-row.pm-data-head,
+:root[data-theme="dark"] .pm-detail-info-card,
+:root[data-theme="dark"] .pm-detail-note { background: var(--surface-alt); }
+
+/* 고정 텍스트색 → fg 변수 */
+:root[data-theme="dark"] .pm-page-head h1,
+:root[data-theme="dark"] .pm-metric .num,
+:root[data-theme="dark"] .pm-card-head h2,
+:root[data-theme="dark"] .pm-modal-header h2,
+:root[data-theme="dark"] .pm-data-row,
+:root[data-theme="dark"] .pm-user-cell strong,
+:root[data-theme="dark"] .pm-product-cell strong,
+:root[data-theme="dark"] .pm-detail-amount,
+:root[data-theme="dark"] .pm-detail-result-grid strong,
+:root[data-theme="dark"] .pm-detail-val { color: var(--fg-1); }
+
+:root[data-theme="dark"] .pm-page-head p,
+:root[data-theme="dark"] .pm-metric .lbl,
+:root[data-theme="dark"] .pm-metric .num small,
+:root[data-theme="dark"] .pm-metric .delta,
+:root[data-theme="dark"] .pm-card-head p,
+:root[data-theme="dark"] .pm-filter-group select,
+:root[data-theme="dark"] .pm-filter-group input,
+:root[data-theme="dark"] .pm-limit-select,
+:root[data-theme="dark"] .pm-date-range input,
+:root[data-theme="dark"] .pm-date-range span,
+:root[data-theme="dark"] .pm-data-row.pm-data-head,
+:root[data-theme="dark"] .pm-date-cell,
+:root[data-theme="dark"] .pm-method-cell,
+:root[data-theme="dark"] .pm-uuid-cell.mono,
+:root[data-theme="dark"] .pm-user-cell small,
+:root[data-theme="dark"] .pm-pagination .meta,
+:root[data-theme="dark"] .pm-limit-label,
+:root[data-theme="dark"] .pm-detail-status-line,
+:root[data-theme="dark"] .pm-detail-sub,
+:root[data-theme="dark"] .pm-detail-result-grid small,
+:root[data-theme="dark"] .pm-detail-section h3,
+:root[data-theme="dark"] .pm-detail-lbl,
+:root[data-theme="dark"] .pm-btn-detail { color: var(--fg-2); }
+
+/* 경계선 → divider 변수 */
+:root[data-theme="dark"] .pm-metric,
+:root[data-theme="dark"] .pm-card,
+:root[data-theme="dark"] .pm-card-head,
+:root[data-theme="dark"] .pm-tabs,
+:root[data-theme="dark"] .pm-filter-group select,
+:root[data-theme="dark"] .pm-filter-group input,
+:root[data-theme="dark"] .pm-limit-select,
+:root[data-theme="dark"] .pm-btn-detail,
+:root[data-theme="dark"] .pm-modal-header,
+:root[data-theme="dark"] .pm-modal-footer,
+:root[data-theme="dark"] .pm-data-row,
+:root[data-theme="dark"] .pm-data-row.pm-data-head,
+:root[data-theme="dark"] .pm-pagination,
+:root[data-theme="dark"] .pm-detail-kv,
+:root[data-theme="dark"] .pm-detail-info-card,
+:root[data-theme="dark"] .pm-detail-info-card > div + div,
+:root[data-theme="dark"] .pm-detail-payment-row,
+:root[data-theme="dark"] .pm-detail-payment-row > div + div,
+:root[data-theme="dark"] .pm-detail-result-grid,
+:root[data-theme="dark"] .pm-detail-result-grid > div + div,
+:root[data-theme="dark"] .pm-detail-refund-line,
+:root[data-theme="dark"] .pm-detail-section,
+:root[data-theme="dark"] .pm-detail-section h3 { border-color: var(--mui-divider); }
+
+/* 행/버튼 호버 → 흰 음영 */
+:root[data-theme="dark"] .pm-data-row:hover:not(.pm-data-head),
+:root[data-theme="dark"] .pm-btn-detail:hover,
+:root[data-theme="dark"] .pm-modal-close:hover { background: rgba(255, 255, 255, 0.06); }
+
+/* ── 환불 사유 입력 영역 ── */
+.pm-refund-reason-wrap {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pm-refund-reason-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--mui-divider);
+  border-radius: 6px;
+  background: var(--bg-paper);
+  color: var(--text-primary);
+  font-size: 14px;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.pm-refund-reason-input:focus {
+  outline: none;
+  border-color: var(--primary-main);
+}
+
+.pm-char-counter {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+:root[data-theme="dark"] .pm-refund-reason-input {
+  border-color: var(--mui-divider);
+  background: var(--bg-elevated);
+}
+
+/* 목록/모달 상태 메시지(로딩/에러/빈) */
+.pm-loading {
+  padding: 40px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+.pm-error {
+  padding: 40px;
+  text-align: center;
+  color: var(--error-main);
+}
+.pm-empty {
+  padding: 40px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+.pm-modal-loading {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--text-secondary);
+}
+.pm-modal-error {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--error-main);
+}
+/* 환불 사유 필수 표시(*) */
+.pm-required-mark {
+  color: var(--error-main);
+}

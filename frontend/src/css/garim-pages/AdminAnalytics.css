@@ -41,3 +41,61 @@ body { background: #fafafa; }
 .an-err-row { display: grid; grid-template-columns: 1fr 80px 80px; gap: 12px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--mui-divider); font: 400 13px var(--font-sans); }
 .an-err-row:last-child { border-bottom: none; }
 .adm-shell .an-err-row.tbl-head { display: grid; background: #fafafa; font: 500 11px var(--font-sans); text-transform: uppercase; letter-spacing: 0.5px; color: var(--fg-2); }
+
+/* Dark mode overrides */
+:root[data-theme="dark"] .adm-main { background: var(--bg-2); }
+:root[data-theme="dark"] .metric,
+:root[data-theme="dark"] .adm-card,
+:root[data-theme="dark"] .an-period-sel { background: var(--bg-1); border-color: var(--mui-border); }
+:root[data-theme="dark"] .an-period-sel { color: var(--fg-1); }
+:root[data-theme="dark"] .adm-shell .an-plan-row.tbl-head,
+:root[data-theme="dark"] .adm-shell .an-err-row.tbl-head { background: var(--surface-alt); }
+:root[data-theme="dark"] .adm-card .head { border-bottom-color: var(--mui-divider); }
+:root[data-theme="dark"] .an-plan-row,
+:root[data-theme="dark"] .an-err-row { border-bottom-color: var(--mui-divider); color: var(--fg-1); }
+:root[data-theme="dark"] .adm-head h1,
+:root[data-theme="dark"] .adm-card .head h3 { color: var(--fg-1); }
+
+/* 상단 툴바 우측(기간 선택 + Export) */
+.an-toolbar-right {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+/* CSV Export 아이콘 */
+.an-export-ico {
+  font-size: 16px;
+}
+/* 로딩 메시지 */
+.an-loading {
+  padding: 40px;
+  text-align: center;
+  color: var(--fg-2);
+}
+/* 차트 자리 스크롤 영역 */
+.an-chart-scroll {
+  padding: 16px;
+  max-height: 200px;
+  overflow-y: auto;
+  display: block;
+  text-align: left;
+}
+/* 표 헤더 행 하단 여백 */
+.an-plan-row.tbl-head {
+  margin-bottom: 8px;
+}
+/* 데이터 행 구분선 */
+.an-plan-row--bordered {
+  border-bottom: 1px solid var(--mui-divider);
+  padding: 8px 0;
+}
+/* 데이터 없음 안내 */
+.an-empty {
+  text-align: center;
+  padding: 20px;
+  color: var(--fg-3);
+}
+/* 카드 상단 여백 */
+.adm-card--mt {
+  margin-top: 16px;
+}

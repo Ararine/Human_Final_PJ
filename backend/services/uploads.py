@@ -44,6 +44,66 @@ def _mark_upload_status(db, upload_id: str, upload_status: str) -> None:
     )
 
 
+# ── 허용 포맷 정의 ──────────────────────────────────────────────────────
+# 대분류(media_type) → 실제로 허용하는 파일 확장자(filetype 라이브러리 기준) 목록.
+# filetype.guess()가 반환하는 kind.extension 값과 매칭한다.
+# (예: jpeg 파일도 filetype은 'jpg'로 반환)
+ALLOWED_TYPES = {
+    "image": {"jpg", "png", "webp"},
+    "video": {"mp4", "avi", "mov", "mkv", "m4v", "webm"},
+}
+
+
+def _verify_real_media_type(db, upload_id: str, final_path, declared_media_type: str) -> str:
+    """병합된 실제 파일의 매직 바이트를 읽어 진짜 미디어 타입을 판별·검증한다.
+
+    - 확장자가 아니라 파일 시그니처(매직 바이트)로 판별하므로,
+      영상을 .jpg로 위조해 올려도 실제 형식을 정확히 잡아낸다.
+    - 신고값(declared_media_type)과 실제 대분류가 다르거나,
+      허용 목록 밖 포맷이면 업로드를 거부(ValueError)하고 병합 파일을 정리한다.
+
+    반환: 검증을 통과한 실제 미디어 대분류 ('image' | 'video')
+    """
+    import filetype  # 지연 import — 업로드 경로에서만 필요
+
+    # 거부 시 병합 파일 삭제 + 상태 'failed' 마킹 후 예외 발생시키는 내부 헬퍼
+    def _reject(message: str):
+        try:
+            Path(final_path).unlink(missing_ok=True)
+        except Exception:
+            pass
+        _mark_upload_status(db, upload_id, "failed")
+        db.commit()
+        raise ValueError(message)
+
+    # 1) 실제 파일 시그니처로 형식 추정
+    kind = filetype.guess(str(final_path))
+    if kind is None:
+        # 시그니처를 인식할 수 없음 → 지원하지 않는/손상된 파일로 간주
+        _reject("업로드한 파일의 형식을 인식할 수 없습니다. "
+                "지원하는 이미지(jpg/png/webp) 또는 영상(mp4/avi/mov/mkv) 파일인지 확인 후 다시 업로드해주세요.")
+
+    real_ext   = kind.extension              # 예: 'jpg', 'mp4'
+    real_major = (kind.mime or "").split("/")[0].lower()  # 예: 'image', 'video'
+
+    # 2) 허용 목록(대분류 + 확장자) 안에 드는지 확인
+    if real_major not in ALLOWED_TYPES or real_ext not in ALLOWED_TYPES[real_major]:
+        _reject(f"업로드한 파일이 실제로는 '{real_ext}' 형식으로 확인됩니다. "
+                f"지원하지 않는 형식이므로 업로드를 거부합니다. "
+                f"이미지(jpg/png/webp) 또는 영상(mp4/avi/mov/mkv) 파일로 다시 업로드해주세요.")
+
+    # 3) 신고한 대분류와 실제 대분류가 일치하는지 확인 (영상↔이미지 위조 차단)
+    if declared_media_type in ("image", "video") and declared_media_type != real_major:
+        declared_label = "이미지" if declared_media_type == "image" else "영상"
+        real_label     = "이미지" if real_major == "image" else "영상"
+        _reject(f"{declared_label}으로 업로드하셨지만, 해당 파일의 실제 형식은 "
+                f"'{real_ext}'({real_label})로 확인됩니다. "
+                f"확장자만 변경된 파일은 처리할 수 없습니다. 올바른 파일로 다시 업로드해주세요.")
+
+    # 통과: 검증된 실제 대분류 반환
+    return real_major
+
+
 def init_upload(
     user_id: str,
     original_filename: str,
@@ -289,7 +349,7 @@ def complete_upload(upload_id: str, user_id: str) -> dict:
         row = db.execute(
             text("""
                 SELECT user_id, status, total_chunks, uploaded_chunks,
-                       temp_dir_path, stored_path, file_hash, expires_at
+                       temp_dir_path, stored_path, file_hash, expires_at, media_type
                 FROM uploads
                 WHERE upload_id = :upload_id
             """),
@@ -355,12 +415,47 @@ def complete_upload(upload_id: str, user_id: str) -> dict:
 
         file_hash = hasher.hexdigest()
 
+        # ── 실제 파일 타입 검증 (매직 바이트 기반) ──────────────────────
+        # 확장자/신고값(media_type)만 믿으면 영상을 .jpg로 위조해 올릴 수 있다.
+        # 병합된 실제 파일의 시그니처(매직 바이트)를 읽어 진짜 형식을 판별하고,
+        # 신고값과 다르거나 허용 외 포맷이면 업로드를 거부한다.
+        declared_media_type = (m.get("media_type") or "").lower()
+        verified_media_type = _verify_real_media_type(
+            db, upload_id, final_path, declared_media_type
+        )
+        # 통과 시 신고값 대신 '검증된 실제 타입'을 이후 로직/DB에 사용
+        media_type = verified_media_type
+        thumbnail_path = None
+        if media_type.startswith("image"):
+            thumbnail_path = str(final_path)
+        elif media_type.startswith("video"):
+            thumb_jpg = final_path.with_suffix(".jpg")
+            try:
+                import imageio_ffmpeg
+                import subprocess as _sp
+                ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+                cmd = [
+                    ffmpeg, "-y",
+                    "-i", str(final_path),
+                    "-vframes", "1",
+                    "-q:v", "2",
+                    "-vf", "scale='min(640,iw)':min'(360,ih)':force_original_aspect_ratio=decrease",
+                    str(thumb_jpg)
+                ]
+                _sp.run(cmd, capture_output=True)
+                if thumb_jpg.exists():
+                    thumbnail_path = str(thumb_jpg)
+            except Exception:
+                pass
+
         db.execute(
             text("""
                 UPDATE uploads
                 SET status = 'uploaded',
                     merged_file_path = :merged_file_path,
                     file_hash = :file_hash,
+                    thumbnail_path = :thumbnail_path,
+                    media_type = :media_type,
                     updated_at = now()
                 WHERE upload_id = :upload_id
             """),
@@ -368,6 +463,9 @@ def complete_upload(upload_id: str, user_id: str) -> dict:
                 "upload_id": upload_id,
                 "merged_file_path": str(final_path),
                 "file_hash": file_hash,
+                "thumbnail_path": thumbnail_path,
+                # 신고값이 아닌, 매직 바이트로 검증된 실제 타입을 확정 저장
+                "media_type": media_type,
             },
         )
 

@@ -104,6 +104,10 @@ export default function AdminUsers() {
             <span className="material-icons">payments</span>
             사용자 결제 확인
           </a>
+                  <a href="/admin/reports">
+            <span className="material-icons">report_problem</span>
+            문의 내역
+          </a>
         </aside>
         <main className="adm-main">
           <div className="adm-head">
@@ -207,17 +211,17 @@ export default function AdminUsers() {
               </div>
 
               {loading && (
-                <div style={{ padding: "32px 16px", textAlign: "center", color: "var(--fg-2)", font: "400 13px var(--font-sans)" }}>
+                <div className="usr-state">
                   불러오는 중…
                 </div>
               )}
               {!loading && error && (
-                <div style={{ padding: "32px 16px", textAlign: "center", color: "#d32f2f", font: "400 13px var(--font-sans)" }}>
+                <div className="usr-state usr-state--error">
                   {error}
                 </div>
               )}
               {!loading && !error && filteredUsers.length === 0 && (
-                <div style={{ padding: "32px 16px", textAlign: "center", color: "var(--fg-3)", font: "400 13px var(--font-sans)" }}>
+                <div className="usr-state usr-state--empty">
                   등록된 사용자가 없습니다.
                 </div>
               )}

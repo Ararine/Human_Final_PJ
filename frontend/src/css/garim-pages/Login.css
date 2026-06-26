@@ -48,6 +48,19 @@
           border-color: #03C75A;
           color: #fff;
         }
+        /* 구글 버튼은 다크/라이트 모드 관계없이 텍스트 항상 검정 고정 */
+        .login-social--google {
+          color: rgba(0, 0, 0, 0.87) !important;
+        }
         .login-terms-action {
           margin-top: 14px;
         }
+
+/* 재가입 버튼 상단 여백 */
+.login-reregister-btn {
+  margin-top: 16px;
+}
+/* 약관 액션 영역 추가 여백(재가입 화면) */
+.login-terms-action--gap {
+  margin-top: 12px;
+}

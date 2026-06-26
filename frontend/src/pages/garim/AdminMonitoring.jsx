@@ -1,120 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import "../../css/garim-pages/AdminMonitoring.css";
 
 import GarimPage from "../../components/garim/GarimPage";
+import {
+  getMonitoringOverview,
+  getMonitoringActivities,
+  cancelMonitoringJob,
+} from "../../utils/api";
 
-const MOCK_USERS = [
-  {
-    id: "u-0023",
-    email: "kim.jungwoo@example.com",
-    plan: "Pro",
-    planColor: "warn",
-    status: "processing",
-    jobFile: "family_trip_2026.mp4",
-    jobType: "video",
-    progress: 64,
-    elapsed: "1:24",
-    lastSeen: "방금 전",
-    ip: "211.123.***.***",
-    ua: "Chrome 124 / macOS",
-    joined: "2026.02.14",
-    todayJobs: 3,
-    totalJobs: 47,
-    sessionStart: "14:30:12",
-  },
-  {
-    id: "u-0041",
-    email: "park.soojin@example.com",
-    plan: "Free",
-    planColor: "",
-    status: "queued",
-    jobFile: "portrait_edit.jpg",
-    jobType: "image",
-    progress: 0,
-    elapsed: "0:08",
-    lastSeen: "1분 전",
-    ip: "110.45.***.***",
-    ua: "Safari / iOS 17",
-    joined: "2026.04.01",
-    todayJobs: 1,
-    totalJobs: 12,
-    sessionStart: "14:38:44",
-  },
-  {
-    id: "u-0087",
-    email: "lee.minjae@example.com",
-    plan: "Pro",
-    planColor: "warn",
-    status: "done",
-    jobFile: "wedding_video.mp4",
-    jobType: "video",
-    progress: 100,
-    elapsed: "4:52",
-    lastSeen: "3분 전",
-    ip: "175.118.***.***",
-    ua: "Chrome 124 / Windows",
-    joined: "2026.01.19",
-    todayJobs: 5,
-    totalJobs: 103,
-    sessionStart: "13:55:08",
-  },
-  {
-    id: "u-0102",
-    email: "choi.yena@example.com",
-    plan: "Free",
-    planColor: "",
-    status: "error",
-    jobFile: "concert_clip.mp4",
-    jobType: "video",
-    progress: 22,
-    elapsed: "0:45",
-    lastSeen: "5분 전",
-    ip: "203.227.***.***",
-    ua: "Firefox / Windows",
-    joined: "2026.03.22",
-    todayJobs: 2,
-    totalJobs: 8,
-    sessionStart: "14:32:19",
-  },
-  {
-    id: "u-0118",
-    email: "jung.hyunwoo@example.com",
-    plan: "Pro",
-    planColor: "warn",
-    status: "processing",
-    jobFile: "vlog_ep12.mp4",
-    jobType: "video",
-    progress: 81,
-    elapsed: "3:10",
-    lastSeen: "방금 전",
-    ip: "59.10.***.***",
-    ua: "Chrome 124 / macOS",
-    joined: "2026.02.28",
-    todayJobs: 4,
-    totalJobs: 76,
-    sessionStart: "14:12:33",
-  },
-  {
-    id: "u-0134",
-    email: "shin.dayeon@example.com",
-    plan: "Free",
-    planColor: "",
-    status: "idle",
-    jobFile: "—",
-    jobType: "",
-    progress: 0,
-    elapsed: "—",
-    lastSeen: "12분 전",
-    ip: "121.190.***.***",
-    ua: "Safari / macOS",
-    joined: "2026.05.01",
-    todayJobs: 0,
-    totalJobs: 5,
-    sessionStart: "14:05:50",
-  },
-];
-
+// analysis_jobs 상태 → 화면 표시 메타(라벨/색상/칩 클래스)
 const STATUS_META = {
   processing: { label: "처리 중", dot: "#1976d2", chip: "mui-chip--soft-primary" },
   queued:     { label: "대기 중", dot: "#ed6c02", chip: "mui-chip--soft-warning" },
@@ -123,10 +18,91 @@ const STATUS_META = {
   idle:       { label: "유휴",   dot: "#bdbdbd", chip: "" },
 };
 
+// 10초 간격 자동 갱신
+const REFRESH_INTERVAL_MS = 10000;
+
 export default function AdminMonitoring() {
   useDocumentTitle("사용자 모니터링 · Garim Admin");
-  const [selectedId, setSelectedId] = useState("u-0023");
-  const selected = MOCK_USERS.find((u) => u.id === selectedId);
+
+  const [overview,   setOverview]   = useState(null);
+  const [activities, setActivities] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState(null);
+  const [canceling,  setCanceling]  = useState(false);
+
+  // 선택 상태를 비동기 콜백 내부에서 참조하기 위한 ref
+  const selectedIdRef = useRef(null);
+  selectedIdRef.current = selectedId;
+
+  // 데이터 로딩 (overview + activities 동시 호출)
+  const fetchData = useCallback(async (showSpinner = false) => {
+    if (showSpinner) setLoading(true);
+    try {
+      const [ovRes, actRes] = await Promise.all([
+        getMonitoringOverview(),
+        getMonitoringActivities({ limit: 50 }),
+      ]);
+      if (ovRes) setOverview(ovRes.data);
+      if (actRes) {
+        const list = actRes.data.activities || [];
+        setActivities(list);
+        // 선택된 사용자가 없거나 목록에서 사라졌으면 첫 행 선택
+        const stillExists = list.some((a) => a.id === selectedIdRef.current);
+        if (!stillExists && list.length > 0) {
+          setSelectedId(list[0].id);
+        }
+      }
+      setError(null);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      if (showSpinner) setLoading(false);
+    }
+  }, []);
+
+  // 최초 로딩 + 주기적 폴링
+  useEffect(() => {
+    fetchData(true);
+    const timer = setInterval(() => fetchData(false), REFRESH_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [fetchData]);
+
+  const selected = activities.find((u) => u.id === selectedId);
+
+  // 실시간 활동 헤더 칩에 표시할 상태별 카운트
+  const statusCount = activities.reduce(
+    (acc, a) => {
+      acc[a.status] = (acc[a.status] || 0) + 1;
+      return acc;
+    },
+    {}
+  );
+
+  // 처리 중 작업 플랜 분포 문자열 (예: "Free 24 · Pro 9")
+  const planBreakdownText =
+    overview && overview.plan_breakdown && Object.keys(overview.plan_breakdown).length > 0
+      ? Object.entries(overview.plan_breakdown).map(([k, v]) => `${k} ${v}`).join(" · ")
+      : "—";
+
+  // 평균 대기 시간 표시
+  const avgWaitText = overview ? `평균 대기 ${overview.avg_wait_seconds}초` : "—";
+
+  // 작업 취소 핸들러
+  const handleCancelJob = async () => {
+    if (!selected || selected.job_file === "—") return;
+    if (!["processing", "queued"].includes(selected.status)) return;
+    if (!window.confirm(`${selected.email} 사용자의 작업을 취소하시겠습니까?`)) return;
+    setCanceling(true);
+    try {
+      await cancelMonitoringJob(selected.job_id);
+      await fetchData(false);
+    } catch (e) {
+      alert("작업 취소 실패: " + e.message);
+    } finally {
+      setCanceling(false);
+    }
+  };
 
   return (
     <GarimPage bodyClass="" screenLabel="25 Admin monitor">
@@ -166,6 +142,10 @@ export default function AdminMonitoring() {
             <span className="material-icons">payments</span>
             사용자 결제 확인
           </a>
+          <a href="/admin/reports">
+            <span className="material-icons">report_problem</span>
+            문의 내역
+          </a>
         </aside>
         <main className="adm-main">
           <div className="adm-head">
@@ -175,14 +155,10 @@ export default function AdminMonitoring() {
               LIVE
             </span>
             <span className="meta">실시간 활동 중인 사용자 · 10초 갱신</span>
-            <div style={{ marginLeft: "auto", display: "flex", gap: "8px" }}>
-              <button className="mui-btn mui-btn--outlined mui-btn--sm">
-                <span className="material-icons" style={{ fontSize: "16px" }}>refresh</span>
+            <div className="mon-toolbar-right">
+              <button className="mui-btn mui-btn--outlined mui-btn--sm" onClick={() => fetchData(true)}>
+                <span className="material-icons mon-ico-sm">refresh</span>
                 새로고침
-              </button>
-              <button className="mui-btn mui-btn--outlined mui-btn--sm">
-                <span className="material-icons" style={{ fontSize: "16px" }}>filter_list</span>
-                필터
               </button>
             </div>
           </div>
@@ -190,23 +166,29 @@ export default function AdminMonitoring() {
           <div className="metric-row">
             <div className="metric">
               <div className="lbl">현재 접속자</div>
-              <div className="num">127</div>
-              <div className="delta">↑ 23 (1시간 전 대비)</div>
+              <div className="num">{overview ? overview.current_online : "—"}</div>
+              <div className="delta">
+                {overview
+                  ? `${overview.online_delta >= 0 ? "↑" : "↓"} ${Math.abs(overview.online_delta)} (1시간 전 대비)`
+                  : ""}
+              </div>
             </div>
             <div className="metric">
               <div className="lbl">처리 중</div>
-              <div className="num">35</div>
-              <div className="delta">Free 24 · Pro 9 · Studio 2</div>
+              <div className="num">{overview ? overview.processing : "—"}</div>
+              <div className="delta">{planBreakdownText}</div>
             </div>
             <div className="metric warn">
               <div className="lbl">대기 중</div>
-              <div className="num">12</div>
-              <div className="delta">평균 대기 38초</div>
+              <div className="num">{overview ? overview.queued : "—"}</div>
+              <div className="delta">{avgWaitText}</div>
             </div>
             <div className="metric">
               <div className="lbl">금일 완료</div>
-              <div className="num">412</div>
-              <div className="delta">오류 9건 (2.2%)</div>
+              <div className="num">{overview ? overview.today_completed : "—"}</div>
+              <div className="delta">
+                {overview ? `오류 ${overview.today_error}건 (${overview.error_rate}%)` : ""}
+              </div>
             </div>
           </div>
 
@@ -214,9 +196,9 @@ export default function AdminMonitoring() {
             <div className="adm-card">
               <div className="head">
                 <h3>실시간 사용자 활동</h3>
-                <span className="mui-chip mui-chip--soft-primary">처리 중 2</span>
-                <span className="mui-chip mui-chip--soft-warning">대기 1</span>
-                <span className="mui-chip mui-chip--soft-error">오류 1</span>
+                <span className="mui-chip mui-chip--soft-primary">처리 중 {statusCount.processing || 0}</span>
+                <span className="mui-chip mui-chip--soft-warning">대기 {statusCount.queued || 0}</span>
+                <span className="mui-chip mui-chip--soft-error">오류 {statusCount.error || 0}</span>
               </div>
               <div className="mon-row tbl-head">
                 <span />
@@ -228,8 +210,26 @@ export default function AdminMonitoring() {
                 <span>마지막 활동</span>
                 <span />
               </div>
-              {MOCK_USERS.map((u) => {
-                const sm = STATUS_META[u.status];
+
+              {loading && (
+                <div className="mon-state">
+                  불러오는 중…
+                </div>
+              )}
+              {!loading && error && (
+                <div className="mon-state mon-state--error">
+                  {error}
+                </div>
+              )}
+              {!loading && !error && activities.length === 0 && (
+                <div className="mon-state mon-state--empty">
+                  최근 24시간 내 활동 중인 사용자가 없습니다.
+                </div>
+              )}
+
+              {!loading && !error && activities.map((u) => {
+                const sm = STATUS_META[u.status] || STATUS_META.idle;
+                const isPro = u.plan && u.plan !== "Free";
                 return (
                   <div
                     key={u.id}
@@ -241,26 +241,31 @@ export default function AdminMonitoring() {
                       title={sm.label}
                     />
                     <span>
-                      <div className="mon-email">{u.email}</div>
-                      <div className="mon-uid">{u.id}</div>
+                      <div className="mon-email">
+                        {/* @ 이후 도메인을 줄바꿈 허용 — 이메일이 길어도 열 넘침 방지 */}
+                        {u.email.includes("@")
+                          ? <>{u.email.split("@")[0]}<wbr />@{u.email.split("@")[1]}</>
+                          : u.email}
+                      </div>
+                      <div className="mon-uid">{u.id.slice(0, 8)}</div>
                     </span>
                     <span>
-                      <span className={`mui-chip ${u.planColor === "warn" ? "mui-chip--soft-warning" : ""}`}>
+                      <span className={`mui-chip ${isPro ? "mui-chip--soft-warning" : ""}`}>
                         {u.plan}
                       </span>
                     </span>
                     <span>
-                      {u.jobFile !== "—" ? (
+                      {u.job_file !== "—" ? (
                         <>
-                          <div className="mon-filename">{u.jobFile}</div>
-                          <div className="mon-type">{u.jobType}</div>
+                          <div className="mon-filename">{u.job_file}</div>
+                          <div className="mon-type">{u.job_type}</div>
                         </>
                       ) : (
-                        <span style={{ color: "var(--fg-3)", fontSize: "12px" }}>—</span>
+                        <span className="mon-dash">—</span>
                       )}
                     </span>
                     <span>
-                      {u.status !== "idle" && u.jobFile !== "—" ? (
+                      {u.status !== "idle" && u.job_file !== "—" ? (
                         <div className="mon-progress-wrap">
                           <div className="mon-progress-bar">
                             <div
@@ -273,15 +278,15 @@ export default function AdminMonitoring() {
                           <span className="mon-pct">{u.progress}%</span>
                         </div>
                       ) : (
-                        <span style={{ color: "var(--fg-3)", fontSize: "12px" }}>—</span>
+                        <span className="mon-dash">—</span>
                       )}
                     </span>
                     <span className="mon-elapsed">{u.elapsed}</span>
                     <span>
-                      <span className={`mui-chip ${sm.chip}`} style={{ fontSize: "11px", height: "20px" }}>
+                      <span className={`mui-chip ${sm.chip} mon-status-chip`}>
                         {sm.label}
                       </span>
-                      <div className="mon-lastseen">{u.lastSeen}</div>
+                      <div className="mon-lastseen">{u.last_seen}</div>
                     </span>
                     <span>
                       <button
@@ -294,38 +299,41 @@ export default function AdminMonitoring() {
                   </div>
                 );
               })}
-              <div style={{ padding: "10px 16px", textAlign: "center", color: "var(--fg-2)", font: "400 12px var(--font-sans)" }}>
-                … 121명 더 보기
-              </div>
+
+              {!loading && !error && activities.length > 0 && (
+                <div className="mon-footer">
+                  활동 사용자 {activities.length}명 표시 중
+                </div>
+              )}
             </div>
 
             {selected && (
               <aside className="adm-card">
                 <div className="head">
                   <h3>{selected.email}</h3>
-                  <span className={`mui-chip ${STATUS_META[selected.status].chip}`} style={{ fontSize: "11px" }}>
-                    {STATUS_META[selected.status].label}
+                  <span className={`mui-chip ${(STATUS_META[selected.status] || STATUS_META.idle).chip} mon-chip-sm`}>
+                    {(STATUS_META[selected.status] || STATUS_META.idle).label}
                   </span>
                 </div>
                 <div className="detail-body">
                   <section className="detail-section">
                     <h4>사용자 정보</h4>
-                    <div className="detail-row"><span>UID</span><span className="mono">{selected.id}</span></div>
+                    <div className="detail-row"><span>UID</span><span className="mono">{selected.id.slice(0, 8)}</span></div>
                     <div className="detail-row"><span>플랜</span><span>{selected.plan}</span></div>
                     <div className="detail-row"><span>가입일</span><span className="mono">{selected.joined}</span></div>
                     <div className="detail-row"><span>IP</span><span className="mono">{selected.ip}</span></div>
                     <div className="detail-row"><span>브라우저</span><span>{selected.ua}</span></div>
-                    <div className="detail-row"><span>세션 시작</span><span className="mono">{selected.sessionStart}</span></div>
+                    <div className="detail-row"><span>세션 시작</span><span className="mono">{selected.session_start}</span></div>
                   </section>
 
                   <section className="detail-section">
                     <h4>작업 현황</h4>
-                    {selected.jobFile !== "—" ? (
+                    {selected.job_file !== "—" ? (
                       <>
-                        <div className="detail-row"><span>파일</span><span className="mono" style={{ wordBreak: "break-all" }}>{selected.jobFile}</span></div>
-                        <div className="detail-row"><span>유형</span><span>{selected.jobType}</span></div>
+                        <div className="detail-row"><span>파일</span><span className="mono mon-break">{selected.job_file}</span></div>
+                        <div className="detail-row"><span>유형</span><span>{selected.job_type}</span></div>
                         <div className="detail-row"><span>진행률</span>
-                          <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span className="mon-progress-inline">
                             <div className="detail-progress">
                               <div style={{
                                 width: `${selected.progress}%`,
@@ -338,38 +346,56 @@ export default function AdminMonitoring() {
                         <div className="detail-row"><span>경과 시간</span><span className="mono">{selected.elapsed}</span></div>
                       </>
                     ) : (
-                      <div style={{ color: "var(--fg-3)", font: "400 12px var(--font-sans)", padding: "4px 0" }}>현재 처리 중인 작업 없음</div>
+                      <div className="mon-no-job">현재 처리 중인 작업 없음</div>
                     )}
-                    <div className="detail-row"><span>오늘 처리</span><span>{selected.todayJobs}건</span></div>
-                    <div className="detail-row"><span>누적 처리</span><span>{selected.totalJobs}건</span></div>
+                    <div className="detail-row"><span>오늘 처리</span><span>{selected.today_jobs}건</span></div>
+                    <div className="detail-row"><span>누적 처리</span><span>{selected.total_jobs}건</span></div>
                   </section>
 
                   <section className="detail-section">
                     <h4>최근 활동</h4>
                     <div className="activity-log">
-                      <div><span className="ts">{selected.sessionStart}</span> 세션 시작</div>
-                      {selected.todayJobs > 0 && (
-                        <>
-                          <div><span className="ts">14:31:05</span> 파일 업로드 ({selected.jobType})</div>
-                          <div><span className="ts">14:31:08</span> 처리 시작 → 큐 진입</div>
-                          {selected.status === "done" && <div><span className="ts">14:36:00</span> <span style={{ color: "#2e7d32" }}>처리 완료 → 다운로드</span></div>}
-                          {selected.status === "error" && <div><span className="ts">14:33:04</span> <span style={{ color: "#d32f2f" }}>오류 발생 (파일 손상)</span></div>}
-                          {selected.status === "processing" && <div><span className="ts">14:32:00</span> GPU 워커 배정 → 처리 중</div>}
-                        </>
-                      )}
+                      {/* recent_events 배열: 세션시작 + 최근 작업 이력 최대 5개 */}
+                      {(selected.recent_events && selected.recent_events.length > 0)
+                        ? selected.recent_events.map((ev, i) => (
+                          <div key={i}>
+                            <span className="ts">{ev.ts}</span>
+                            <span style={{
+                              color: ev.status === "completed" ? "#2e7d32"
+                                   : ev.status === "failed"    ? "#d32f2f"
+                                   : ev.status === "cancelled" ? "#9e9e9e"
+                                   : undefined,
+                            }}>{ev.label}</span>
+                          </div>
+                        ))
+                        : (
+                          <>
+                            <div><span className="ts">{selected.session_start}</span> 세션 시작</div>
+                            {selected.job_file !== "—" && (
+                              <>
+                                <div><span className="ts">{selected.last_seen}</span> 작업 파일 ({selected.job_type})</div>
+                                {selected.status === "done"       && <div><span className="ts">{selected.last_seen}</span> <span className="mon-evt-done">처리 완료</span></div>}
+                                {selected.status === "error"      && <div><span className="ts">{selected.last_seen}</span> <span className="mon-evt-error">오류 발생</span></div>}
+                                {selected.status === "processing" && <div><span className="ts">{selected.last_seen}</span> 처리 중 ({selected.progress}%)</div>}
+                                {selected.status === "queued"     && <div><span className="ts">{selected.last_seen}</span> 큐 대기 중</div>}
+                              </>
+                            )}
+                          </>
+                        )
+                      }
                     </div>
                   </section>
 
                   <section className="detail-section">
                     <h4>관리 액션</h4>
                     <div className="detail-actions">
-                      <button className="mui-btn mui-btn--outlined mui-btn--sm" style={{ flex: 1 }}>
-                        <span className="material-icons" style={{ fontSize: "15px" }}>cancel</span>
-                        작업 취소
-                      </button>
-                      <button className="mui-btn mui-btn--outlined mui-btn--sm" style={{ flex: 1, color: "#d32f2f", borderColor: "rgba(211,47,47,0.5)" }}>
-                        <span className="material-icons" style={{ fontSize: "15px" }}>logout</span>
-                        세션 종료
+                      <button
+                        className="mui-btn mui-btn--outlined mui-btn--sm mon-action-btn"
+                        disabled={canceling || selected.job_file === "—" || !["processing", "queued"].includes(selected.status)}
+                        onClick={handleCancelJob}
+                      >
+                        <span className="material-icons mon-ico-15">cancel</span>
+                        {canceling ? "취소 중…" : "작업 취소"}
                       </button>
                     </div>
                   </section>

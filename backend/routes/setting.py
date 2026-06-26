@@ -17,6 +17,12 @@ router.add_api_route(
 )
 
 router.add_api_route(
+    "/me/login-histories",
+    setting.get_my_login_histories,
+    methods=["GET"]
+)
+
+router.add_api_route(
     "/me",
     setting.update_my_setting,
     methods=["PUT"]

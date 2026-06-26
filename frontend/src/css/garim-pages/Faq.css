@@ -44,3 +44,33 @@
   }
   .contact-card h3 { margin: 0 0 4px; font: 500 18px var(--font-sans); }
   .contact-card p { margin: 0; font: 400 14px/1.5 var(--font-sans); color: var(--fg-2); }
+
+  /* ── 다크 모드 보정 ── 검색바/아코디언/문의카드 흰 배경 → 다크 표면색 */
+  :root[data-theme="dark"] .search-bar,
+  :root[data-theme="dark"] .accordion,
+  :root[data-theme="dark"] .contact-card,
+  :root[data-theme="dark"] .accordion .feedback button { background: var(--bg-1); }
+  :root[data-theme="dark"] .search-bar input { background: transparent; color: var(--fg-1); }
+  /* 검정 음영 호버 → 흰 음영 */
+  :root[data-theme="dark"] .cat-side a:hover,
+  :root[data-theme="dark"] .accordion .feedback button:hover { background: rgba(255,255,255,0.06); }
+
+/* 질문 아이콘 크기 */
+.faq-ico {
+  font-size: 18px;
+}
+/* 문의 카드 아이콘 */
+.faq-contact-ico {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(151, 71, 255, 0.1);
+  color: #9747ff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+/* 문의 카드 본문 */
+.faq-contact-body {
+  flex: 1;
+}

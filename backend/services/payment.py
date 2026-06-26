@@ -462,64 +462,108 @@ def _spend_user_credits(
     source_id,
     description: str | None = None,
 ):
+    # 1. Fetch current balances and consent status
     row = db.execute(
         text("""
-            UPDATE user_credit_balances
-            SET
-                balance = balance - :amount,
-                updated_at = NOW()
-            WHERE user_id = :user_id
-              AND balance >= :amount
-            RETURNING balance
+            SELECT b.balance, b.free_balance, b.pending_ai_refund_usage, COALESCE(s.data_usage_consent, false) as data_usage_consent
+            FROM user_credit_balances b
+            LEFT JOIN user_settings s ON b.user_id = s.user_id
+            WHERE b.user_id = :user_id
         """),
-        {"user_id": user_id, "amount": amount},
+        {"user_id": user_id}
     ).fetchone()
 
     if not row:
         raise ValueError("크레딧 잔액이 부족합니다.")
 
-    balance_after = int(row._mapping["balance"])
+    m = row._mapping
+    current_free = int(m["free_balance"])
+    current_paid = int(m["balance"])
+    data_usage_consent = bool(m["data_usage_consent"])
 
-    db.execute(
+    if current_free + current_paid < amount:
+        raise ValueError("크레딧 잔액이 부족합니다.")
+
+    # Calculate deductions
+    free_deducted = min(current_free, amount)
+    paid_deducted = amount - free_deducted
+
+    # Calculate pending AI refund accumulation
+    pending_ai_accumulation = paid_deducted if data_usage_consent else 0
+
+    # 2. Update balances
+    update_row = db.execute(
         text("""
-            INSERT INTO credit_ledger (
-                user_id,
-                amount,
-                balance_after,
-                entry_type,
-                source_type,
-                source_id,
-                description,
-                created_at
-            )
-            VALUES (
-                :user_id,
-                :amount,
-                :balance_after,
-                'spend',
-                'analysis',
-                :source_id,
-                :description,
-                NOW()
-            )
+            UPDATE user_credit_balances
+            SET
+                free_balance = free_balance - :free_deducted,
+                balance = balance - :paid_deducted,
+                pending_ai_refund_usage = pending_ai_refund_usage + :pending_ai_accumulation,
+                updated_at = NOW()
+            WHERE user_id = :user_id
+            RETURNING balance, free_balance
         """),
         {
             "user_id": user_id,
-            "amount": -amount,
-            "balance_after": balance_after,
-            "source_id": source_id,
-            "description": description,
-        },
-    )
+            "free_deducted": free_deducted,
+            "paid_deducted": paid_deducted,
+            "pending_ai_accumulation": pending_ai_accumulation,
+        }
+    ).fetchone()
 
-    return balance_after
+    balance_after = int(update_row._mapping["balance"])
+    free_balance_after = int(update_row._mapping["free_balance"])
+
+    # 3. Log into credit_ledger
+    # We log separately for free and paid deductions if both happened
+    if free_deducted > 0:
+        db.execute(
+            text("""
+                INSERT INTO credit_ledger (
+                    user_id, amount, balance_after, entry_type, source_type, source_id, description, created_at
+                )
+                VALUES (
+                    :user_id, :amount, :balance_after, 'spend', 'analysis', :source_id, :description, NOW()
+                )
+            """),
+            {
+                "user_id": user_id,
+                "amount": -free_deducted,
+                "balance_after": free_balance_after,
+                "source_id": source_id,
+                "description": (description or "") + " (무료 크레딧)",
+            },
+        )
+
+    if paid_deducted > 0:
+        db.execute(
+            text("""
+                INSERT INTO credit_ledger (
+                    user_id, amount, balance_after, entry_type, source_type, source_id, description, created_at
+                )
+                VALUES (
+                    :user_id, :amount, :balance_after, 'spend', 'analysis', :source_id, :description, NOW()
+                )
+            """),
+            {
+                "user_id": user_id,
+                "amount": -paid_deducted,
+                "balance_after": balance_after,
+                "source_id": source_id,
+                "description": (description or "") + " (보유 크레딧)",
+            },
+        )
+
+    # Return total remaining balance for compatibility, or just paid balance
+    return balance_after + free_balance_after
 
 
 def _restore_free_plan_for_expired_subscriptions(db: Session, user_id):
     if not user_id:
         return
 
-    db.execute(
+    # 1. Update subscription to Free
+    row = db.execute(
         text("""
             UPDATE subscriptions
             SET
@@ -540,9 +584,15 @@ def _restore_free_plan_for_expired_subscriptions(db: Session, user_id):
               AND status = 'active'
               AND ended_at IS NOT NULL
               AND ended_at <= NOW()
+            RETURNING subscription_id
         """),
         {"user_id": user_id},
-    )
+    ).fetchone()
+
+    # 2. Award pending AI refund if subscription actually expired and changed
+    if row:
+        from services.subscription import award_pending_ai_refund
+        award_pending_ai_refund(db, user_id)
 
 
 def _public_payment_response(toss_result: dict):
@@ -619,9 +669,10 @@ async def _confirm_toss_payment(
 def get_my_credit_balance(db: Session, user_id: str):
     row = db.execute(
         text("""
-            SELECT COALESCE(balance, 0) AS balance
-            FROM user_credit_balances
-            WHERE user_id = :user_id
+            SELECT COALESCE(b.balance, 0) AS balance, u.role
+            FROM users u
+            LEFT JOIN user_credit_balances b ON u.user_id = b.user_id
+            WHERE u.user_id = :user_id
         """),
         {"user_id": user_id},
     ).fetchone()
@@ -629,7 +680,34 @@ def get_my_credit_balance(db: Session, user_id: str):
     if not row:
         return {"balance": 0}
 
-    return {"balance": int(row._mapping["balance"] or 0)}
+    balance = int(row._mapping["balance"] if row._mapping["balance"] is not None else 0)
+    role = row._mapping["role"]
+
+    if role == "admin" and balance < 5:
+        amount_to_add = 50 - balance
+        db.execute(
+            text("""
+                INSERT INTO user_credit_balances (user_id, balance, updated_at)
+                VALUES (:user_id, 50, NOW())
+                ON CONFLICT (user_id) DO UPDATE 
+                SET balance = 50, updated_at = NOW()
+            """),
+            {"user_id": user_id}
+        )
+        db.execute(
+            text("""
+                INSERT INTO credit_ledger (
+                    user_id, amount, balance_after, entry_type, source_type, description, created_at
+                ) VALUES (
+                    :user_id, :amount, 50, 'earn', 'admin_recharge', '관리자 자동 충전', NOW()
+                )
+            """),
+            {"user_id": user_id, "amount": amount_to_add}
+        )
+        db.commit()
+        balance = 50
+
+    return {"balance": balance}
 
 
 def get_my_payment_info(db: Session, user_id: str):

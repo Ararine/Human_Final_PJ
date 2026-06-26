@@ -3,6 +3,7 @@ import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import "../../css/garim-pages/AdminSubscriptions.css";
 import GarimPage from "../../components/garim/GarimPage";
 import {
+  cancelAdminSubscription,
   getAdminSubscriptionDetail,
   getAdminSubscriptions,
 } from "../../utils/api";
@@ -107,6 +108,11 @@ export default function AdminSubscriptions() {
   const [detailError, setDetailError] = useState("");
   const [detailData, setDetailData] = useState(null);
 
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelLoading, setCancelLoading] = useState(false);
+
   useEffect(() => {
     let ignore = false;
 
@@ -201,6 +207,66 @@ export default function AdminSubscriptions() {
     }
   };
 
+  /* 구독 강제 취소 — 취소 사유 입력 모달 열기 */
+  const handleCancelSubscriptionClick = (subscription) => {
+    const userEmail = detailData?.user?.email || "해당 사용자";
+
+    // ── 구독 취소 경고 조건 체크 ──
+    const warnings = [];
+
+    // 조건 1: 최근 결제일 기준 14일 경과
+    if (subscription.days_since_last_payment != null && subscription.days_since_last_payment >= 14) {
+      warnings.push(`[${userEmail}] 사용자는 결제일 기준 14일이 지난 사용자입니다.`);
+    }
+    // 조건 2: 플랜 크레딧의 15% 이상 사용
+    if (subscription.plan_credits > 0 && subscription.credit_used_ratio >= 15) {
+      warnings.push(`[${userEmail}] 사용자는 충전 크레딧의 15% 이상 사용한 사용자입니다.`);
+    }
+    if (warnings.length > 0) {
+      alert(`⚠️ 구독 취소 주의 사항\n\n${warnings.join("\n\n")}`);
+    }
+
+    setCancelTarget(subscription);
+    setCancelReason("");
+    setCancelConfirmOpen(true);
+  };
+
+  /* 모달에서 실제 취소 API 호출 */
+  const handleConfirmCancel = async () => {
+    if (!cancelTarget || !detailData) return;
+    const reason = cancelReason.trim();
+    if (!reason) {
+      alert("취소 사유를 입력해주세요.");
+      return;
+    }
+    if (reason.length > 30) {
+      alert("취소 사유는 30글자 이내로 입력해주세요.");
+      return;
+    }
+
+    setCancelLoading(true);
+    try {
+      const userId = detailData.user.user_id;
+      const res = await cancelAdminSubscription(userId, cancelTarget.subscription_id, reason);
+      const restored = res?.data?.restored_plan || "Free";
+      alert(`구독이 취소되었습니다.\n복원된 플랜: ${restored}`);
+
+      setCancelConfirmOpen(false);
+      setCancelTarget(null);
+
+      /* 상세 모달 새로고침 */
+      const detail = await getAdminSubscriptionDetail(userId);
+      setDetailData(detail.data);
+
+      /* 목록 새로고침 */
+      setQueryVersion((v) => v + 1);
+    } catch (err) {
+      alert("구독 취소 중 오류가 발생했습니다: " + (err.message || "알 수 없는 오류"));
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
   return (
     <GarimPage bodyClass="" screenLabel="31 Admin Subscriptions">
       <div className="adm-shell">
@@ -238,6 +304,10 @@ export default function AdminSubscriptions() {
           <a href="/admin/payments">
             <span className="material-icons">payments</span>
             사용자 결제 확인
+          </a>
+                  <a href="/admin/reports">
+            <span className="material-icons">report_problem</span>
+            문의 내역
           </a>
         </aside>
 
@@ -562,6 +632,7 @@ export default function AdminSubscriptions() {
                       <span>자동결제</span>
                       <span>carryover</span>
                       <span>superseded_by</span>
+                      <span>관리</span>
                     </div>
                     {detailData.active_subscriptions.length === 0 && (
                       <div className="sb-empty">활성 구독이 없습니다.</div>
@@ -574,6 +645,19 @@ export default function AdminSubscriptions() {
                         <span>{boolLabel(subscription.auto_renew)}</span>
                         <span>{subscription.carried_over_days || 0}일</span>
                         <span className="mono">{subscription.superseded_by_subscription_id || "-"}</span>
+                        <span>
+                          {/* Free 플랜은 취소 불가 */}
+                          {subscription.plan_code !== "free" && (
+                            <button
+                              type="button"
+                              className="sb-cancel-sub-btn"
+                              onClick={() => handleCancelSubscriptionClick(subscription)}
+                            >
+                              <span className="material-icons">cancel</span>
+                              구독 취소
+                            </button>
+                          )}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -646,6 +730,70 @@ export default function AdminSubscriptions() {
                 </section>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {cancelConfirmOpen && cancelTarget && detailData && (
+        <div className="sb-modal-backdrop" onClick={() => !cancelLoading && setCancelConfirmOpen(false)}>
+          <div className="sb-modal sb-modal--narrow" onClick={(e) => e.stopPropagation()}>
+            <div className="sb-modal-head">
+              <div>
+                <h2>구독 취소 확인</h2>
+                <p>선택한 구독을 강제 취소합니다.</p>
+              </div>
+              <button
+                type="button"
+                className="sb-icon-btn"
+                onClick={() => setCancelConfirmOpen(false)}
+                disabled={cancelLoading}
+              >
+                <span className="material-icons">close</span>
+              </button>
+            </div>
+            
+            <div className="sb-detail-body sb-cancel-body">
+              <div className="sb-cancel-target">
+                <strong>사용자:</strong> {detailData.user.email} <br/>
+                <strong>취소 플랜:</strong> {cancelTarget.plan_name}
+              </div>
+              <div className="sb-reason-field">
+                <label className="sb-reason-label">
+                  취소 사유 <span className="sb-required-mark">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="취소 사유를 30글자 이내로 요약해주세요"
+                  maxLength={30}
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  autoFocus
+                  className="sb-reason-input"
+                />
+                <span className="sb-reason-count">
+                  {cancelReason.length}/30
+                </span>
+              </div>
+            </div>
+
+            <div className="sb-modal-foot">
+              <button
+                type="button"
+                className="mui-btn mui-btn--outlined"
+                onClick={() => setCancelConfirmOpen(false)}
+                disabled={cancelLoading}
+              >
+                닫기
+              </button>
+              <button
+                type="button"
+                className="mui-btn mui-btn--contained mui-btn--error"
+                onClick={handleConfirmCancel}
+                disabled={cancelLoading || !cancelReason.trim()}
+              >
+                구독 취소
+              </button>
+            </div>
           </div>
         </div>
       )}

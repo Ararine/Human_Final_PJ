@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { loadTossPayments } from "@tosspayments/payment-sdk";
 
 import GarimPage from "../../components/garim/GarimPage";
@@ -42,6 +42,7 @@ function formatPrice(value) {
 
 export default function Payment() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // 새 URL 파라미터: productType, productCode (구 plan 파라미터 fallback 지원)
@@ -138,15 +139,25 @@ export default function Payment() {
             결제 버튼을 누르면 백엔드 임시 주문 생성 후 Toss 결제창이 열립니다.
           </p>
 
-          <button
-            type="button"
-            onClick={handlePayment}
-            className="mui-btn mui-btn--contained mui-btn--lg pay-submit"
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? "주문 생성 중" : "결제하기"}
-            <span className="material-icons">arrow_forward</span>
-          </button>
+          <div className="pay-btn-group">
+            <button
+              type="button"
+              onClick={() => navigate("/pricing")}
+              className="mui-btn mui-btn--outlined mui-btn--lg pay-submit"
+              disabled={isSubmitting}
+            >
+              취소하기
+            </button>
+            <button
+              type="button"
+              onClick={handlePayment}
+              className="mui-btn mui-btn--contained mui-btn--lg pay-submit"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "주문 생성 중" : "결제하기"}
+              <span className="material-icons">arrow_forward</span>
+            </button>
+          </div>
         </div>
 
         <div className="trust-strip">
