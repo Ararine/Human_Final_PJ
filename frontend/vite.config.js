@@ -8,6 +8,11 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 3000,
     strictPort: false,
+    allowedHosts: ["garim.shop", "www.garim.shop", "localhost"],
+    watch: {
+      usePolling: true,
+      interval: 500,
+    },
   },
   plugins: [react(), babel({ presets: [reactCompilerPreset()] })],
 });

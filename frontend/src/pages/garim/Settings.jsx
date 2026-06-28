@@ -8,7 +8,7 @@ import {
   updateUserSettings,
   deleteAccount,
   getMyPaymentInfo, // 백엔드 결제 조회 API 함수 임포트
-  getMyLoginHistories, // 최근 로그인 히스토리 API 함수 임포트
+  getMyLoginHistories, // 최근 로그인 이력 API 함수 임포트
 } from "../../utils/api";
 import "../../css/garim-pages/Settings.css";
 
@@ -52,33 +52,29 @@ function formatToKST(dateString, isDateOnly = false) {
     hour12: false,
   }).format(date);
 }
-// ----------------------------------------
 
-// --- 상대 시간 변환 유틸리티 함수 ---
-function formatRelativeTime(dateString) {
-  if (!dateString) return "-";
+// --- User-Agent 파싱 유틸리티 함수 ---
+function parseUserAgent(uaString) {
+  if (!uaString) return "Unknown Device";
+  let browser = "Unknown Browser";
+  let os = "Unknown OS";
 
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  let diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 0) diffSec = 0;
+  // Browser (순서 중요: Whale, Edge 등이 Chrome보다 먼저 와야 함)
+  if (uaString.includes("Whale")) browser = "Whale";
+  else if (uaString.includes("Edg")) browser = "Edge";
+  else if (uaString.includes("Chrome")) browser = "Chrome";
+  else if (uaString.includes("Safari") && !uaString.includes("Chrome")) browser = "Safari";
+  else if (uaString.includes("Firefox")) browser = "Firefox";
 
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHour = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHour / 24);
+  // OS
+  if (uaString.includes("Windows NT 10.0")) os = "Windows 10/11";
+  else if (uaString.includes("Windows")) os = "Windows";
+  else if (uaString.includes("Mac OS X")) os = "macOS";
+  else if (uaString.includes("Linux")) os = "Linux";
+  else if (uaString.includes("Android")) os = "Android";
+  else if (uaString.includes("iOS") || uaString.includes("iPhone") || uaString.includes("iPad")) os = "iOS";
 
-  if (diffSec < 60) return "방금 전";
-  if (diffMin < 60) return `${diffMin}분 전`;
-  if (diffHour < 24) return `${diffHour}시간 전`;
-  if (diffDay < 7) return `${diffDay}일 전`;
-
-  return new Intl.DateTimeFormat("ko-KR", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
+  return `${browser} / ${os}`;
 }
 // ----------------------------------------
 
@@ -100,6 +96,8 @@ export default function Settings() {
   const [planInfo, setPlanInfo] = useState({ name: "무료 플랜", date: null });
   const [isPremium, setIsPremium] = useState(false);
   const [selectedReceipt, setSelectedReceipt] = useState(null);
+
+  // 로그인 이력 상태
   const [loginHistories, setLoginHistories] = useState([]);
 
   useEffect(() => {
@@ -144,15 +142,15 @@ export default function Settings() {
       })
       .catch((error) => console.error("결제 정보 로드 실패", error));
 
-    // 백엔드 API로부터 로그인 히스토리 이력 조회 (최근 5건)
+    // 최근 로그인 이력 조회
     getMyLoginHistories()
       .then((res) => {
         if (!isMounted) return;
-        if (res && res.data) {
+        if (res.data) {
           setLoginHistories(res.data);
         }
       })
-      .catch((error) => console.error("로그인 히스토리 로드 실패", error));
+      .catch((error) => console.error("로그인 이력 로드 실패", error));
 
     return () => {
       isMounted = false;
@@ -293,7 +291,7 @@ export default function Settings() {
             className={`set-nav-danger ${getNavClassName("danger")}`}
             onClick={(e) => handleNavClick(e, "danger")}
           >
-            <span className="material-icons" style={{ color: "#d32f2f" }}>
+            <span className="material-icons set-ico-danger">
               warning
             </span>
             위험 영역
@@ -321,17 +319,7 @@ export default function Settings() {
           </div>
 
           <div className="set-section" id="plan">
-            {/* 플랜 섹션 헤더: '자세히 보기' 버튼을 추가하여 billing 페이지로 이동할 수 있도록 설정 */}
-            <div className="set-section-head">
-              <h3>플랜</h3>
-              <button
-                className="mui-btn mui-btn--outlined mui-btn--sm"
-                type="button"
-                onClick={() => navigate("/billing")}
-              >
-                자세히 보기
-              </button>
-            </div>
+            <h3>플랜</h3>
             <p className="sub">
               현재 이용 중인 요금제와 결제 내역을 확인합니다.
             </p>
@@ -343,7 +331,6 @@ export default function Settings() {
                 padding: "16px",
                 border: "1px solid var(--mui-divider)",
                 borderRadius: "8px",
-                background: isPremium ? "#fafafa" : "#fff",
               }}
             >
               <div
@@ -363,8 +350,8 @@ export default function Settings() {
                     {/* 크레딧 글자 필터링 부분 */}
                     {planInfo.name.includes("크레딧")
                       ? paymentHistory.find(
-                          (pay) => !pay.orderName.includes("크레딧"),
-                        )?.orderName || "무료 플랜"
+                        (pay) => !pay.orderName.includes("크레딧"),
+                      )?.orderName || "무료 플랜"
                       : planInfo.name}
                   </strong>
                   <span
@@ -389,24 +376,34 @@ export default function Settings() {
                     </div>
                   )}
                 </div>
-                {isPremium ? (
-                  <span className="mui-chip mui-chip--soft-success">
-                    Active
-                  </span>
-                ) : (
-                  <a
-                    href="/pricing"
-                    className="mui-btn mui-btn--contained mui-btn--sm"
-                  >
-                    업그레이드
-                  </a>
-                )}
+                <div className="set-row-12">
+                  {isPremium ? (
+                    <>
+                      <span className="mui-chip mui-chip--soft-success">
+                        Active
+                      </span>
+                      <a
+                        href="/billing"
+                        className="mui-btn mui-btn--outlined mui-btn--sm"
+                      >
+                        구독 관리
+                      </a>
+                    </>
+                  ) : (
+                    <a
+                      href="/pricing"
+                      className="mui-btn mui-btn--contained mui-btn--sm"
+                    >
+                      업그레이드
+                    </a>
+                  )}
+                </div>
               </div>
             </div>
 
             {/* 결제 내역 박스 */}
-            <div style={{ marginTop: "32px" }}>
-              <h4 style={{ fontSize: "15px", marginBottom: "12px" }}>
+            <div className="set-mt-32">
+              <h4 className="set-subhead">
                 결제 내역
               </h4>
               <div
@@ -498,8 +495,8 @@ export default function Settings() {
             </p>
             <div className="row-toggle">
               <div className="text">
-                <div className="t">처리 완료 이메일</div>
-                <div className="s">치환 완료·실패 시 이메일 발송</div>
+                <div className="t">처리 완료 이메일 </div>
+                <div className="s">치환 완료·실패 시 이메일 발송 (미구현 개발중)</div>
               </div>
               {renderSwitch("email_notification", "처리 완료 이메일")}
             </div>
@@ -515,34 +512,28 @@ export default function Settings() {
           <div className="set-section" id="security">
             <h3>보안</h3>
             <p className="sub">로그인 이력 관리</p>
-            <div style={{ marginTop: "24px" }}>
-              <label
-                style={{
-                  font: "500 13px var(--font-sans)",
-                  display: "block",
-                  marginBottom: "12px",
-                }}
-              >
-                최근 로그인 (최근 5건)
+            <div className="set-mt-24">
+              <label className="set-login-label">
+                최근 로그인 (최근 5건만 표시)
               </label>
               <div className="login-list">
                 {loginHistories.length > 0 ? (
-                  loginHistories.map((hist) => (
-                    <div className="row" key={hist.login_history_id}>
-                      <span style={{ flex: "1" }}>
-                        {formatRelativeTime(hist.logged_in_at)} · {hist.browser_device}
+                  loginHistories.map((history, idx) => (
+                    <div className="row" key={history.id}>
+                      <span className="set-flex1">
+                        {formatToKST(history.logged_in_at, false)} · {history.provider} / {parseUserAgent(history.user_agent)}
                       </span>
-                      {hist.is_current_session && (
-                        <span className="mui-chip mui-chip--soft-success">
+                      {idx === 0 && (
+                        <span className="mui-chip mui-chip--soft-success set-chip-mr">
                           현재 세션
                         </span>
                       )}
-                      <span className="ip">{hist.ip_address}</span>
+                      <span className="ip">{history.ip_address}</span>
                     </div>
                   ))
                 ) : (
-                  <div style={{ padding: "16px 0", color: "var(--fg-3)", fontSize: "13px" }}>
-                    로그인 이력이 없습니다.
+                  <div className="row">
+                    <span className="set-flex1-muted">로그인 이력이 없습니다.</span>
                   </div>
                 )}
               </div>
@@ -576,23 +567,21 @@ export default function Settings() {
                 color: "var(--fg-2)",
               }}
             >
-              <strong style={{ color: "#1976d2" }}>자동 삭제 정책</strong>— 원본
+              <strong className="set-policy-strong">자동 삭제 정책</strong>— 원본
               파일은 처리 후 12시간 / 결과 파일은 플랜별 (Free 7일·Pro 90일) /
               처리 메타데이터는 90일 (워터마크 역추적용).
             </div>
           </div>
           <div className="set-section" id="danger">
-            <h3 style={{ color: "#d32f2f" }}>위험 영역</h3>
+            <h3 className="set-danger-title">위험 영역</h3>
             <div className="danger">
               <h4>계정 삭제</h4>
               <p>
-                작업에 사용된 모든 데이터는 삭제됩니다.
-                <br />
-                마지막 탈퇴일 기준 30일 내에 재가입시 무료 크래딧은 제공되지 않습니다.
+                계정과 모든 데이터가 영구히 삭제됩니다. 결제 이력은 법적 보관
+                의무로 90일간 별도 보존됩니다.
               </p>
               <button
-                className="mui-btn mui-btn--outlined"
-                style={{ color: "#d32f2f", borderColor: "rgba(211,47,47,0.5)" }}
+                className="mui-btn mui-btn--outlined set-danger-btn"
                 onClick={openDeleteModal}
               >
                 계정 삭제 신청 →
@@ -606,9 +595,8 @@ export default function Settings() {
           <div className="delete-modal" onClick={(e) => e.stopPropagation()}>
             <h3>계정 삭제</h3>
             <p>
-              작업에 사용된 모든 데이터는 삭제됩니다.
-              <br />
-              마지막 탈퇴일 기준 30일 내에 재가입시 무료 크래딧은 제공되지 않습니다.
+              계정과 모든 데이터가 영구히 삭제됩니다. 결제 이력은 법적 보관
+              의무로 90일간 별도 보존됩니다.
             </p>
             <p className="delete-modal-instruction">
               삭제를 진행하시려면 아래에 &lsquo;복구 안됨&rsquo; 이라는 메세지를
@@ -672,20 +660,13 @@ export default function Settings() {
               </div>
               <div className="row">
                 <span className="lbl">주문명</span>
-                <span className="val" style={{ fontWeight: "600" }}>
+                <span className="val set-val-bold">
                   {selectedReceipt.orderName}
                 </span>
               </div>
               <div className="row">
                 <span className="lbl">주문번호</span>
-                <span
-                  className="val"
-                  style={{
-                    fontSize: "12px",
-                    color: "var(--fg-2)",
-                    wordBreak: "break-all",
-                  }}
-                >
+                <span className="val set-order-id">
                   {selectedReceipt.orderId}
                 </span>
               </div>
@@ -702,8 +683,7 @@ export default function Settings() {
             </div>
             <div className="receipt-modal-actions">
               <button
-                className="mui-btn mui-btn--contained mui-btn--block"
-                style={{ width: "100%" }}
+                className="mui-btn mui-btn--contained mui-btn--block set-w-full"
                 onClick={() => setSelectedReceipt(null)}
               >
                 확인

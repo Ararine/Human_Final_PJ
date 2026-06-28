@@ -13,3 +13,10 @@ psycopg2-binary
 redis
 ffmpeg-python
 pyngrok
+requests
+opencv-python
+paddlepaddle==3.0.0
+paddleocr==3.6.0
+paddlex==3.6.1
+imageio-ffmpeg
+filetype

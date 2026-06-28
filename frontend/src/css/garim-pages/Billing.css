@@ -242,3 +242,34 @@
     font-size: 28px;
   }
 }
+
+/* Dark Mode Support for Billing Page */
+:root[data-theme="dark"] .billing-surface {
+  background: var(--bg-1);
+}
+
+:root[data-theme="dark"] .billing-hero {
+  background: linear-gradient(135deg, rgba(25, 118, 210, 0.1) 0%, rgba(46, 125, 50, 0.1) 100%);
+}
+
+:root[data-theme="dark"] .billing-hero__price {
+  color: #64b5f6;
+}
+
+:root[data-theme="dark"] .billing-fact,
+:root[data-theme="dark"] .billing-definition div {
+  background: var(--surface-alt);
+  border-color: var(--mui-border);
+}
+
+:root[data-theme="dark"] .billing-banner--info {
+  background: rgba(25, 118, 210, 0.1);
+  border-color: rgba(25, 118, 210, 0.3);
+  color: #90caf9;
+}
+
+:root[data-theme="dark"] .billing-banner--error {
+  background: rgba(211, 47, 47, 0.1);
+  border-color: rgba(211, 47, 47, 0.3);
+  color: #ef9a9a;
+}

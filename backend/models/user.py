@@ -36,6 +36,44 @@ def get_user_by_provider_query(conn, provider, provider_user_id, provider_email=
     ).fetchone()
 
 
+def update_oauth_user_query(conn, user_id, oauth_user):
+    conn.execute(
+        text(
+            """
+            UPDATE users
+            SET email = COALESCE(:email, email),
+                display_name = COALESCE(:name, display_name),
+                profile_image_url = COALESCE(:profile_image_url, profile_image_url),
+                updated_at = NOW()
+            WHERE user_id = :user_id
+            """
+        ),
+        {
+            "user_id": user_id,
+            "email": oauth_user.get("email"),
+            "name": oauth_user.get("name"),
+            "profile_image_url": oauth_user.get("profile_image_url"),
+        },
+    )
+    conn.execute(
+        text(
+            """
+            UPDATE oauth_accounts
+            SET provider_email = COALESCE(:provider_email, provider_email),
+                provider_name = COALESCE(:provider_name, provider_name),
+                last_used_at = NOW()
+            WHERE user_id = :user_id AND provider = :provider
+            """
+        ),
+        {
+            "user_id": user_id,
+            "provider": oauth_user["provider"],
+            "provider_email": oauth_user.get("email"),
+            "provider_name": oauth_user.get("name"),
+        },
+    )
+
+
 def create_oauth_user_query(conn, oauth_user, role, status):
     created_user = conn.execute(
         text(
@@ -109,8 +147,8 @@ def create_oauth_user_query(conn, oauth_user, role, status):
     conn.execute(
         text(
             """
-            INSERT INTO user_credit_balances (user_id, balance, updated_at)
-            VALUES (:user_id, 10, NOW())
+            INSERT INTO user_credit_balances (user_id, balance, free_balance, updated_at)
+            VALUES (:user_id, 0, 10, NOW())
             """
         ),
         {"user_id": user_id},
@@ -132,11 +170,11 @@ def create_oauth_user_query(conn, oauth_user, role, status):
             VALUES (
                 :user_id,
                 10,
-                10,
+                0,
                 'first_login',
                 'oauth',
                 :source_id,
-                '가입 환영 크레딧 지급',
+                '가입 환영 크레딧 지급 (무료)',
                 NOW()
             )
             """
@@ -268,3 +306,88 @@ def update_user_role_and_status_query(conn, user_id, role, status):
         ),
         {"user_id": user_id, "role": role, "status": status},
     ).fetchone()
+
+def get_user_consent_query(conn, user_id):
+    return conn.execute(
+        text(
+            """
+            SELECT is_agreed, version
+            FROM user_consents
+            WHERE user_id = :user_id AND consent_type = 'terms_and_privacy'
+            ORDER BY created_at DESC
+            LIMIT 1
+            """
+        ),
+        {"user_id": user_id},
+    ).fetchone()
+
+
+def save_user_consent_query(conn, user_id, is_agreed, version, ip_address, user_agent):
+    return conn.execute(
+        text(
+            """
+            INSERT INTO user_consents (
+                user_id, consent_type, is_agreed, version, source, ip_address, user_agent
+            ) VALUES (
+                :user_id, 'terms_and_privacy', :is_agreed, :version, 'signup_modal', :ip_address, :user_agent
+            )
+            RETURNING *
+            """
+        ),
+        {
+            "user_id": user_id,
+            "is_agreed": is_agreed,
+            "version": version,
+            "ip_address": ip_address,
+            "user_agent": user_agent,
+        },
+    ).fetchone()
+
+
+def insert_login_history_query(conn, data):
+    return conn.execute(
+        text(
+            """
+            INSERT INTO user_login_histories (
+                user_id,
+                provider,
+                provider_email,
+                login_result,
+                ip_address,
+                user_agent,
+                session_id
+            ) VALUES (
+                :user_id,
+                :provider,
+                :provider_email,
+                :login_result,
+                :ip_address,
+                :user_agent,
+                :session_id
+            )
+            """
+        ),
+        data
+    )
+
+
+def get_user_login_histories_query(conn, user_id, limit=5):
+    return conn.execute(
+        text(
+            """
+            SELECT 
+                login_history_id,
+                provider,
+                login_result,
+                ip_address,
+                user_agent,
+                session_id,
+                logged_in_at
+            FROM user_login_histories
+            WHERE user_id = :user_id
+            ORDER BY logged_in_at DESC
+            LIMIT :limit
+            """
+        ),
+        {"user_id": user_id, "limit": limit}
+    ).fetchall()

@@ -832,3 +832,144 @@
     justify-content: flex-end;
   }
 }
+
+/* 결제 상태 배지: 텍스트 너비에 맞게 자동 조절 */
+.sb-status-cell .mui-chip,
+.sb-state-cell .mui-chip,
+.sb-scheduled-cell .mui-chip {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+}
+
+/* 구독 취소 버튼 — 상세 모달 활성 구독 행 */
+.sb-cancel-sub-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid #d32f2f;
+  border-radius: 4px;
+  background: transparent;
+  color: #d32f2f;
+  font: 500 12px var(--font-sans);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 150ms, color 150ms;
+}
+.sb-cancel-sub-btn:hover {
+  background: rgba(211, 47, 47, 0.08);
+}
+.sb-cancel-sub-btn .material-icons {
+  font-size: 14px;
+}
+
+/* 취소 버튼 열 포함 구독 행 — 7컬럼으로 확장 */
+.sb-detail-row-subscription {
+  grid-template-columns: 100px 1.3fr 1fr 86px 86px 1.2fr 90px;
+}
+
+/* =========================================================
+   다크 모드 보정 (사용자와 동일 중성 톤)
+   - 흰/연회색 표면 → 다크 표면 변수
+   - 고정 텍스트(#111827/#64748b 등) → fg 변수
+   - 경계선(#e5e7eb/#e2e8f0 등) → divider 변수
+   ========================================================= */
+:root[data-theme="dark"] .sb-metric,
+:root[data-theme="dark"] .sb-card,
+:root[data-theme="dark"] .sb-card-head,
+:root[data-theme="dark"] .sb-toolbar,
+:root[data-theme="dark"] .sb-limit-select,
+:root[data-theme="dark"] .sb-filter-group select,
+:root[data-theme="dark"] .sb-filter-group input,
+:root[data-theme="dark"] .sb-advanced-toggle,
+:root[data-theme="dark"] .sb-icon-btn,
+:root[data-theme="dark"] .sb-modal-head,
+:root[data-theme="dark"] .sb-detail-table,
+:root[data-theme="dark"] .sb-detail-row,
+:root[data-theme="dark"] .sb-detail-section,
+:root[data-theme="dark"] .sb-pagination { background: var(--bg-1); }
+
+/* 모달 본문/요약 카드/테이블 헤더 등 보조 표면 */
+:root[data-theme="dark"] .sb-modal,
+:root[data-theme="dark"] .sb-detail-body { background: var(--bg-2); }
+:root[data-theme="dark"] .sb-data-head,
+:root[data-theme="dark"] .sb-detail-summary-card,
+:root[data-theme="dark"] .sb-detail-head { background: var(--surface-alt); }
+
+/* 고정 텍스트색 → 변수 */
+:root[data-theme="dark"] .sb-card-head h2,
+:root[data-theme="dark"] .sb-modal-head h2,
+:root[data-theme="dark"] .sb-section-head h3 { color: var(--fg-1); }
+:root[data-theme="dark"] .sb-card-head p,
+:root[data-theme="dark"] .sb-modal-head p,
+:root[data-theme="dark"] .sb-section-head p,
+:root[data-theme="dark"] .sb-pagination .meta,
+:root[data-theme="dark"] .sb-detail-head { color: var(--fg-2); }
+
+/* 경계선 → divider 변수 */
+:root[data-theme="dark"] .sb-modal-head,
+:root[data-theme="dark"] .sb-detail-section,
+:root[data-theme="dark"] .sb-detail-table,
+:root[data-theme="dark"] .sb-detail-summary-card,
+:root[data-theme="dark"] .sb-section-head { border-color: var(--mui-divider); }
+
+/* 행/버튼 호버 → 흰 음영 */
+:root[data-theme="dark"] .sb-data-row:not(.sb-data-head):hover,
+:root[data-theme="dark"] .sb-detail-row:not(.sb-detail-head):hover { background: rgba(255, 255, 255, 0.04); }
+:root[data-theme="dark"] .sb-icon-btn:hover { background: rgba(255, 255, 255, 0.08); border-color: var(--mui-border); color: var(--fg-1); }
+
+/* 구독 취소 버튼 — 다크 모드에서도 빨간 테두리/텍스트 유지 */
+:root[data-theme="dark"] .sb-cancel-sub-btn {
+  border-color: #ef5350;
+  color: #ef5350;
+}
+:root[data-theme="dark"] .sb-cancel-sub-btn:hover {
+  background: rgba(239, 83, 80, 0.14);
+}
+
+/* 구독 취소 확인 모달 */
+.sb-modal--narrow {
+  max-width: 500px;
+}
+.sb-cancel-body {
+  padding: 24px;
+}
+.sb-cancel-target {
+  margin-bottom: 16px;
+}
+.sb-reason-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sb-reason-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-2);
+}
+.sb-required-mark {
+  color: var(--error-main);
+}
+.sb-reason-input {
+  padding: 10px 12px;
+  border: 1px solid var(--mui-border);
+  border-radius: 4px;
+  font-size: 14px;
+  background: var(--bg-1);
+  color: var(--fg-1);
+  outline: none;
+}
+.sb-reason-count {
+  font-size: 12px;
+  color: var(--fg-3);
+  text-align: right;
+}
+.sb-modal-foot {
+  padding: 16px 24px;
+  border-top: 1px solid var(--mui-divider);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

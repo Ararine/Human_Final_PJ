@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import "../../css/garim-pages/AdminPolicy.css";
-// 요금제 정보 표시를 위해 Pricing용 포맷팅 함수들을 import합니다.
-import { formatFileSize, formatPrice, formatQuota } from "../../hooks/usePricingPlans";
 
 import GarimPage from "../../components/garim/GarimPage";
 import {
@@ -27,7 +25,6 @@ const SUBSCRIPTION_DEFAULT = {
   watermark_required: false,
   price_amount: "0",
   sort_order: "0",
-  plan_rank: "0",
   status: "active",
   file_size_limit: "50",
   max_jobs: "3",
@@ -52,7 +49,6 @@ const SUBSCRIPTION_NUMBER_FIELDS = [
   "result_retention_days",
   "price_amount",
   "sort_order",
-  "plan_rank",
   "file_size_limit",
   "max_jobs",
   "auto_delete_original_hours",
@@ -287,9 +283,8 @@ export default function AdminPolicy() {
           selectedPlanId &&
           plans.find((p) => p.plan_id === selectedPlanId)?.status === "active";
 
-        // 활성 플랜이 3개 이상인 상태에서 새로 활성화하거나 추가하려는 경우 차단합니다.
-        if (!isCurrentlyActive && activeCount >= 3) {
-          alert("활성화된 구독 플랜 카드는 최대 3개까지만 등록할 수 있습니다.");
+        if (!isCurrentlyActive && activeCount >= 4) {
+          alert("활성화된 구독 플랜 카드는 최대 4개까지만 등록할 수 있습니다.");
           return;
         }
       }
@@ -396,6 +391,10 @@ export default function AdminPolicy() {
             <span className="material-icons">manage_history</span>
             로그인 히스토리
           </a>
+          <a href="/admin/analytics">
+            <span className="material-icons">analytics</span>
+            분석
+          </a>
           <a href="/admin/policy" className="active">
             <span className="material-icons">tune</span>
             정책 및 상품 관리
@@ -408,9 +407,9 @@ export default function AdminPolicy() {
             <span className="material-icons">payments</span>
             사용자 결제 확인
           </a>
-          <a href="/admin/analytics">
-            <span className="material-icons">analytics</span>
-            분석
+                  <a href="/admin/reports">
+            <span className="material-icons">report_problem</span>
+            문의 내역
           </a>
         </aside>
 
@@ -551,7 +550,14 @@ export default function AdminPolicy() {
                             {statusLabel(plan.status)}
                           </span>
                         </span>
-                        <span>₩{formatMoney(plan.price_amount)}</span>
+                        <span className="pol-price-cell">
+                          ₩{formatMoney(plan.price_amount)}
+                          {Number(plan.price_amount) > 0 && (
+                            <small className="pol-subprice">
+                              연 ₩{formatMoney(Number(plan.price_amount) * 10)} (2개월 무료)
+                            </small>
+                          )}
+                        </span>
                         <span>{formatMoney(plan.credits)} 크레딧</span>
                         <span>{formatMoney(plan.file_size_limit)}MB</span>
                         <span>{plan.result_retention_days ?? "-"}일</span>
@@ -892,11 +898,6 @@ function PlanFormPanel({ title, form, onChange, onSave, onReset, onClose }) {
           value={form.sort_order}
           onChange={(v) => onChange("sort_order", v)}
         />
-        <NumberField
-          label="플랜 랭크"
-          value={form.plan_rank}
-          onChange={(v) => onChange("plan_rank", v)}
-        />
         <SelectField
           label="관리 상태"
           value={form.status}
@@ -982,7 +983,11 @@ function PlanFormPanel({ title, form, onChange, onSave, onReset, onClose }) {
           저장
         </button>
       </div>
-    </aside>
+              <a href="/admin/reports">
+            <span className="material-icons">report_problem</span>
+            문의 내역
+          </a>
+        </aside>
   );
 }
 
@@ -1054,7 +1059,11 @@ function CreditFormPanel({ title, form, onChange, onSave, onReset, onClose }) {
           저장
         </button>
       </div>
-    </aside>
+              <a href="/admin/reports">
+            <span className="material-icons">report_problem</span>
+            문의 내역
+          </a>
+        </aside>
   );
 }
 
@@ -1067,9 +1076,6 @@ function PlanPreviewPanel({ form }) {
   // 버튼 문구는 price_amount 기준 고정 분기값 사용 (cta_label 제거)
   const ctaLabel = Number(form.price_amount || 0) === 0 ? "무료로 시작" : "결제하기";
 
-  // 무료 플랜일 경우 "/ 영구", 그 외의 플랜은 "/ 30일" 결제 주기를 표시합니다.
-  const periodLabel = (form.plan_code || "").toLowerCase() === "free" ? "/ 영구" : "/ 30일";
-
   return (
     <aside className="pol-preview-panel pol-preview-panel--modal">
       <div className="pol-card-head">
@@ -1077,53 +1083,38 @@ function PlanPreviewPanel({ form }) {
       </div>
       <div className="pol-preview-body">
         <div className="pol-price-preview">
-          {/* 플랜 명칭과 배지를 한 행에 정렬하도록 Pricing 카드와 구조를 통일합니다. */}
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-            <span className="overline-k" style={{ margin: 0, lineHeight: 1 }}>{planName}</span>
-            {badgeLabel && (
-              <span className={`mui-chip ${badgeClass} price-card__badge`}>
-                {badgeLabel}
-              </span>
-            )}
-          </div>
+          <span className={`mui-chip ${badgeClass} price-card__badge`}>
+            {badgeLabel}
+          </span>
+          <span className="overline-k">{planName}</span>
           <div className="price-card__price">
-            {formatPrice(form.price_amount)}
-            <small>원</small>
-            {/* 요금제 기간 표시 (/ 영구 또는 / 30일)를 렌더링합니다. */}
-            <span className="price-card__period">
-              {periodLabel}
-            </span>
+            {formatMoney(form.price_amount)}
+            <small>원 / 월</small>
           </div>
-          <p className="caption-k" style={{ fontSize: "13px" }}>{description}</p>
-          {/* 실제 서비스에 노출되는 7개의 혜택 및 파일 처리 정책 항목들을 동일하게 표시합니다. */}
+          {/* 연 결제 파생 금액 — 월 × 10 (2개월 무료), pricing 페이지와 동일 공식 */}
+          {Number(form.price_amount || 0) > 0 && (
+            <div className="pol-preview-yearly">
+              연 결제 {formatMoney(Number(form.price_amount) * 10)}원
+              <span> (2개월 무료 · 월 {formatMoney(Math.round(Number(form.price_amount) * 10 / 12))}원 상당)</span>
+            </div>
+          )}
+          <p className="caption-k">{description}</p>
           <ul className="price-card__feats">
             <li>
               <span className="material-icons">check</span>크레딧{" "}
-              {formatQuota(form.credits, "개")}
+              {formatMoney(form.credits)}개
             </li>
             <li>
               <span className="material-icons">check</span>월 처리 한도{" "}
-              {formatQuota(form.monthly_quota)}
+              {form.monthly_quota || "무제한"}건
             </li>
             <li>
               <span className="material-icons">check</span>최대 파일 크기{" "}
-              {formatFileSize(form.file_size_limit)}
-            </li>
-            <li>
-              <span className="material-icons">check</span>동시 처리 최대{" "}
-              {formatQuota(form.max_jobs)}
+              {formatMoney(form.file_size_limit)}MB
             </li>
             <li>
               <span className="material-icons">check</span>결과 파일{" "}
-              {formatQuota(form.result_retention_days, "일")} 보관
-            </li>
-            <li>
-              <span className="material-icons">check</span>원본 파일{" "}
-              {formatQuota(form.auto_delete_original_hours, "시간")} 후 삭제
-            </li>
-            <li>
-              <span className="material-icons">check</span>메타데이터{" "}
-              {formatQuota(form.metadata_retention_days, "일")} 보존
+              {form.result_retention_days || 0}일 보관
             </li>
           </ul>
           <button
@@ -1134,7 +1125,11 @@ function PlanPreviewPanel({ form }) {
           </button>
         </div>
       </div>
-    </aside>
+              <a href="/admin/reports">
+            <span className="material-icons">report_problem</span>
+            문의 내역
+          </a>
+        </aside>
   );
 }
 
@@ -1173,7 +1168,11 @@ function CreditPreviewPanel({ form }) {
           </button>
         </div>
       </div>
-    </aside>
+              <a href="/admin/reports">
+            <span className="material-icons">report_problem</span>
+            문의 내역
+          </a>
+        </aside>
   );
 }
 
@@ -1254,22 +1253,13 @@ function SelectField({ label, value, onChange, options = STATUS_OPTIONS }) {
 
 function ToggleField({ label, checked, onChange }) {
   return (
-    <div className="pol-field">
+    <label className="pol-switch-wrap pol-switch-wrap--field">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
       <span>{label}</span>
-      <div className="pol-input pol-input--switch">
-        <span className="pol-switch-state">
-          {checked ? "필수 적용" : "선택 적용"}
-        </span>
-        <button
-          type="button"
-          className={`pol-switch ${checked ? "on" : ""}`}
-          role="switch"
-          aria-checked={checked}
-          onClick={() => onChange(!checked)}
-        >
-          <span className="knob"></span>
-        </button>
-      </div>
-    </div>
+    </label>
   );
 }

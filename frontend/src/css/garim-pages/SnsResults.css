@@ -49,3 +49,88 @@
   .v2-placeholder .material-icons { color: var(--fg-3); font-size: 32px; }
   .v2-placeholder .t { font: 500 14px var(--font-sans); }
   .v2-placeholder .s { font: 400 13px var(--font-sans); color: var(--fg-2); }
+
+  /* ── 다크 모드 보정 ── 통계/목록/카드 흰 배경 → 다크 표면색 */
+  :root[data-theme="dark"] .sr-cat,
+  :root[data-theme="dark"] .sr-main,
+  :root[data-theme="dark"] .post-card,
+  :root[data-theme="dark"] .side-card,
+  :root[data-theme="dark"] .v2-placeholder { background: var(--bg-1); }
+  /* 인플루언서 정보 구분선 음영 보정 */
+  :root[data-theme="dark"] .sr-impact .ig-info { border-left-color: var(--mui-divider); }
+
+/* 카드 오버레이 SVG */
+.sns-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+/* 위험도 칩 크기 */
+.sns-chip {
+  height: 20px;
+  font-size: 10px;
+}
+/* 본문 영역 채움 */
+.sns-flex1 {
+  flex: 1;
+}
+/* 상단 라벨 강조 */
+.sns-overline {
+  color: #d32f2f;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+}
+.sns-label-ml {
+  margin-left: 8px;
+}
+/* 영상 썸네일 */
+.sns-thumb-video {
+  background: linear-gradient(135deg, #424242, #212121);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sns-video-ico {
+  color: #fff;
+  font-size: 64px;
+}
+/* 카드 하단 안내 */
+.sns-card-foot {
+  padding: 16px 20px;
+  text-align: center;
+  border-top: 1px solid var(--mui-divider);
+  color: var(--fg-2);
+  font: 400 13px var(--font-sans);
+}
+.sns-link {
+  color: #1976d2;
+}
+.sns-sub {
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+/* 사이드 항목 */
+.sns-row-gap {
+  gap: 8px;
+}
+.sns-ico-ok {
+  color: #2e7d32;
+}
+.sns-item-title {
+  font-weight: 500;
+}
+.sns-cap-11 {
+  font-size: 11px;
+}
+.sns-del-btn {
+  margin-top: 12px;
+  padding-left: 0;
+  color: #d32f2f;
+}
+.sns-card-dim {
+  opacity: 0.6;
+}
+.sns-row-between {
+  justify-content: space-between;
+}

@@ -229,6 +229,7 @@ def normalize_user(provider, user_response):
         }
 
     if provider == "naver":
+        print(f"NAVER RAW RESPONSE: {user_response}", flush=True)
         profile = user_response.get("response", {})
         return {
             "provider": provider,
