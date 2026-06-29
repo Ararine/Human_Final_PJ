@@ -5,6 +5,9 @@ import "./css/index.css";
 import "./css/App.css";
 import "./css/garim.css";
 import { GarimRouteProvider } from "./context/GarimRouteContext.jsx";
+import { AuthProvider } from "./context/AuthContext.jsx";
+import { NotificationProvider } from "./context/NotificationContext.jsx";
+import { ThemeProvider } from "./context/ThemeContext.jsx";
 import { garimPages } from "./data/garim/pages";
 import { useAuthUser } from "./hooks/useAuthStatus";
 
@@ -52,7 +55,10 @@ function renderRouteElement(route) {
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
+      <ThemeProvider>
+      <AuthProvider>
+      <NotificationProvider>
+        <Routes>
         {garimPages.map((route) => (
           <Route
             key={route.path}
@@ -61,7 +67,10 @@ function App() {
           />
         ))}
         <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
+        </Routes>
+      </NotificationProvider>
+      </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

@@ -248,7 +248,7 @@ def set_auth_cookies(response, token_pair):
         httponly=True,
         secure=get_cookie_secure(),
         samesite=get_cookie_samesite(),
-        path="/auth/refresh",
+        path="/api/v1/auth/refresh",
         max_age=get_refresh_ttl_seconds(),
     )
     # [한글 주석] 프론트엔드 자바스크립트가 로그인 여부를 간접 식별할 수 있도록 비-HttpOnly 쿠키를 심어줍니다.
@@ -271,7 +271,7 @@ def delete_auth_cookies(response):
         "samesite": get_cookie_samesite(),
     }
     response.delete_cookie(ACCESS_COOKIE_NAME, path="/", **cookie_options)
-    response.delete_cookie(REFRESH_COOKIE_NAME, path="/auth/refresh", **cookie_options)
+    response.delete_cookie(REFRESH_COOKIE_NAME, path="/api/v1/auth/refresh", **cookie_options)
     response.delete_cookie(REFRESH_COOKIE_NAME, path="/", **cookie_options)
     
     # [한글 주석] 로그아웃 시 프론트엔드 인식용 비-HttpOnly 쿠키 logged_in도 함께 지워줍니다.

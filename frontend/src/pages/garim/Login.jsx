@@ -1,11 +1,13 @@
-import { useState, useEffect } from "react";
-import { Link, useSearchParams, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { getOAuthStartUrl, getOAuthReregisterUrl } from "../../utils/api";
 import "../../css/garim-pages/Login.css";
+import "../../css/garim-pages/TermsConsentModal.css";
 
 import GarimPage from "../../components/garim/GarimPage";
+import TermsText from "../../components/garim/TermsText";
 
 const socialButtons = [
   {
@@ -48,26 +50,13 @@ const socialButtons = [
 
 export default function Login() {
   useDocumentTitle("로그인 · Garim");
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [showSuspendedModal, setShowSuspendedModal] = useState(false); // [한글 주석] 정지 계정 안내 팝업 상태
-
   const isReregister = searchParams.get("reregister") === "true";
   const reregisterProvider = searchParams.get("provider") || "";
   const nextPath = searchParams.get("next") || "";
 
-  // [한글 주석] 로그인 실패 에러 코드가 suspended인 경우 정지 팝업을 노출합니다.
-  useEffect(() => {
-    if (searchParams.get("error") === "suspended") {
-      setShowSuspendedModal(true);
-    }
-  }, [searchParams]);
-
-  // [한글 주석] 정지 팝업 닫힘 시 메인 페이지("/")로 이동시킵니다.
-  const handleCloseSuspendedModal = () => {
-    setShowSuspendedModal(false);
-    navigate("/");
-  };
+  // 약관 팝업 열림/닫힘 상태
+  const [termsOpen, setTermsOpen] = useState(false);
 
   const startOAuth = (provider) => {
     window.location.assign(getOAuthStartUrl(provider, nextPath));
@@ -89,36 +78,18 @@ export default function Login() {
             </p>
             <button
               type="button"
-              className="mui-btn mui-btn--contained mui-btn--block"
-              style={{ marginTop: "16px" }}
+              className="mui-btn mui-btn--contained mui-btn--block login-reregister-btn"
               onClick={startReregister}
             >
               동의하고 재가입하기
             </button>
-            <div className="login-terms-action" style={{ marginTop: "12px" }}>
+            <div className="login-terms-action login-terms-action--gap">
               <Link className="mui-btn mui-btn--outlined mui-btn--block" to="/login">
                 돌아가기
               </Link>
             </div>
           </div>
         </main>
-        {showSuspendedModal && (
-          <div className="suspended-modal-overlay" onClick={handleCloseSuspendedModal}>
-            <div className="suspended-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="suspended-modal-icon">
-                <span className="material-icons">block</span>
-              </div>
-              <h2>계정 정지 안내</h2>
-              <p>
-                본 계정은 현재 정지 상태입니다.<br />
-                자세한 내용은 관리자에게 문의하세요.
-              </p>
-              <button className="mui-btn mui-btn--contained" onClick={handleCloseSuspendedModal}>
-                확인
-              </button>
-            </div>
-          </div>
-        )}
       </GarimPage>
     );
   }
@@ -144,26 +115,32 @@ export default function Login() {
             ))}
           </div>
           <div className="login-terms-action">
-            <Link className="mui-btn mui-btn--outlined mui-btn--block" to="/terms">
+            {/* /terms 페이지 이동 대신 팝업으로 약관 표시 */}
+            <button
+              type="button"
+              className="mui-btn mui-btn--outlined mui-btn--block"
+              onClick={() => setTermsOpen(true)}
+            >
               이용약관 확인
-            </Link>
+            </button>
           </div>
         </div>
       </main>
-      {showSuspendedModal && (
-        <div className="suspended-modal-overlay" onClick={handleCloseSuspendedModal}>
-          <div className="suspended-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="suspended-modal-icon">
-              <span className="material-icons">block</span>
+
+      {/* 이용약관 팝업 — TermsConsentModal과 동일한 스타일 재사용 */}
+      {termsOpen && (
+        <div className="consent-modal-overlay" onClick={() => setTermsOpen(false)}>
+          <div className="consent-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="consent-detail-view">
+              <TermsText />
+              <button
+                type="button"
+                className="mui-btn mui-btn--contained mui-btn--block"
+                onClick={() => setTermsOpen(false)}
+              >
+                닫기
+              </button>
             </div>
-            <h2>계정 정지 안내</h2>
-            <p>
-              본 계정은 현재 정지 상태입니다.<br />
-              자세한 내용은 관리자에게 문의하세요.
-            </p>
-            <button className="mui-btn mui-btn--contained" onClick={handleCloseSuspendedModal}>
-              확인
-            </button>
           </div>
         </div>
       )}

@@ -1,8 +1,10 @@
 .report-page { padding: 32px 32px 96px; }
   .report-shell { max-width: 1280px; margin: 0 auto; }
   .impact { display: flex; gap: 32px; align-items: flex-start; margin-bottom: 32px; padding: 32px; background: linear-gradient(135deg, rgba(211,47,47,0.06) 0%, rgba(151,71,255,0.04) 100%); border: 1px solid rgba(211,47,47,0.2); border-radius: 8px; }
+  .impact.safe { background: linear-gradient(135deg, rgba(46,125,50,0.06) 0%, rgba(46,125,50,0.04) 100%); border-color: rgba(46,125,50,0.2); }
   .impact .lead { flex: 1; }
   .impact .lead .overline-k { color: #d32f2f; font-size: 12px; letter-spacing: 1.5px; font-weight: 600; }
+  .impact.safe .lead .overline-k { color: #2e7d32; }
   .impact .lead h1 { font: 300 44px/1.15 var(--font-sans); margin: 8px 0 12px; letter-spacing: -0.5px; color: var(--fg-1); }
   .impact .lead h1 .num { font-weight: 500; color: #d32f2f; }
   .impact .lead .sub { font: 400 16px/1.5 var(--font-sans); color: var(--fg-2); }
@@ -69,3 +71,14 @@
   .cta-sticky .text-block { flex: 1; }
   .cta-sticky h3 { font: 500 18px var(--font-sans); margin: 0 0 4px; }
   .cta-sticky .caption-k { font-size: 13px; }
+
+/* Dark Mode */
+:root[data-theme="dark"] .cat-card,
+:root[data-theme="dark"] .player-card,
+:root[data-theme="dark"] .side-card,
+:root[data-theme="dark"] .cta-sticky { background: var(--bg-1); border-color: var(--mui-border); }
+:root[data-theme="dark"] .impact { background: linear-gradient(135deg, rgba(211,47,47,0.15) 0%, rgba(151,71,255,0.1) 100%); border-color: rgba(211,47,47,0.3); }
+:root[data-theme="dark"] .impact.safe { background: linear-gradient(135deg, rgba(46,125,50,0.15) 0%, rgba(46,125,50,0.1) 100%); border-color: rgba(46,125,50,0.3); }
+:root[data-theme="dark"] .player .controls { background: linear-gradient(transparent, rgba(0,0,0,0.9)); }
+:root[data-theme="dark"] .player .play-btn { background: rgba(30,30,30,0.92); }
+:root[data-theme="dark"] .player .play-btn .material-icons { color: var(--fg-1); }

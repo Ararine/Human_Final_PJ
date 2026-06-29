@@ -1,474 +1,509 @@
+import { useEffect, useState } from "react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
+import { getJobDetections, getJobResult, getMyCreditBalance, chargeDetailAccess } from "../../utils/api";
 import "../../css/garim-pages/AnalysisReport.css";
 
 import GarimPage from "../../components/garim/GarimPage";
+import CreditConfirmModal from "../../components/garim/CreditConfirmModal";
+
+// UUID 접두사 제거 → 원본 파일명만 반환 (예: "abc123_택배송장1.jpg" → "택배송장1.jpg")
+function stripUuidPrefix(sourceName) {
+  if (!sourceName) return "";
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_/i;
+  return sourceName.replace(uuidPattern, "");
+}
+
+// 위험도 점수 0~10 → 게이지 바늘 좌표
+function riskGaugePath(score) {
+  const clamped = Math.max(0, Math.min(10, score || 0));
+  const angle = (clamped / 10) * 160 - 80;
+  const rad = (angle * Math.PI) / 180;
+  const cx = 100, cy = 100, r = 80;
+  const x = cx + r * Math.sin(rad);
+  const y = cy - r * Math.cos(rad);
+  return { x: Math.round(x), y: Math.round(y) };
+}
 
 export default function AnalysisReport() {
   useDocumentTitle("분석 리포트 · Garim");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const jobId = location.state?.jobId || searchParams.get("jobId");
+
+  const [summary, setSummary] = useState({});
+  const [resultPaths, setResultPaths] = useState({});
+  const [loading, setLoading] = useState(Boolean(jobId));
+  const [error, setError] = useState(jobId ? "" : "분석 작업 ID가 없습니다.");
+  // 크레딧 확인 팝업 표시 여부
+  const [showCreditModal, setShowCreditModal] = useState(false);
+  const [creditBalance, setCreditBalance] = useState(0);
+
+
+
+  useEffect(() => {
+    if (jobId) {
+      localStorage.setItem(`job_stage_${jobId}`, "/analysis-report");
+    }
+  }, [jobId]);
+
+  useEffect(() => {
+    getMyCreditBalance().then(res => {
+      setCreditBalance(res.balance || 0);
+    }).catch(err => console.error("크레딧 조회 실패", err));
+  }, []);
+
+  useEffect(() => {
+    if (!jobId) return;
+    let cancelled = false;
+
+    Promise.all([getJobDetections(jobId), getJobResult(jobId)])
+      .then(([detectData, resultData]) => {
+        if (cancelled) return;
+        setSummary(detectData.summary || {});
+        setResultPaths(resultData || {});
+      })
+      .catch((err) => {
+        if (!cancelled) setError(String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [jobId]);
+
+  const riskCounts = summary.risk_level_counts || {};
+  const total = summary.total_pii_count || 0;
+  const riskScore = summary.risk_score || 0;
+  const gaugePoint = riskGaugePath(riskScore);
+
+  // 원본 파일명 (UUID 제거)
+  const rawSourceName = summary.source_name
+    || resultPaths.result_json_path?.split(/[\\/]/).pop()?.replace("_result.json", "")
+    || "";
+  const displayName = stripUuidPrefix(rawSourceName) || "업로드된 파일";
+
+  if (loading) {
+    return (
+      <GarimPage bodyClass="page-app" screenLabel="10 Analysis report">
+        <div className="report-page" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
+          <div className="caption-k" style={{ color: "var(--fg-3)" }}>탐지 결과를 불러오는 중…</div>
+        </div>
+      </GarimPage>
+    );
+  }
+
+  if (error) {
+    return (
+      <GarimPage bodyClass="page-app" screenLabel="10 Analysis report">
+        <div className="report-page" style={{ padding: "48px", textAlign: "center" }}>
+          <div style={{ color: "var(--error)", marginBottom: "16px" }}>{error}</div>
+          <Link to="/upload" className="mui-btn mui-btn--outlined">새 파일 업로드</Link>
+        </div>
+      </GarimPage>
+    );
+  }
+
+  const requiredCredit = summary.source_type === "video" ? 3 : 2;
+  const isInsufficient = creditBalance < requiredCredit;
+
+  // 상세보기 확인 → /replace-options 이동
+  async function handleDetailConfirm() {
+    setShowCreditModal(false);
+    try {
+      setLoading(true);
+      const res = await chargeDetailAccess(jobId, summary.source_type);
+      setCreditBalance(res.remaining_credits);
+      navigate("/replace-options", { state: { jobId, summary } });
+    } catch (err) {
+      if (err.message && err.message.includes("크레딧이 부족")) {
+        alert("크레딧이 부족합니다. 요금제 구매 페이지로 이동합니다.");
+        navigate("/pricing");
+      } else {
+        alert(err.message || "상세보기 접근 중 오류가 발생했습니다.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleGoToPricing() {
+    setShowCreditModal(false);
+    navigate("/pricing");
+  }
+
+
 
   return (
     <GarimPage bodyClass="page-app" screenLabel="10 Analysis report">
+      {/* 크레딧 확인 팝업 */}
+      <CreditConfirmModal
+        open={showCreditModal}
+        sourceType={summary.source_type}
+        isInsufficient={isInsufficient}
+        onConfirm={handleDetailConfirm}
+        onCancel={() => setShowCreditModal(false)}
+        onGoToPricing={handleGoToPricing}
+      />
+
       <div className="report-page">
         <div className="report-shell">
-          <section className="impact">
+
+          {/* ── 요약 임팩트 섹션 ── */}
+          <section className={`impact ${total === 0 ? "safe" : ""}`}>
             <div className="lead">
+              {/* 파란 부분: 파일명.확장자만 표시 */}
               <div className="overline-k">
-                ⚠ 분석 완료 · family_picnic_2026.mp4
+                {total === 0 ? "✓" : "⚠"} 분석 완료 · {displayName}
               </div>
               <h1>
-                내 영상에서
-                <span className="num">
-                  17건
-                </span>
-                의 개인정보 노출이 발견됐습니다
+                <span className="file-name-highlight">{displayName}</span> 파일에서
+                <span className="num" style={{ color: total === 0 ? "#2e7d32" : undefined }}> {total}건</span>의
+                개인정보 탐지가 되었습니다.
               </h1>
               <p className="sub">
-                이 영상을 그대로 SNS에 올리면 신상 도싱·스토킹의 단서가 될 수 있습니다. 모든 항목을 확인하고 안전하게 가려보세요.
+                {total === 0 ? (
+                  "발견된 민감한 개인정보가 없으므로 별도의 마스킹 처리 없이 안전하게 활용하실 수 있습니다."
+                ) : (
+                  "탐지된 개인정보를 확인하고 안전하게 처리하세요. 상세보기를 통해 각 항목을 직접 선택하고 가릴 수 있습니다."
+                )}
               </p>
-              <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
-                <span className="mui-chip mui-chip--soft-error">
-                  위험 8건
-                </span>
-                <span className="mui-chip mui-chip--soft-warning">
-                  주의 6건
-                </span>
-                <span className="mui-chip mui-chip--soft-info">
-                  참고 3건
-                </span>
+              <div style={{ display: "flex", gap: "8px", marginTop: "16px", flexWrap: "wrap" }}>
+                {(riskCounts["위험"] > 0) && (
+                  <span className="mui-chip mui-chip--soft-error">위험 {riskCounts["위험"]}건</span>
+                )}
+                {(riskCounts["주의"] > 0) && (
+                  <span className="mui-chip mui-chip--soft-warning">주의 {riskCounts["주의"]}건</span>
+                )}
+                {(riskCounts["참고"] > 0) && (
+                  <span className="mui-chip mui-chip--soft-info">참고 {riskCounts["참고"]}건</span>
+                )}
+                {total === 0 && (
+                  <span className="mui-chip mui-chip--soft-info">탐지된 개인정보 없음</span>
+                )}
               </div>
             </div>
+
+            {/* 위험도 게이지 */}
             <div className="risk-gauge">
               <svg viewBox="0 0 200 120">
                 <defs>
-                  <lineargradient id="gg" x1="0" y1="0" x2="1" y2="0">
+                  <linearGradient id="gg" x1="0" y1="0" x2="1" y2="0">
                     <stop offset="0%" stopColor="#2e7d32" />
                     <stop offset="40%" stopColor="#ed6c02" />
                     <stop offset="100%" stopColor="#d32f2f" />
-                  </lineargradient>
+                  </linearGradient>
                 </defs>
                 <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#e0e0e0" strokeWidth="14" strokeLinecap="round" />
-                <path d="M 20 100 A 80 80 0 0 1 168 60" fill="none" stroke="url(#gg)" strokeWidth="14" strokeLinecap="round" />
-                <circle cx="168" cy="60" r="6" fill="#d32f2f" />
+                <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="url(#gg)" strokeWidth="14" strokeLinecap="round" />
+                <circle cx={gaugePoint.x} cy={gaugePoint.y} r="6" fill={total === 0 ? "#2e7d32" : "#d32f2f"} />
               </svg>
               <div className="score">
-                8.2
-                <small>
-                  /10
-                </small>
+                {riskScore.toFixed(1)}
+                <small>/10</small>
               </div>
-              <div className="lbl">
-                위험도
-              </div>
+              <div className="lbl">위험도</div>
             </div>
           </section>
-          <div className="cat-cards">
-            <div className="cat-card err">
-              <div className="row">
-                <span className="material-icons">
-                  local_shipping
-                </span>
-                <div className="lbl">
-                  택배 송장
-                </div>
+
+          {/* ── 사이드바 영역 ── */}
+          <div className="main-grid" style={{ gridTemplateColumns: "1fr 280px" }}>
+            {/* 경고 및 요약 영역 (좌측) */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+              {/* 탐지 결과 요약 카드 */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+                  <div style={{
+                    background: "var(--surface-2)",
+                    borderRadius: "12px",
+                    padding: "24px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "16px",
+                    boxShadow: "var(--mui-elev-1)"
+                  }}>
+                    <div style={{ fontSize: "15px", fontWeight: 600, color: "var(--fg-1)" }}>
+                      탐지된 개인정보 요약
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-around", marginTop: "8px" }}>
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: "32px", fontWeight: 700, color: "var(--primary)" }}>{summary.visual_pii_count ?? total}</div>
+                        <div style={{ fontSize: "12px", color: "var(--fg-3)", marginTop: "4px" }}>시각 PII</div>
+                      </div>
+                      {(summary.audio_pii_count > 0) && (
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: "32px", fontWeight: 700, color: "#7c4dff" }}>{summary.audio_pii_count}</div>
+                          <div style={{ fontSize: "12px", color: "var(--fg-3)", marginTop: "4px" }}>음성 PII</div>
+                        </div>
+                      )}
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: "32px", fontWeight: 700, color: "#d32f2f" }}>{total}</div>
+                        <div style={{ fontSize: "12px", color: "var(--fg-3)", marginTop: "4px" }}>총 건수</div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* 액션 유도 카드 */}
+                  {total === 0 ? (
+                    <div style={{
+                      background: "linear-gradient(135deg, var(--surface-1) 0%, rgba(46, 125, 50, 0.08) 100%)",
+                      border: "1px solid rgba(46, 125, 50, 0.2)",
+                      borderRadius: "12px",
+                      padding: "24px",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "center",
+                      gap: "12px",
+                      boxShadow: "var(--mui-elev-1)"
+                    }}>
+                       <div style={{ fontSize: "15px", fontWeight: 600, color: "var(--fg-1)", display: "flex", alignItems: "center", gap: "6px" }}>
+                         <span className="material-icons" style={{ color: "#2e7d32", fontSize: "20px" }}>check_circle</span>
+                         안전하게 배포하세요
+                       </div>
+                       <p style={{ margin: 0, fontSize: "13px", color: "var(--fg-2)", lineHeight: 1.6 }}>
+                         이 파일은 탐지된 개인정보가 없습니다. 안심하고 다른 곳에 공유하셔도 좋습니다.
+                       </p>
+                    </div>
+                  ) : (
+                    <div style={{
+                      background: "linear-gradient(135deg, var(--surface-1) 0%, rgba(33, 150, 243, 0.08) 100%)",
+                      border: "1px solid rgba(33, 150, 243, 0.2)",
+                      borderRadius: "12px",
+                      padding: "24px",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "center",
+                      gap: "12px",
+                      boxShadow: "var(--mui-elev-1)"
+                    }}>
+                       <div style={{ fontSize: "15px", fontWeight: 600, color: "var(--fg-1)", display: "flex", alignItems: "center", gap: "6px" }}>
+                         <span className="material-icons" style={{ color: "#2196f3", fontSize: "20px" }}>visibility</span>
+                         안전한 배포를 원하시나요?
+                       </div>
+                       <p style={{ margin: 0, fontSize: "13px", color: "var(--fg-2)", lineHeight: 1.6 }}>
+                         상세보기를 통해 AI가 찾아낸 {total}건의 항목을 눈으로 직접 확인하고, 안전하게 가려보세요.
+                       </p>
+                    </div>
+                  )}
               </div>
-              <div className="num">
-                4
-              </div>
-            </div>
-            <div className="cat-card err">
-              <div className="row">
-                <span className="material-icons">
-                  directions_car
-                </span>
-                <div className="lbl">
-                  차량 번호판
-                </div>
-              </div>
-              <div className="num">
-                3
-              </div>
-            </div>
-            <div className="cat-card warn">
-              <div className="row">
-                <span className="material-icons">
-                  face
-                </span>
-                <div className="lbl">
-                  얼굴
-                </div>
-              </div>
-              <div className="num">
-                5
-              </div>
-            </div>
-            <div className="cat-card warn">
-              <div className="row">
-                <span className="material-icons">
-                  record_voice_over
-                </span>
-                <div className="lbl">
-                  음성 속 이름
-                </div>
-              </div>
-              <div className="num">
-                2
-              </div>
-            </div>
-            <div className="cat-card info">
-              <div className="row">
-                <span className="material-icons">
-                  tag
-                </span>
-                <div className="lbl">
-                  EXIF·기타
-                </div>
-              </div>
-              <div className="num">
-                3
-              </div>
-            </div>
-          </div>
-          <div className="main-grid">
-            <div className="player-card">
-              <div className="player">
-                <img src="https://images.unsplash.com/photo-1542038784456-1ea8e935640e?w=1200&amp;q=80" alt="가족 피크닉 영상 한 프레임" />
-                <svg viewBox="0 0 1200 675" preserveAspectRatio="none" style={{ position: "absolute", inset: "0", width: "100%", height: "100%", pointerEvents: "none" }}>
-                  <rect x="420" y="180" width="220" height="220" fill="none" stroke="#d32f2f" strokeWidth="3" rx="2" />
-                  <rect x="418" y="158" width="148" height="24" fill="#d32f2f" />
-                  <text x="425" y="175" fill="#fff" fontFamily="Pretendard, sans-serif" fontSize="13" fontWeight="500">
-                    택배 송장 · 8.4
-                  </text>
-                  <rect x="700" y="240" width="140" height="160" fill="none" stroke="#ed6c02" strokeWidth="3" rx="2" />
-                  <rect x="698" y="218" width="80" height="24" fill="#ed6c02" />
-                  <text x="705" y="235" fill="#fff" fontFamily="Pretendard, sans-serif" fontSize="13" fontWeight="500">
-                    얼굴 · 6.1
-                  </text>
-                  <rect x="120" y="450" width="180" height="100" fill="none" stroke="#ed6c02" strokeWidth="3" rx="2" />
-                  <rect x="118" y="428" width="104" height="24" fill="#ed6c02" />
-                  <text x="125" y="445" fill="#fff" fontFamily="Pretendard, sans-serif" fontSize="13" fontWeight="500">
-                    번호판 · 7.2
-                  </text>
-                </svg>
-                <div className="play-btn">
-                  <span className="material-icons">
-                    play_arrow
-                  </span>
-                </div>
-                <div className="controls">
-                  <div className="timeline-row">
-                    <span className="time">
-                      00:47 / 02:14
+
+              {/* 경고 시뮬레이션 카드 */}
+              {total === 0 ? (
+                <div style={{
+                  background: "linear-gradient(145deg, rgba(46,125,50,0.05) 0%, rgba(46,125,50,0.12) 100%)",
+                  border: "1px solid rgba(46,125,50,0.25)",
+                  borderRadius: "12px",
+                  padding: "28px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "16px",
+                  position: "relative",
+                  overflow: "hidden",
+                  boxShadow: "var(--mui-elev-1)"
+                }}>
+                  <div style={{
+                    position: "absolute", top: 0, right: 0, width: "150px", height: "150px",
+                    background: "radial-gradient(circle, rgba(46,125,50,0.2) 0%, transparent 70%)",
+                    transform: "translate(30%, -30%)",
+                    pointerEvents: "none"
+                  }}></div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <span className="material-icons" style={{ color: "#2e7d32" }}>verified_user</span>
+                    <span style={{ fontSize: "18px", fontWeight: 700, color: "var(--fg-1)" }}>
+                      탐지된 개인정보 없음
                     </span>
-                    <div className="timeline" style={{ flex: "1" }}>
-                      <div className="timeline__fill">
-                      </div>
-                      <div className="timeline__marker" style={{ left: "8%" }}>
-                      </div>
-                      <div className="timeline__marker timeline__marker--warning" style={{ left: "22%" }}>
-                      </div>
-                      <div className="timeline__marker timeline__marker--warning" style={{ left: "35%" }}>
-                      </div>
-                      <div className="timeline__marker" style={{ left: "42%" }}>
-                      </div>
-                      <div className="timeline__marker" style={{ left: "58%" }}>
-                      </div>
-                      <div className="timeline__marker timeline__marker--info" style={{ left: "71%" }}>
-                      </div>
-                      <div className="timeline__marker timeline__marker--warning" style={{ left: "86%" }}>
-                      </div>
+                  </div>
+                  <p style={{ margin: 0, fontSize: "14px", color: "var(--fg-2)", lineHeight: 1.6 }}>
+                    현재 파일에서 민감한 개인정보가 <strong style={{ color: "#2e7d32" }}>0건</strong> 발견되었습니다.<br/>
+                    이 파일은 개인정보 유출 위험이 없으며, 안전하게 공유하거나 배포할 수 있습니다.
+                  </p>
+                  <div style={{
+                    background: "var(--bg-2)",
+                    border: "1px solid var(--mui-border)",
+                    borderRadius: "8px",
+                    padding: "16px",
+                    fontFamily: "monospace",
+                    fontSize: "13px",
+                    color: "var(--fg-1)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                    marginTop: "8px",
+                    boxShadow: "inset 0 2px 4px rgba(0,0,0,0.05)"
+                  }}>
+                    <div style={{ color: "#2e7d32", fontWeight: 600 }}>[✓] SECURITY SCAN REPORT</div>
+                    <div style={{ color: "var(--fg-2)" }}>&gt; Analyzing file: {displayName}</div>
+                    <div style={{ color: "var(--fg-2)" }}>&gt; Found 0 visual/voice identifiers...</div>
+                    <div style={{ color: "#2e7d32" }}>&gt; SUCCESS: No sensitive data detected.</div>
+                    <div style={{ 
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                      marginTop: "8px", borderTop: "1px dashed var(--mui-divider)", paddingTop: "12px" 
+                    }}>
+                      <span>Status: <span style={{ color: "#2e7d32", fontWeight: "bold" }}>SAFE(안전함)</span></span>
                     </div>
-                    <button style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer" }}>
-                      <span className="material-icons">
-                        fullscreen
-                      </span>
-                    </button>
                   </div>
                 </div>
-              </div>
-              <div className="filter-bar">
-                <span className="label">
-                  필터:
-                </span>
-                <span className="mui-chip mui-chip--primary mui-chip--md">
-                  전체 17
-                </span>
-                <span className="mui-chip mui-chip--outlined mui-chip--md">
-                  택배 4
-                </span>
-                <span className="mui-chip mui-chip--outlined mui-chip--md">
-                  번호판 3
-                </span>
-                <span className="mui-chip mui-chip--outlined mui-chip--md">
-                  얼굴 5
-                </span>
-                <span className="mui-chip mui-chip--outlined mui-chip--md">
-                  음성 2
-                </span>
-                <span className="mui-chip mui-chip--outlined mui-chip--md">
-                  EXIF 3
-                </span>
-                <div style={{ flex: "1" }}>
-                </div>
-                <button className="mui-btn mui-btn--text mui-btn--sm">
-                  위험도순 ↓
-                </button>
-              </div>
-              <div className="det-list">
-                <div className="detect-list">
-                  <div className="detect-item">
-                    <div className="detect-item__thumb">
-                      <img src="https://images.unsplash.com/photo-1611532736597-de2d4265fba3?w=200&amp;q=60" alt="" />
-                    </div>
-                    <div className="detect-item__body">
-                      <div className="detect-item__time">
-                        00:11
-                      </div>
-                      <div className="detect-item__title">
-                        택배 송장 — 이름·주소·전화번호
-                      </div>
-                      <div className="detect-item__desc">
-                        박OO 님 · 서울특별시 강남구 ○○로 ○○ 101호 · 010-****-****
-                      </div>
-                    </div>
-                    <div className="detect-item__risk">
-                      <span className="mui-chip mui-chip--error">
-                        위험 8.4
-                      </span>
-                      <span className="caption-k" style={{ fontSize: "11px" }}>
-                        신뢰도 96%
-                      </span>
-                    </div>
+              ) : (
+                <div style={{
+                  background: "linear-gradient(145deg, rgba(211,47,47,0.05) 0%, rgba(211,47,47,0.12) 100%)",
+                  border: "1px solid rgba(211,47,47,0.25)",
+                  borderRadius: "12px",
+                  padding: "28px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "16px",
+                  position: "relative",
+                  overflow: "hidden",
+                  boxShadow: "var(--mui-elev-1)"
+                }}>
+                  {/* 경고등 효과 */}
+                  <div style={{
+                    position: "absolute", top: 0, right: 0, width: "150px", height: "150px",
+                    background: "radial-gradient(circle, rgba(211,47,47,0.2) 0%, transparent 70%)",
+                    transform: "translate(30%, -30%)",
+                    pointerEvents: "none"
+                  }}></div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <span className="material-icons" style={{ color: "#d32f2f" }}>gpp_bad</span>
+                    <span style={{ fontSize: "18px", fontWeight: 700, color: "var(--fg-1)" }}>
+                      개인정보 노출 및 유출 위험 감지!
+                    </span>
                   </div>
-                  <div className="detect-item">
-                    <div className="detect-item__thumb" style={{ background: "linear-gradient(45deg,#424242,#212121)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <span className="material-icons" style={{ color: "#fff" }}>
-                        directions_car
-                      </span>
+                  
+                  <p style={{ margin: 0, fontSize: "14px", color: "var(--fg-2)", lineHeight: 1.6 }}>
+                    현재 파일에는 <strong style={{ color: "#d32f2f" }}>{total}건</strong>의 민감한 정보가 그대로 노출되어 있습니다.<br/>
+                    이대로 외부에 공유되거나 전송될 경우, <strong>무단 도용 및 보이스피싱 타겟팅</strong> 등 심각한 피해를 초래할 수 있으며 
+                    관련 법령에 의해 처벌받을 수 있습니다.
+                  </p>
+                  
+                  <div style={{
+                    background: "var(--bg-2)",
+                    border: "1px solid var(--mui-border)",
+                    borderRadius: "8px",
+                    padding: "16px",
+                    fontFamily: "monospace",
+                    fontSize: "13px",
+                    color: "var(--fg-1)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                    marginTop: "8px",
+                    boxShadow: "inset 0 2px 4px rgba(0,0,0,0.05)"
+                  }}>
+                    <div style={{ color: "#d32f2f", fontWeight: 600 }}>[!] SECURITY SCAN REPORT</div>
+                    <div style={{ color: "var(--fg-2)" }}>&gt; Analyzing file: {displayName}</div>
+                    {((summary.visual_pii_count ?? total) > 0 || total === 0) && (
+                      <div style={{ color: "var(--fg-2)" }}>&gt; Found {summary.visual_pii_count ?? total} visual identifiers...</div>
+                    )}
+                    {(summary.audio_pii_count > 0) && (
+                      <div style={{ color: "var(--fg-2)" }}>&gt; Found {summary.audio_pii_count} voice identifiers...</div>
+                    )}
+                    <div style={{ color: "#ed6c02" }}>&gt; WARNING: Sensitive data is completely exposed.</div>
+                    <div style={{ 
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                      marginTop: "8px", borderTop: "1px dashed var(--mui-divider)", paddingTop: "12px" 
+                    }}>
+                      <span>Status: <span style={{ color: "#d32f2f", fontWeight: "bold", animation: "pulse 1.5s infinite" }}>UNPROTECTED(보호되지 않음)</span></span>
                     </div>
-                    <div className="detect-item__body">
-                      <div className="detect-item__time">
-                        00:31
-                      </div>
-                      <div className="detect-item__title">
-                        차량 번호판 — 한국식 7자리
-                      </div>
-                      <div className="detect-item__desc">
-                        아파트 주차장 — "12가 ****" · 거주지 추정 가능
-                      </div>
-                    </div>
-                    <div className="detect-item__risk">
-                      <span className="mui-chip mui-chip--error">
-                        위험 7.2
-                      </span>
-                      <span className="caption-k" style={{ fontSize: "11px" }}>
-                        신뢰도 93%
-                      </span>
-                    </div>
-                  </div>
-                  <div className="detect-item">
-                    <div className="detect-item__thumb">
-                      <img src="https://images.unsplash.com/photo-1542038784456-1ea8e935640e?w=200&amp;q=60" alt="" />
-                    </div>
-                    <div className="detect-item__body">
-                      <div className="detect-item__time">
-                        00:47
-                      </div>
-                      <div className="detect-item__title">
-                        얼굴 — 미등록 인물 3명
-                      </div>
-                      <div className="detect-item__desc">
-                        본인 동의 여부 확인 필요. 본인 얼굴 화이트리스트 등록 시 자동 제외 (v2)
-                      </div>
-                    </div>
-                    <div className="detect-item__risk">
-                      <span className="mui-chip mui-chip--warning">
-                        주의 6.1
-                      </span>
-                      <span className="caption-k" style={{ fontSize: "11px" }}>
-                        신뢰도 99%
-                      </span>
-                    </div>
-                  </div>
-                  <div className="detect-item">
-                    <div className="detect-item__thumb" style={{ background: "linear-gradient(135deg,#9c27b0,#7b1fa2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <span className="material-icons" style={{ color: "#fff" }}>
-                        graphic_eq
-                      </span>
-                    </div>
-                    <div className="detect-item__body">
-                      <div className="detect-item__time">
-                        01:08
-                      </div>
-                      <div className="detect-item__title">
-                        음성 속 호칭 — "수민아!"
-                      </div>
-                      <div className="detect-item__desc">
-                        한국어 친밀어 인식. 영상 속 인물 식별 단서가 될 수 있습니다.
-                      </div>
-                    </div>
-                    <div className="detect-item__risk">
-                      <span className="mui-chip mui-chip--warning">
-                        주의 5.8
-                      </span>
-                      <span className="caption-k" style={{ fontSize: "11px" }}>
-                        신뢰도 91%
-                      </span>
-                    </div>
-                  </div>
-                  <div className="detect-item">
-                    <div className="detect-item__thumb" style={{ background: "linear-gradient(135deg,#0288d1,#01579b)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <span className="material-icons" style={{ color: "#fff" }}>
-                        location_on
-                      </span>
-                    </div>
-                    <div className="detect-item__body">
-                      <div className="detect-item__time">
-                        EXIF
-                      </div>
-                      <div className="detect-item__title">
-                        EXIF GPS — 촬영 위치 좌표
-                      </div>
-                      <div className="detect-item__desc">
-                        37.5172° N, 127.0473° E · 서울 강남구 근방. 메타데이터에서 자동 제거 가능
-                      </div>
-                    </div>
-                    <div className="detect-item__risk">
-                      <span className="mui-chip mui-chip--info">
-                        참고 4.2
-                      </span>
-                      <span className="caption-k" style={{ fontSize: "11px" }}>
-                        신뢰도 100%
-                      </span>
-                    </div>
-                  </div>
-                  <div className="detect-item">
-                    <div className="detect-item__thumb">
-                      <img src="https://images.unsplash.com/photo-1611532736597-de2d4265fba3?w=200&amp;q=60" alt="" />
-                    </div>
-                    <div className="detect-item__body">
-                      <div className="detect-item__time">
-                        01:23
-                      </div>
-                      <div className="detect-item__title">
-                        택배 송장 — 추가 1건
-                      </div>
-                      <div className="detect-item__desc">
-                        테이블 위 두 번째 박스의 송장지. 흐릿하지만 글자 추출 가능.
-                      </div>
-                    </div>
-                    <div className="detect-item__risk">
-                      <span className="mui-chip mui-chip--error">
-                        위험 7.8
-                      </span>
-                      <span className="caption-k" style={{ fontSize: "11px" }}>
-                        신뢰도 87%
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{ padding: "16px 0", textAlign: "center", color: "var(--fg-3)", font: "400 13px var(--font-sans)" }}>
-                    … 11개 항목 더 보기
                   </div>
                 </div>
-              </div>
+              )}
             </div>
+
+            {/* 우측 사이드바 */}
             <aside className="side">
               <div className="side-card">
-                <h3>
-                  유형별 분포
-                </h3>
+                <h3>유형별 분포</h3>
                 <div className="donut">
                   <svg viewBox="0 0 100 100">
                     <circle cx="50" cy="50" r="40" fill="none" stroke="#e0e0e0" strokeWidth="14" />
-                    <circle cx="50" cy="50" r="40" fill="none" stroke="#d32f2f" strokeWidth="14" strokeDasharray="103 251" strokeDashoffset="0" transform="rotate(-90 50 50)" />
-                    <circle cx="50" cy="50" r="40" fill="none" stroke="#ed6c02" strokeWidth="14" strokeDasharray="92 251" strokeDashoffset="-103" transform="rotate(-90 50 50)" />
-                    <circle cx="50" cy="50" r="40" fill="none" stroke="#0288d1" strokeWidth="14" strokeDasharray="44 251" strokeDashoffset="-195" transform="rotate(-90 50 50)" />
-                    <text x="50" y="48" textAnchor="middle" fontFamily="Pretendard" fontSize="14" fontWeight="500" fill="#212121">
-                      17
+                    {(riskCounts["위험"] > 0) && (
+                      <circle cx="50" cy="50" r="40" fill="none" stroke="#d32f2f" strokeWidth="14"
+                        strokeDasharray={`${(riskCounts["위험"] / total) * 251} 251`}
+                        strokeDashoffset="0" transform="rotate(-90 50 50)" />
+                    )}
+                    {(riskCounts["주의"] > 0) && (
+                      <circle cx="50" cy="50" r="40" fill="none" stroke="#ed6c02" strokeWidth="14"
+                        strokeDasharray={`${(riskCounts["주의"] / total) * 251} 251`}
+                        strokeDashoffset={`-${(riskCounts["위험"] / total) * 251 || 0}`}
+                        transform="rotate(-90 50 50)" />
+                    )}
+                    {(riskCounts["참고"] > 0) && (
+                      <circle cx="50" cy="50" r="40" fill="none" stroke="#0288d1" strokeWidth="14"
+                        strokeDasharray={`${(riskCounts["참고"] / total) * 251} 251`}
+                        strokeDashoffset={`-${((riskCounts["위험"] + riskCounts["주의"]) / total) * 251 || 0}`}
+                        transform="rotate(-90 50 50)" />
+                    )}
+                    {total === 0 && (
+                      <circle cx="50" cy="50" r="40" fill="none" stroke="#e0e0e0" strokeWidth="14" />
+                    )}
+                    <text x="50" y="48" textAnchor="middle" fontFamily="Pretendard" fontSize="14" fontWeight="500" fill="var(--fg-1)" style={{ fill: "var(--fg-1)" }}>
+                      {total}
                     </text>
-                    <text x="50" y="62" textAnchor="middle" fontFamily="Pretendard" fontSize="7" fill="#757575">
-                      건
-                    </text>
+                    <text x="50" y="62" textAnchor="middle" fontFamily="Pretendard" fontSize="7" fill="var(--fg-3)" style={{ fill: "var(--fg-3)" }}>건</text>
                   </svg>
                   <div className="donut__legend">
-                    <div className="lg-row">
-                      <span className="dot" style={{ background: "#d32f2f" }}>
-                      </span>
-                      위험 8건 (47%)
-                    </div>
-                    <div className="lg-row">
-                      <span className="dot" style={{ background: "#ed6c02" }}>
-                      </span>
-                      주의 6건 (35%)
-                    </div>
-                    <div className="lg-row">
-                      <span className="dot" style={{ background: "#0288d1" }}>
-                      </span>
-                      참고 3건 (18%)
-                    </div>
+                    {(riskCounts["위험"] > 0) && (
+                      <div className="lg-row">
+                        <span className="dot" style={{ background: "#d32f2f" }}></span>
+                        위험 {riskCounts["위험"]}건 ({Math.round((riskCounts["위험"] / total) * 100)}%)
+                      </div>
+                    )}
+                    {(riskCounts["주의"] > 0) && (
+                      <div className="lg-row">
+                        <span className="dot" style={{ background: "#ed6c02" }}></span>
+                        주의 {riskCounts["주의"]}건 ({Math.round((riskCounts["주의"] / total) * 100)}%)
+                      </div>
+                    )}
+                    {(riskCounts["참고"] > 0) && (
+                      <div className="lg-row">
+                        <span className="dot" style={{ background: "#0288d1" }}></span>
+                        참고 {riskCounts["참고"]}건 ({Math.round((riskCounts["참고"] / total) * 100)}%)
+                      </div>
+                    )}
+                    {total === 0 && (
+                      <div className="lg-row" style={{ color: "var(--fg-3)" }}>탐지된 항목 없음</div>
+                    )}
                   </div>
                 </div>
               </div>
-              <div className="side-card" style={{ background: "rgba(151,71,255,0.04)", border: "1px solid rgba(151,71,255,0.2)" }}>
-                <h3 style={{ color: "#9747ff" }}>
-                  이번 주 사용자 평균
-                </h3>
-                <div style={{ font: "300 36px var(--font-sans)", color: "#9747ff", lineHeight: "1" }}>
-                  6.4
-                  <small style={{ fontSize: "18px", color: "var(--fg-2)" }}>
-                    건
-                  </small>
+
+              <div className="side-card" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--fg-1)" }}>
+                  다음 단계
                 </div>
-                <div className="caption-k" style={{ fontSize: "13px", marginTop: "4px" }}>
-                  당신의 영상은 평균보다
-                  <strong style={{ color: "#d32f2f" }}>
-                    2.7배
-                  </strong>
-                  많은 위험을 포함하고 있습니다.
+                <div className="caption-k" style={{ fontSize: "12px", color: "var(--fg-2)" }}>
+                  {total === 0 ? "개인정보 탐지 내역 없음" : `탐지된 ${total}건 모두 안전하게 가리기`}
                 </div>
-              </div>
-              <div className="side-card">
-                <h3>
-                  이 결과 공유
-                </h3>
-                <p className="caption-k" style={{ fontSize: "13px", margin: "0 0 12px" }}>
-                  영상 자체는 공유되지 않습니다. Garim 서비스 링크만 전달됩니다.
-                </p>
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button className="mui-btn mui-btn--outlined mui-btn--sm" style={{ flex: "1" }}>
-                    <span className="material-icons" style={{ fontSize: "18px" }}>
-                      link
-                    </span>
-                    링크 복사
-                  </button>
-                  <button className="mui-btn mui-btn--outlined mui-btn--sm" style={{ flex: "1" }}>
-                    <span className="material-icons" style={{ fontSize: "18px" }}>
-                      share
-                    </span>
-                    친구 점검
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  className="mui-btn mui-btn--contained mui-btn--lg"
+                  onClick={() => {
+                    if (total === 0) {
+                      alert("개인정보 탐지된 부분이 없습니다. 안전한 파일입니다.");
+                      return;
+                    }
+                    if (summary.is_paid) {
+                      navigate("/replace-options", { state: { jobId, summary } });
+                    } else {
+                      setShowCreditModal(true);
+                    }
+                  }}
+                  style={{ width: "100%", display: "flex", justifyContent: "center", borderRadius: "8px" }}
+                >
+                  <span className="material-icons" style={{ fontSize: "20px", marginRight: "6px" }}>search</span>
+                  상세보기
+                </button>
+                <Link to="/upload" className="mui-btn mui-btn--outlined" style={{ width: "100%", display: "flex", justifyContent: "center", borderRadius: "8px" }}>
+                  다른 파일 검사
+                </Link>
               </div>
             </aside>
           </div>
-          <div className="cta-sticky">
-            <div className="text-block">
-              <h3>
-                17건 모두 안전하게 가리기
-              </h3>
-              <div className="caption-k" style={{ fontSize: "13px" }}>
-                자동·사용자 지정·마스킹 중에서 항목별로 선택할 수 있습니다. MVP1 단계는 무료입니다.
-              </div>
-            </div>
-            <a href="/upload" className="mui-btn mui-btn--outlined">
-              다른 영상 검사
-            </a>
-            <a href="/replace-options" className="mui-btn mui-btn--contained mui-btn--lg">
-              <span className="material-icons" style={{ fontSize: "20px" }}>
-                visibility_off
-              </span>
-              보안 처리 요청 →
-            </a>
-          </div>
+
         </div>
       </div>
     </GarimPage>

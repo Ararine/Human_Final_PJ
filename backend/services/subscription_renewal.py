@@ -226,6 +226,9 @@ def _process_subscription_renewal(db: Session, subscription, charge_client=None)
         {"billing_key_id": billing_key["billing_key_id"]},
     )
 
+    from services.subscription import award_pending_ai_refund
+    award_pending_ai_refund(db, subscription["user_id"])
+
     return {
         "subscription_id": str(subscription["subscription_id"]),
         "status": "success",

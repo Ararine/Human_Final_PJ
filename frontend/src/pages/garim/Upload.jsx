@@ -1,15 +1,20 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
-import { initUpload, uploadChunk, completeUpload, createAnalysisJob } from "../../utils/api";
+import { initUpload, uploadChunk, completeUpload, createAnalysisJob, getConsents, saveConsents, getMyPaymentInfo } from "../../utils/api";
+import { usePricingPlans, formatFileSize } from "../../hooks/usePricingPlans";
+import TermsConsentModal from "../../components/garim/TermsConsentModal";
 import "../../css/garim-pages/Upload.css";
 
 import GarimPage from "../../components/garim/GarimPage";
 
 const CHUNK_SIZE = 5 * 1024 * 1024;
 const MAX_RETRIES = 3;
-const FILE_TYPES = ["MP4", "MOV", "MKV", "JPG", "PNG", "HEIC", "MP3", "WAV"];
+
+// 허용 확장자: 영상 4종 + 이미지 4종
+const ALLOWED_EXTENSIONS = ["mp4", "avi", "mov", "mkv", "jpg", "png", "jpeg", "webp"];
+const FILE_TYPES = ["MP4", "AVI", "MOV", "MKV", "JPG", "PNG", "JPEG", "WEBP"];
 
 function formatBytes(size) {
   if (!size) return "0 B";
@@ -42,14 +47,63 @@ export default function Upload() {
   const [uploadedChunks, setUploadedChunks] = useState(0);
   const [totalChunks, setTotalChunks] = useState(0);
 
+  const [showConsentModal, setShowConsentModal] = useState(false);
+  const { policy } = usePricingPlans();
+  const [fileSizeLimitLabel, setFileSizeLimitLabel] = useState("50MB");
+
+  useEffect(() => {
+    async function checkConsentAndPlan() {
+      try {
+        const res = await getConsents();
+        if (res && !res.consented) {
+          setShowConsentModal(true);
+        }
+      } catch (err) {
+        console.error("Failed to check user consent:", err);
+      }
+
+      try {
+        const pRes = await getMyPaymentInfo();
+        const code = pRes?.plan_code || "free";
+        const limitMB = policy?.file_processing?.plans?.[code]?.fileSizeLimit || 50;
+        setFileSizeLimitLabel(formatFileSize(limitMB));
+      } catch (err) {
+        console.error("Failed to fetch plan:", err);
+      }
+    }
+    checkConsentAndPlan();
+  }, [policy]);
+
+  const handleConsentSuccess = async () => {
+    try {
+      await saveConsents(true, "v1.0");
+      setShowConsentModal(false);
+    } catch (err) {
+      alert("약관 동의 처리 중 오류가 발생했습니다.");
+    }
+  };
+
   const isActive = ["initializing", "uploading", "merging", "analyzing"].includes(phase);
   const progress =
     phase === "merging" || phase === "success" ? 100
-    : totalChunks > 0 ? Math.round((uploadedChunks / totalChunks) * 100)
-    : 0;
+      : totalChunks > 0 ? Math.round((uploadedChunks / totalChunks) * 100)
+        : 0;
 
   function handleSelectedFile(file) {
     if (!file || isActive) return;
+
+    // 파일 확장자 유효성 검사
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+      setPhase("error");
+      setMessage(
+        `지원하지 않는 파일 형식입니다 (.${ext}). 허용 형식: ${FILE_TYPES.join(", ")}`,
+      );
+      // input 초기화 (같은 파일 재선택 허용)
+      if (inputRef.current) inputRef.current.value = "";
+      return;
+    }
+
     setSelectedFile(file);
     setPhase("ready");
     setMessage(`${file.name} 파일을 선택했습니다.`);
@@ -137,6 +191,8 @@ export default function Upload() {
 
     setPhase("success");
     setMessage("분석 작업이 등록되었습니다. 분석 진행 화면으로 이동합니다.");
+    const thumbnailUrl = URL.createObjectURL(file);
+
     window.setTimeout(() => {
       navigate(`/analysis-progress?jobId=${encodeURIComponent(jobId)}`, {
         state: {
@@ -145,6 +201,7 @@ export default function Upload() {
           fileName: file.name,
           fileSize: file.size,
           contentType: file.type || "application/octet-stream",
+          thumbnailUrl,
         },
       });
     }, 700);
@@ -170,17 +227,20 @@ export default function Upload() {
 
   const btnLabel =
     isActive ? "업로드 중..." :
-    phase === "success" ? "완료" :
-    selectedFile ? "분석 시작" : "파일 선택";
+      phase === "success" ? "완료" :
+        selectedFile ? "분석 시작" : "파일 선택";
 
   const metaText =
     phase === "uploading" ? `chunk ${uploadedChunks}/${totalChunks} · ${formatBytes(selectedFile?.size)}` :
-    phase === "merging" ? `병합 중... · ${formatBytes(selectedFile?.size)}` :
-    phase === "success" ? `완료 · ${formatBytes(selectedFile?.size)}` :
-    selectedFile ? `${formatBytes(selectedFile.size)} · ${selectedFile.type || "알 수 없는 형식"}` : "";
+      phase === "merging" ? `병합 중... · ${formatBytes(selectedFile?.size)}` :
+        phase === "success" ? `완료 · ${formatBytes(selectedFile?.size)}` :
+          selectedFile ? `${formatBytes(selectedFile.size)} · ${selectedFile.type || "알 수 없는 형식"}` : "";
 
   return (
     <GarimPage bodyClass="page-app" screenLabel="08 Upload">
+      {showConsentModal && (
+        <TermsConsentModal onConsentSuccess={handleConsentSuccess} />
+      )}
       <div className="upload-page">
         <div className="upload-head">
           <h1>파일 업로드</h1>
@@ -215,7 +275,7 @@ export default function Upload() {
                 ref={inputRef}
                 className="upload-input"
                 type="file"
-                accept="video/*,image/*,audio/*"
+                accept=".mp4,.avi,.mov,.mkv,.jpg,.png,.jpeg,.webp"
                 onChange={(e) => handleSelectedFile(e.target.files?.[0])}
               />
               <span className="material-icons">cloud_upload</span>
@@ -223,7 +283,7 @@ export default function Upload() {
               <p>
                 {selectedFile
                   ? metaText
-                  : "지원 형식: MP4, MOV, MKV, JPG, PNG, HEIC, MP3, WAV"}
+                  : "지원 형식: MP4, AVI, MOV, MKV / JPG, PNG, JPEG, WEBP"}
               </p>
               <button
                 className="mui-btn mui-btn--contained"
@@ -247,7 +307,7 @@ export default function Upload() {
               <div className="progress-state show">
                 <div className="file-info">
                   <span className="material-icons">{getFileIcon(selectedFile)}</span>
-                  <div style={{ flex: "1" }}>
+                  <div className="up-file-info">
                     <div className="name">{selectedFile?.name}</div>
                     <div className="meta">{metaText}</div>
                   </div>
@@ -260,13 +320,13 @@ export default function Upload() {
                     초기화
                   </button>
                 </div>
-                <div className="progress" style={{ margin: "16px 0 4px" }}>
+                <div className="progress up-progress">
                   <div
                     className="progress__bar"
-                    style={{ width: `${progress}%`, transition: "width 0.3s ease" }}
+                    style={{ width: `${progress}%` }}
                   />
                 </div>
-                <div style={{ font: "400 11px var(--font-sans)", color: "var(--fg-2)", textAlign: "right" }}>
+                <div className="up-progress-pct">
                   {progress}%
                 </div>
               </div>
@@ -276,7 +336,15 @@ export default function Upload() {
           <aside>
             <div className="sidebar-card">
               <h3>지원 사양</h3>
-              <div className="spec-row"><span className="k">최대 파일 크기</span><span className="v">2 GB</span></div>
+              <div className="spec-group">
+                <div className="spec-row">
+                  <span className="k">최대 파일 크기</span>
+                  <span className="v">{fileSizeLimitLabel}</span>
+                </div>
+                <div className="plan-info">
+                  (Free: 50MB / Pro: 500MB / Studio: 2GB)
+                </div>
+              </div>
               <div className="spec-row"><span className="k">최대 영상 길이</span><span className="v">30분</span></div>
               <div className="spec-row"><span className="k">권장 해상도</span><span className="v">1080p</span></div>
               <div className="spec-row"><span className="k">업로드 방식</span><span className="v">청크 업로드</span></div>
@@ -284,7 +352,7 @@ export default function Upload() {
 
             <div className="sidebar-card queue-card">
               <h3>처리 안내</h3>
-              <div style={{ font: "400 13px/1.5 var(--font-sans)", color: "var(--fg-2)" }}>
+              <div className="up-guide-text">
                 파일을 5MB 단위 chunk로 분할하여 전송합니다. 전송 실패 chunk는 최대 3회 자동 재시도합니다. 모든 chunk 전송 후 서버에서 병합합니다.
               </div>
             </div>

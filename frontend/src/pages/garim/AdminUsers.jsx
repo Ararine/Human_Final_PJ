@@ -172,6 +172,10 @@ export default function AdminUsers() {
             <span className="material-icons">analytics</span>
             분석
           </a>
+          <a href="/admin/reports">
+            <span className="material-icons">report_problem</span>
+            문의 내역
+          </a>
         </aside>
         <main className="adm-main">
           <div className="adm-head">

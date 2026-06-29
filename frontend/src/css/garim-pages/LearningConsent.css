@@ -45,3 +45,43 @@
     border-radius: 2px; font: 400 13px/1.6 var(--font-sans); color: var(--fg-1);
   }
   .legal-note strong { color: #c62828; }
+
+  /* ── 다크 모드 보정 ── 토글 카드 / 변경이력 카드 흰 배경 → 다크 표면색 */
+  :root[data-theme="dark"] .toggle-card,
+  :root[data-theme="dark"] .changelog { background: var(--bg-1); }
+  /* off 상태 knob은 흰색 바탕이므로, 다크에선 X 아이콘을 검정으로(안 보임 방지).
+     on 상태(.big-switch.on .knob)는 흰색 유지를 위해 :not(.on)로 한정 */
+  :root[data-theme="dark"] .big-switch:not(.on) .knob { color: rgba(0,0,0,0.7); }
+
+/* 뒤로가기 링크 아이콘 크기 */
+.lc-back .material-icons {
+  font-size: 18px;
+}
+/* 동의 토글 버튼 — 기본 버튼 스타일 제거 */
+.lc-page .big-switch {
+  border: none;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+}
+.lc-page .big-switch--saving {
+  cursor: wait;
+}
+/* 토글 정보/이력 텍스트 영역 */
+.lc-toggle-info {
+  flex: 1;
+}
+.lc-log-text {
+  flex: 1;
+}
+/* 변경 이력 ON/OFF 상태 강조 */
+.lc-log-state {
+  color: var(--fg-2);
+}
+.lc-log-state--on {
+  color: #2e7d32;
+}
+/* 약관 링크 색상 */
+.lc-terms-link {
+  color: #1976d2;
+}

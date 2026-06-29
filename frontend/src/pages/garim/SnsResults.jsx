@@ -12,7 +12,7 @@ export default function SnsResults() {
         <div className="sr-shell">
           <section className="sr-impact">
             <div>
-              <span className="overline-k" style={{ color: "#d32f2f", fontWeight: "600", letterSpacing: "1.5px" }}>
+              <span className="overline-k sns-overline">
                 ⚠ SNS 셀프 점검 완료
               </span>
               <h1>
@@ -78,7 +78,7 @@ export default function SnsResults() {
             <span className="material-icons">
               trending_up
             </span>
-            <div style={{ flex: "1" }}>
+            <div className="sns-flex1">
               <div className="t">
                 위험도 추이 — 정기 스캔으로 시각화 (v2)
               </div>
@@ -99,7 +99,7 @@ export default function SnsResults() {
                 <button className="mui-btn mui-btn--text mui-btn--sm">
                   위험도순 ↓
                 </button>
-                <span className="label" style={{ marginLeft: "8px" }}>
+                <span className="label sns-label-ml">
                   필터:
                 </span>
                 <span className="mui-chip mui-chip--primary mui-chip--md">
@@ -111,7 +111,7 @@ export default function SnsResults() {
                 <span className="mui-chip mui-chip--outlined mui-chip--md">
                   주의 4
                 </span>
-                <div style={{ flex: "1" }}>
+                <div className="sns-flex1">
                 </div>
                 <span className="caption-k">
                   9건 / 60개 게시물
@@ -121,7 +121,7 @@ export default function SnsResults() {
                 <div className="post-card">
                   <div className="thumb">
                     <img src="https://images.unsplash.com/photo-1611532736597-de2d4265fba3?w=400&amp;q=60" alt="" />
-                    <svg viewBox="0 0 400 400" preserveAspectRatio="none" style={{ position: "absolute", inset: "0", width: "100%", height: "100%" }}>
+                    <svg viewBox="0 0 400 400" preserveAspectRatio="none" className="sns-svg">
                       <rect x="80" y="120" width="240" height="160" fill="none" stroke="#d32f2f" strokeWidth="3" />
                     </svg>
                     <span className="mui-chip mui-chip--error risk-badge">
@@ -136,10 +136,10 @@ export default function SnsResults() {
                       새 책상 도착 ‼ 박스 그대로 풀어봤어요
                     </div>
                     <div className="tags">
-                      <span className="mui-chip mui-chip--soft-error" style={{ height: "20px", fontSize: "10px" }}>
+                      <span className="mui-chip mui-chip--soft-error sns-chip">
                         송장
                       </span>
-                      <span className="mui-chip mui-chip--soft-warning" style={{ height: "20px", fontSize: "10px" }}>
+                      <span className="mui-chip mui-chip--soft-warning sns-chip">
                         주소
                       </span>
                     </div>
@@ -151,7 +151,7 @@ export default function SnsResults() {
                 <div className="post-card">
                   <div className="thumb">
                     <img src="https://images.unsplash.com/photo-1542038784456-1ea8e935640e?w=400&amp;q=60" alt="" />
-                    <svg viewBox="0 0 400 400" preserveAspectRatio="none" style={{ position: "absolute", inset: "0", width: "100%", height: "100%" }}>
+                    <svg viewBox="0 0 400 400" preserveAspectRatio="none" className="sns-svg">
                       <rect x="180" y="100" width="80" height="80" fill="none" stroke="#ed6c02" strokeWidth="3" />
                       <rect x="80" y="180" width="80" height="80" fill="none" stroke="#ed6c02" strokeWidth="3" />
                     </svg>
@@ -167,7 +167,7 @@ export default function SnsResults() {
                       우리 가족 주말 피크닉 🌳
                     </div>
                     <div className="tags">
-                      <span className="mui-chip mui-chip--soft-warning" style={{ height: "20px", fontSize: "10px" }}>
+                      <span className="mui-chip mui-chip--soft-warning sns-chip">
                         얼굴 3명
                       </span>
                     </div>
@@ -177,8 +177,8 @@ export default function SnsResults() {
                   </div>
                 </div>
                 <div className="post-card">
-                  <div className="thumb" style={{ background: "linear-gradient(135deg,#424242,#212121)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <span className="material-icons" style={{ color: "#fff", fontSize: "64px" }}>
+                  <div className="thumb sns-thumb-video">
+                    <span className="material-icons sns-video-ico">
                       directions_car
                     </span>
                     <span className="mui-chip mui-chip--error risk-badge">
@@ -193,10 +193,10 @@ export default function SnsResults() {
                       새 차 출고 기념 🚗 우리 동네에서
                     </div>
                     <div className="tags">
-                      <span className="mui-chip mui-chip--soft-error" style={{ height: "20px", fontSize: "10px" }}>
+                      <span className="mui-chip mui-chip--soft-error sns-chip">
                         번호판
                       </span>
-                      <span className="mui-chip mui-chip--soft-info" style={{ height: "20px", fontSize: "10px" }}>
+                      <span className="mui-chip mui-chip--soft-info sns-chip">
                         위치 태그
                       </span>
                     </div>
@@ -208,7 +208,7 @@ export default function SnsResults() {
                 <div className="post-card">
                   <div className="thumb">
                     <img src="https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&amp;q=60" alt="" />
-                    <svg viewBox="0 0 400 400" preserveAspectRatio="none" style={{ position: "absolute", inset: "0", width: "100%", height: "100%" }}>
+                    <svg viewBox="0 0 400 400" preserveAspectRatio="none" className="sns-svg">
                       <rect x="100" y="160" width="200" height="80" fill="none" stroke="#d32f2f" strokeWidth="3" />
                     </svg>
                     <span className="mui-chip mui-chip--error risk-badge">
@@ -223,7 +223,7 @@ export default function SnsResults() {
                       주말 배달 도착! 컵라면 한 박스
                     </div>
                     <div className="tags">
-                      <span className="mui-chip mui-chip--soft-error" style={{ height: "20px", fontSize: "10px" }}>
+                      <span className="mui-chip mui-chip--soft-error sns-chip">
                         송장
                       </span>
                     </div>
@@ -235,7 +235,7 @@ export default function SnsResults() {
                 <div className="post-card">
                   <div className="thumb">
                     <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&amp;q=60" alt="" />
-                    <svg viewBox="0 0 400 400" preserveAspectRatio="none" style={{ position: "absolute", inset: "0", width: "100%", height: "100%" }}>
+                    <svg viewBox="0 0 400 400" preserveAspectRatio="none" className="sns-svg">
                       <rect x="160" y="80" width="100" height="100" fill="none" stroke="#ed6c02" strokeWidth="3" />
                     </svg>
                     <span className="mui-chip mui-chip--warning risk-badge">
@@ -250,7 +250,7 @@ export default function SnsResults() {
                       절친이랑 카페 데이트 ☕
                     </div>
                     <div className="tags">
-                      <span className="mui-chip mui-chip--soft-warning" style={{ height: "20px", fontSize: "10px" }}>
+                      <span className="mui-chip mui-chip--soft-warning sns-chip">
                         얼굴
                       </span>
                     </div>
@@ -262,7 +262,7 @@ export default function SnsResults() {
                 <div className="post-card">
                   <div className="thumb">
                     <img src="https://images.unsplash.com/photo-1521295121783-8a321d551ad2?w=400&amp;q=60" alt="" />
-                    <svg viewBox="0 0 400 400" preserveAspectRatio="none" style={{ position: "absolute", inset: "0", width: "100%", height: "100%" }}>
+                    <svg viewBox="0 0 400 400" preserveAspectRatio="none" className="sns-svg">
                       <rect x="240" y="220" width="120" height="60" fill="none" stroke="#ed6c02" strokeWidth="3" />
                     </svg>
                     <span className="mui-chip mui-chip--warning risk-badge">
@@ -277,7 +277,7 @@ export default function SnsResults() {
                       집 근처 산책로 발견! 너무 좋네요
                     </div>
                     <div className="tags">
-                      <span className="mui-chip mui-chip--soft-warning" style={{ height: "20px", fontSize: "10px" }}>
+                      <span className="mui-chip mui-chip--soft-warning sns-chip">
                         번호판
                       </span>
                     </div>
@@ -287,9 +287,9 @@ export default function SnsResults() {
                   </div>
                 </div>
               </div>
-              <div style={{ padding: "16px 20px", textAlign: "center", borderTop: "1px solid var(--mui-divider)", color: "var(--fg-2)", font: "400 13px var(--font-sans)" }}>
+              <div className="sns-card-foot">
                 위험 게시물 6/9 표시 중 ·
-                <a href="#" style={{ color: "#1976d2" }}>
+                <a href="#" className="sns-link">
                   3건 더 보기
                 </a>
                 · 안전 게시물 51개는 숨겨져 있습니다
@@ -300,7 +300,7 @@ export default function SnsResults() {
                 <h3>
                   처리 후 흐름 — 직접 해야 하는 일
                 </h3>
-                <p className="caption-k" style={{ fontSize: "12px", marginBottom: "12px" }}>
+                <p className="caption-k sns-sub">
                   Garim은 인스타에 자동 게시·삭제를 하지 않습니다 (B-2 권한 정책).
                 </p>
                 <div className="guide-step">
@@ -347,28 +347,28 @@ export default function SnsResults() {
                 <h3>
                   연결 상태
                 </h3>
-                <div className="row" style={{ gap: "8px" }}>
-                  <span className="material-icons" style={{ color: "#2e7d32" }}>
+                <div className="row sns-row-gap">
+                  <span className="material-icons sns-ico-ok">
                     check_circle
                   </span>
                   <div>
-                    <div className="body2-k" style={{ fontWeight: "500" }}>
+                    <div className="body2-k sns-item-title">
                       @mynn_creator
                     </div>
-                    <div className="caption-k" style={{ fontSize: "11px" }}>
+                    <div className="caption-k sns-cap-11">
                       연결됨 · 토큰 만료 60일 후
                     </div>
                   </div>
                 </div>
-                <button className="mui-btn mui-btn--text mui-btn--sm" style={{ marginTop: "12px", paddingLeft: "0", color: "#d32f2f" }}>
+                <button className="mui-btn mui-btn--text mui-btn--sm sns-del-btn">
                   연결 해제 →
                 </button>
               </div>
-              <div className="side-card" style={{ opacity: "0.6" }}>
+              <div className="side-card sns-card-dim">
                 <h3>
                   정기 자동 스캔
                 </h3>
-                <div className="row" style={{ justifyContent: "space-between" }}>
+                <div className="row sns-row-between">
                   <span className="body2-k">
                     매주 자동 점검
                   </span>

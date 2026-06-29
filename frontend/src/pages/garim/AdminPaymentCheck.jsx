@@ -4,13 +4,6 @@ import "../../css/garim-pages/AdminPaymentCheck.css";
 import GarimPage from "../../components/garim/GarimPage";
 import { getAdminPayments, getAdminPaymentDetail, refundAdminPayment } from "../../utils/api";
 
-// 결제일시를 초 단위까지만 깔끔하게 포맷팅하는 한국어 주석 헬퍼 함수
-function formatDateTimeSeconds(value) {
-  if (!value) return "-";
-  // T를 공백으로 치환하고 밀리초(.)가 존재한다면 그 앞부분만 취합니다.
-  return value.replace("T", " ").split(".")[0];
-}
-
 function formatDateParam(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -179,6 +172,7 @@ export default function AdminPaymentCheck() {
     setDetailError(null);
     setRefundConfirmOpen(false);
     setRefundMessage("");
+    setRefundReason("");
     setDetailData(null);
     try {
       const res = await getAdminPaymentDetail(payment.payment_id);
@@ -194,17 +188,50 @@ export default function AdminPaymentCheck() {
   const handleRequestRefund = () => {
     if (!detailData) return;
     setRefundMessage("");
+
+    // ── 환불 경고 조건 체크 ──
+    const warnings = [];
+    const userEmail = detailData.user_email || "해당 사용자";
+
+    // 조건 1: 결제일 기준 14일 경과
+    if (detailData.days_since_payment >= 14) {
+      warnings.push(`[${userEmail}] 사용자는 결제일 기준 14일이 지난 사용자입니다.`);
+    }
+    // 조건 2: 충전 크레딧의 15% 이상 사용
+    if (detailData.credit_amount > 0 && detailData.credit_used_ratio >= 15) {
+      warnings.push(`[${userEmail}] 사용자는 충전 크레딧의 15% 이상 사용한 사용자입니다.`);
+    }
+    if (warnings.length > 0) {
+      alert(`⚠️ 환불 주의 사항\n\n${warnings.join("\n\n")}`);
+    }
+
     setRefundConfirmOpen(true);
   };
 
+  // 환불 사유를 상태로 관리
+  const [refundReason, setRefundReason] = useState("");
+
   const handleConfirmRefund = async () => {
     if (!detailData) return;
+
+    // 환불 사유 유효성 검사
+    const trimmedReason = refundReason.trim();
+    if (!trimmedReason) {
+      alert("환불 사유를 입력해주세요.");
+      return;
+    }
+    if (trimmedReason.length > 30) {
+      alert("환불 사유는 30글자 이내로 입력해주세요.");
+      return;
+    }
+
     setDetailLoading(true);
     setDetailError(null);
     try {
-      await refundAdminPayment(detailData.payment_id);
+      await refundAdminPayment(detailData.payment_id, trimmedReason);
       setRefundMessage("환불 처리가 완료되었습니다.");
       setRefundConfirmOpen(false);
+      setRefundReason("");
       const res = await getAdminPaymentDetail(detailData.payment_id);
       setDetailData(res.data);
       loadPayments();
@@ -248,6 +275,10 @@ export default function AdminPaymentCheck() {
             <span className="material-icons">manage_history</span>
             로그인 히스토리
           </a>
+          <a href="/admin/analytics">
+            <span className="material-icons">analytics</span>
+            분석
+          </a>
           <a href="/admin/policy">
             <span className="material-icons">tune</span>
             정책 및 상품 관리
@@ -260,9 +291,9 @@ export default function AdminPaymentCheck() {
             <span className="material-icons">payments</span>
             사용자 결제 확인
           </a>
-          <a href="/admin/analytics">
-            <span className="material-icons">analytics</span>
-            분석
+                  <a href="/admin/reports">
+            <span className="material-icons">report_problem</span>
+            문의 내역
           </a>
         </aside>
 
@@ -425,6 +456,7 @@ export default function AdminPaymentCheck() {
                 <div className="pm-data-row pm-data-head">
                   <span>결제일</span>
                   <span>사용자</span>
+                  <span>주문 식별자</span>
                   <span>상품</span>
                   <span>금액</span>
                   <span>상태</span>
@@ -433,23 +465,25 @@ export default function AdminPaymentCheck() {
                 </div>
 
                 {isLoading && (
-                  <div className="pm-loading" style={{ padding: "40px", textAlign: "center", color: "var(--text-secondary)" }}>
+                  <div className="pm-loading">
                     불러오는 중입니다...
                   </div>
                 )}
 
                 {!isLoading && error && (
-                  <div className="pm-error" style={{ padding: "40px", textAlign: "center", color: "var(--error-main)" }}>
+                  <div className="pm-error">
                     {error}
                   </div>
                 )}
 
                 {!isLoading && !error && payments.map((payment) => (
                   <div className="pm-data-row" key={payment.payment_id}>
-                    <span className="pm-date-cell">{formatDateTimeSeconds(payment.paid_at)}</span>
+                    <span className="pm-date-cell">{payment.paid_at.replace("T", " ")}</span>
                     <span className="pm-user-cell">
                       <strong>{payment.user_email || "—"}</strong>
+                      <small>{payment.user_id}</small>
                     </span>
+                    <span className="pm-uuid-cell mono">{maskPaymentId(payment.payment_id)}</span>
                     <span className="pm-product-cell">
                       <span className={`pm-prod-badge ${payment.product_type}`}>
                         {payment.product_type === "subscription" ? "구독" : "크레딧"}
@@ -476,7 +510,7 @@ export default function AdminPaymentCheck() {
                 ))}
 
                 {!isLoading && !error && payments.length === 0 && (
-                  <div className="pm-empty" style={{ padding: "40px", textAlign: "center", color: "var(--text-secondary)" }}>
+                  <div className="pm-empty">
                     검색 결과가 없습니다.
                   </div>
                 )}
@@ -530,13 +564,13 @@ export default function AdminPaymentCheck() {
             
             <div className="pm-modal-body">
               {detailLoading && (
-                <div className="pm-modal-loading" style={{ padding: "40px 0", textAlign: "center", color: "var(--text-secondary)" }}>
+                <div className="pm-modal-loading">
                   불러오는 중...
                 </div>
               )}
               
               {detailError && (
-                <div className="pm-modal-error" style={{ padding: "40px 0", textAlign: "center", color: "var(--error-main)" }}>
+                <div className="pm-modal-error">
                   {detailError}
                 </div>
               )}
@@ -548,7 +582,7 @@ export default function AdminPaymentCheck() {
                       {getStatusLabel(detailData.status)}
                     </span>
                     <span>
-                      {formatDateTimeSeconds(detailData.approved_at || detailData.paid_at || detailData.created_at)}
+                      {(detailData.approved_at || detailData.paid_at || detailData.created_at || "").replace("T", " ")}
                     </span>
                   </div>
 
@@ -563,6 +597,7 @@ export default function AdminPaymentCheck() {
                     <div>
                       <span className="pm-detail-lbl">사용자</span>
                       <strong className="pm-detail-val">{detailData.user_email || "—"}</strong>
+                      <small className="pm-detail-sub mono">{detailData.user_id || "—"}</small>
                     </div>
                     <div>
                       <span className="pm-detail-lbl">상품</span>
@@ -597,6 +632,10 @@ export default function AdminPaymentCheck() {
                     {detailData.product_type === "subscription" ? (
                       <div className="pm-detail-result-grid">
                         <div>
+                          <strong>구독 처리 완료</strong>
+                          <small className="mono">{detailData.subscription_id || "처리 완료"}</small>
+                        </div>
+                        <div>
                           <strong>크레딧 반영</strong>
                           <small>{detailData.credit_amount || 0} 크레딧</small>
                         </div>
@@ -606,6 +645,10 @@ export default function AdminPaymentCheck() {
                         <div>
                           <strong>크레딧 충전 완료</strong>
                           <small>{detailData.credit_amount || 0} 크레딧</small>
+                        </div>
+                        <div>
+                          <strong>원장 반영</strong>
+                          <small className="mono">{detailData.credit_ledger_id || "처리 완료"}</small>
                         </div>
                       </div>
                     )}
@@ -687,6 +730,24 @@ export default function AdminPaymentCheck() {
                   <span className="pm-detail-val price">₩{formatMoney(detailData.balance_amount || detailData.amount)}</span>
                 </div>
               </div>
+
+              {/* 환불 사유 입력 필드 */}
+              <div className="pm-refund-reason-wrap">
+                <label className="pm-detail-lbl" htmlFor="refund-reason-input">
+                  환불 사유 <span className="pm-required-mark">*</span>
+                </label>
+                <input
+                  id="refund-reason-input"
+                  type="text"
+                  className="pm-refund-reason-input"
+                  placeholder="환불 사유를 30글자 이내로 요약해주세요"
+                  maxLength={30}
+                  value={refundReason}
+                  onChange={(e) => setRefundReason(e.target.value)}
+                  autoFocus
+                />
+                <span className="pm-char-counter">{refundReason.length}/30</span>
+              </div>
             </div>
             <div className="pm-modal-footer">
               <button
@@ -701,7 +762,7 @@ export default function AdminPaymentCheck() {
                 type="button"
                 className="mui-btn mui-btn--contained mui-btn--error pm-btn-refund"
                 onClick={handleConfirmRefund}
-                disabled={detailLoading}
+                disabled={detailLoading || !refundReason.trim()}
               >
                 환불 처리
               </button>

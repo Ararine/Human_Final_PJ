@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
-import { cancelAnalysisJob, getAnalysisJob } from "../../utils/api";
+import { cancelAnalysisJob, getAnalysisJob, deleteAnalysisUpload, getApiBaseUrl } from "../../utils/api";
+import { useNavigate } from "react-router-dom";
 import "../../css/garim-pages/AnalysisProgress.css";
 
 import GarimPage from "../../components/garim/GarimPage";
 
-const POLL_INTERVAL_MS = 2500;
+const POLL_INTERVAL_MS = 1000;
 const ACTIVE_STATUSES = new Set(["queued", "processing", "retrying", "cancelling"]);
 
 const STAGES = [
@@ -52,15 +53,54 @@ function statusLabel(status) {
   return labels[status] || "상태 확인 중";
 }
 
+// 최근 로그 패널에 표시할 stage_name 한국어 레이블
+const STAGE_NAME_KO = {
+  upload_completed: "업로드 완료",
+  queued:           "대기열 등록",
+  ocr:              "텍스트 탐지 중",
+  ocr_done:         "텍스트 탐지 완료",
+  stt_wait:         "음성 분석 대기",
+  audio_extract:    "음성 추출 중",
+  stt:              "음성-텍스트 변환",
+  pii_detect:       "개인정보 탐지",
+  merge:            "결과 통합",
+  detail_view:      "상세 분석",
+  register:         "결과 등록",
+  completed:        "완료",
+};
+
+function stageNameKo(name) {
+  return STAGE_NAME_KO[name] || name;
+}
+
 function stageIndex(currentStage, status) {
   if (status === "completed") return STAGES.length - 1;
-  const index = STAGES.findIndex((stage) => stage.key === currentStage);
-  return index >= 0 ? index : 1;
+
+  // 백엔드의 세부 진행 단계(stage_name)를 프론트엔드의 큰 5단계(STAGES)에 매핑
+  const stageMap = {
+    "upload_completed": "upload_completed",
+    "queued": "queued",
+    "ocr": "visual_detection",
+    "ocr_done": "visual_detection",
+    "stt_wait": "audio_detection",
+    "audio_extract": "audio_detection",
+    "stt": "audio_detection",
+    "pii_detect": "audio_detection",
+    "merge": "report_generation",
+    "detail_view": "report_generation",
+    "register": "report_generation",
+    "completed": "completed"
+  };
+  
+  const mappedKey = stageMap[currentStage] || currentStage;
+  const index = STAGES.findIndex((stage) => stage.key === mappedKey);
+  return index >= 0 ? index : 1; // 기본값은 대기열 등록(index 1)
 }
 
 export default function AnalysisProgress() {
   useDocumentTitle("분석 진행 - Garim");
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialState = location.state || {};
   const jobId = initialState.jobId || searchParams.get("jobId");
@@ -70,17 +110,58 @@ export default function AnalysisProgress() {
   const [loading, setLoading] = useState(Boolean(jobId));
   const [canceling, setCanceling] = useState(false);
 
+  useEffect(() => {
+    if (jobId) {
+      localStorage.setItem(`job_stage_${jobId}`, "/analysis-progress");
+    }
+  }, [jobId]);
+
   const jobStatus = job?.status;
   const isActive = job ? ACTIVE_STATUSES.has(jobStatus) : Boolean(jobId);
   const totalProgress = clampPercent(job?.total_progress);
   const currentStageIndex = stageIndex(job?.current_stage, job?.status);
+  
+  const [localEta, setLocalEta] = useState(null);
+  const [nowTick, setNowTick] = useState(Date.now());
+
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    if (jobStatus === "completed") {
+      setLocalEta(0);
+      return;
+    }
+    if (job?.eta_seconds !== undefined && job.eta_seconds !== null) {
+      setLocalEta({
+        base: job.eta_seconds,
+        updatedAt: Date.now()
+      });
+    } else {
+      setLocalEta(null);
+    }
+  }, [job?.eta_seconds, job?.total_progress, jobStatus]);
+
+  const displayEta = useMemo(() => {
+    if (localEta === 0) return 0;
+    if (!localEta) return null;
+    const elapsedSec = Math.floor((nowTick - localEta.updatedAt) / 1000);
+    return Math.max(0, localEta.base - elapsedSec);
+  }, [localEta, nowTick]);
+
   const fileMeta = useMemo(() => {
     const parts = [];
-    if (initialState.fileName) parts.push(initialState.fileName);
-    if (initialState.fileSize) parts.push(formatBytes(initialState.fileSize));
-    if (initialState.contentType) parts.push(initialState.contentType);
+    const name = initialState.fileName || job?.filename;
+    const size = initialState.fileSize || job?.file_size;
+    const type = initialState.contentType || (job?.media_type ? `${job.media_type}/unknown` : undefined);
+    
+    if (name) parts.push(name);
+    if (size) parts.push(formatBytes(size));
+    if (type) parts.push(type.split("/")[0].toUpperCase());
     return parts.join(" · ");
-  }, [initialState.contentType, initialState.fileName, initialState.fileSize]);
+  }, [initialState.contentType, initialState.fileName, initialState.fileSize, job?.filename, job?.file_size, job?.media_type]);
 
   useEffect(() => {
     if (!jobId) return undefined;
@@ -122,15 +203,26 @@ export default function AnalysisProgress() {
   }, [jobId, jobStatus]);
 
   async function handleCancel() {
-    if (!jobId || canceling || !job || !ACTIVE_STATUSES.has(job.status)) return;
+    if (canceling || !job || !ACTIVE_STATUSES.has(job.status)) return;
+    
+    // Use upload_id to delete the whole upload if available
+    const targetUploadId = job.upload_id;
+    if (!targetUploadId && !jobId) return;
+
+    const filename = initialState.fileName || job?.filename || "진행 중인";
+    if (!window.confirm(`${filename} 작업을 취소하시겠습니까?`)) return;
+
     setCanceling(true);
     try {
-      const result = await cancelAnalysisJob(jobId);
-      setJob((prev) => ({ ...prev, ...result }));
+      if (targetUploadId) {
+        await deleteAnalysisUpload(targetUploadId);
+      } else {
+        await cancelAnalysisJob(jobId);
+      }
       setError("");
+      navigate("/upload"); // Navigate to upload page
     } catch (err) {
       setError(err.message);
-    } finally {
       setCanceling(false);
     }
   }
@@ -151,80 +243,201 @@ export default function AnalysisProgress() {
         <div className="ana-grid">
           <div className="ana-main">
             <div className="ana-head">
-              <div className="thumb">
-                <span className="material-icons">manage_search</span>
-                {isActive && <div className="pulse" />}
+              <div className="thumb ap-thumb">
+                {initialState.thumbnailUrl ? (
+                  initialState.contentType?.startsWith("video/") ? (
+                    <video src={`${initialState.thumbnailUrl}#t=0.1`} preload="metadata" className="ap-thumb-media" />
+                  ) : (
+                    <img src={initialState.thumbnailUrl} alt="thumbnail" className="ap-thumb-media" />
+                  )
+                ) : job?.thumbnail_url ? (
+                  <img src={`${getApiBaseUrl()}${job.thumbnail_url}`} alt="thumbnail" className="ap-thumb-media" />
+                ) : (
+                  <span className="material-icons ap-thumb-ico">manage_search</span>
+                )}
+                {isActive && <div className="pulse ap-pulse" />}
               </div>
-              <div style={{ flex: "1" }}>
+              <div className="ap-job-info">
                 <h1>{heading}</h1>
                 <div className="meta">
                   {fileMeta || `Job ${jobId || "unknown"}`}
                 </div>
-                <div style={{ marginTop: "8px", display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                <div className="ap-tag-row">
                   <span className="mui-chip mui-chip--soft-info">{statusLabel(job?.status)}</span>
                   <span className="mui-chip mui-chip--soft-info">{job?.job_type || "analysis"}</span>
                   {job?.current_stage && (
-                    <span className="mui-chip mui-chip--soft-info">{job.current_stage}</span>
+                    <span className="mui-chip mui-chip--soft-info">{stageNameKo(job.current_stage)}</span>
                   )}
                 </div>
               </div>
             </div>
 
             {error && (
-              <div className="mui-alert mui-alert--error" style={{ marginBottom: "16px" }}>
+              <div className="mui-alert mui-alert--error ap-alert-mb">
                 <span className="material-icons">error</span>
                 <div className="mui-alert__body">{error}</div>
               </div>
             )}
 
             <div className="stepper-wrap">
-              <div className="vstep">
-                {STAGES.map((stage, index) => {
-                  const done = index < currentStageIndex || job?.status === "completed";
-                  const active = index === currentStageIndex && !["completed", "failed", "cancelled"].includes(job?.status);
-                  const className =
-                    done ? "vstep__item vstep__item--done" :
-                    active ? "vstep__item vstep__item--active" :
-                    "vstep__item vstep__item--pending";
+              {(() => {
+                const stageStatus = STAGES.map((stage, index) => {
+                  let done = false;
+                  let active = false;
+                  let progressValue = 0;
+                  let stepMessage = stage.detail;
 
+                  const isImage = !(initialState.contentType?.startsWith("video/") || job?.media_type === "video");
+
+                  if (stage.key === "visual_detection") {
+                    done = currentStageIndex > index || job?.status === "completed";
+                    active = currentStageIndex === index && !["failed", "cancelled", "completed"].includes(job?.status);
+                    if (active) {
+                      progressValue = clampPercent(job?.stage_progress);
+                      stepMessage = statusMessage || stage.detail;
+                    } else if (done) stepMessage = "시각 탐지 완료";
+                  } else if (stage.key === "audio_detection") {
+                    if (isImage) {
+                      done = currentStageIndex >= index || job?.status === "completed";
+                      active = false;
+                      progressValue = 100;
+                      stepMessage = "이미지 (음성 없음)";
+                    } else if (job?.stt_job) {
+                      done = job.stt_job.status === "completed" || currentStageIndex > index || job?.status === "completed";
+                      active = job.stt_job.status === "processing" || (currentStageIndex === index && !done);
+                      if (active) {
+                        progressValue = clampPercent(job.stt_job.total_progress);
+                        stepMessage = "음성 분석 중... " + progressValue + "%";
+                      } else if (done) stepMessage = "음성 탐지 완료";
+                    } else {
+                      done = currentStageIndex > index || job?.status === "completed";
+                      active = currentStageIndex === index && !["failed", "cancelled", "completed"].includes(job?.status);
+                      if (active) {
+                        progressValue = clampPercent(job?.stage_progress);
+                        stepMessage = statusMessage || stage.detail;
+                      } else if (done) stepMessage = "음성 탐지 완료";
+                    }
+                  } else {
+                    // For upload_completed, queued, report_generation, and completed
+                    done = currentStageIndex > index || job?.status === "completed";
+                    active = currentStageIndex === index && !["failed", "cancelled", "completed"].includes(job?.status);
+                    if (active) {
+                      progressValue = clampPercent(job?.stage_progress);
+                      stepMessage = statusMessage || stage.detail;
+                    } else if (done) {
+                      stepMessage = "완료";
+                    }
+                  }
+                  
+                  return { ...stage, done, active, progressValue, stepMessage };
+                });
+
+                const STAGE_ICONS = {
+                  upload_completed: "cloud_done",
+                  queued: "hourglass_empty",
+                  visual_detection: "visibility",
+                  audio_detection: "graphic_eq",
+                  report_generation: "analytics",
+                  completed: "check_circle"
+                };
+
+                const renderFlowNode = (st) => {
+                  const cn = `fc-node ${st.active ? 'active' : ''} ${st.done ? 'done' : ''}`;
                   return (
-                    <div key={stage.key}>
-                      <div className={className}>
-                        <div className="vstep__dot">
-                          {!done && <span className="num">{index + 1}</span>}
+                    <div className={cn} key={st.key}>
+                      <div className="fc-node-content-row">
+                        <div className="fc-node-icon">
+                          <span className="material-icons">{STAGE_ICONS[st.key] || "lens"}</span>
                         </div>
-                        <div className="vstep__body">
-                          <div className="vstep__title">{stage.label}</div>
-                          <div className="vstep__sub">
-                            {active && statusMessage ? statusMessage : stage.detail}
-                          </div>
-                          {active && (
-                            <div className="progress" style={{ marginTop: "8px", maxWidth: "300px" }}>
-                              <div
-                                className="progress__bar"
-                                style={{ width: `${clampPercent(job?.stage_progress)}%` }}
-                              />
-                            </div>
-                          )}
+                        <div className="fc-node-text-wrap">
+                          <div className="fc-node-title">{st.label}</div>
+                          <div className="fc-node-sub">{st.stepMessage}</div>
                         </div>
                       </div>
-                      {index < STAGES.length - 1 && <div className="vstep__connector" />}
+                      {st.active && (
+                        <div className="fc-node-progress">
+                          <div className="fc-node-progress-bar" style={{ width: `${st.progressValue}%` }} />
+                        </div>
+                      )}
                     </div>
                   );
-                })}
-              </div>
+                };
+                
+                const lineState = (targetSt) => targetSt.done ? 'done' : targetSt.active ? 'active' : '';
+
+                return (
+                  <div className="flow-chart">
+                    {renderFlowNode(stageStatus[0])}
+                    <div className={`fc-v-line ${lineState(stageStatus[1])}`} />
+                    
+                    {renderFlowNode(stageStatus[1])}
+
+                    <div className="fc-split-container">
+                      <div className={`fc-v-line ${lineState(stageStatus[2]) || lineState(stageStatus[3])}`} />
+                      <div className="fc-h-bar split-bar">
+                        <div className={`fc-h-half left ${lineState(stageStatus[2])}`} />
+                        <div className={`fc-h-half right ${lineState(stageStatus[3])}`} />
+                      </div>
+                    </div>
+
+                    <div className="fc-columns">
+                      <div className="fc-col">
+                        <div className={`fc-v-line ${lineState(stageStatus[2])}`} />
+                        {renderFlowNode(stageStatus[2])}
+                        <div className={`fc-v-line ${stageStatus[4].active ? 'active' : stageStatus[4].done ? 'done' : ''}`} />
+                      </div>
+                      <div className="fc-col">
+                        <div className={`fc-v-line ${lineState(stageStatus[3])}`} />
+                        {renderFlowNode(stageStatus[3])}
+                        <div className={`fc-v-line ${stageStatus[4].active ? 'active' : stageStatus[4].done ? 'done' : ''}`} />
+                      </div>
+                    </div>
+
+                    <div className="fc-split-container">
+                      <div className="fc-h-bar merge-bar">
+                        <div className={`fc-h-half left ${stageStatus[4].done ? 'done' : stageStatus[4].active ? 'active' : ''}`} />
+                        <div className={`fc-h-half right ${stageStatus[4].done ? 'done' : stageStatus[4].active ? 'active' : ''}`} />
+                      </div>
+                      <div className={`fc-v-line ${lineState(stageStatus[4])}`} />
+                    </div>
+
+                    {renderFlowNode(stageStatus[4])}
+                    <div className={`fc-v-line ${lineState(stageStatus[5])}`} />
+                    
+                    {renderFlowNode(stageStatus[5])}
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="progress-summary">
-              <span className="caption-k" style={{ fontSize: "13px" }}>전체 진행</span>
+              <span className="caption-k ap-cap-13">전체 진행</span>
               <div className="progress">
-                <div className="progress__bar" style={{ width: `${totalProgress}%` }} />
+                <div className="progress__bar" style={{ width: `${(() => {
+                  if (job?.status === "completed") return 100;
+                  const ocrProg = job?.total_progress || 0;
+                  const sttProg = job?.stt_job ? job.stt_job.total_progress : null;
+                  let combined = ocrProg;
+                  if (sttProg !== null) {
+                    combined = Math.round((ocrProg + sttProg) / 2);
+                  }
+                  return clampPercent(combined);
+                })()}%` }} />
               </div>
-              <span className="pct">{totalProgress}%</span>
+              <span className="pct">{(() => {
+                if (job?.status === "completed") return 100;
+                const ocrProg = job?.total_progress || 0;
+                const sttProg = job?.stt_job ? job.stt_job.total_progress : null;
+                let combined = ocrProg;
+                if (sttProg !== null) {
+                  combined = Math.round((ocrProg + sttProg) / 2);
+                }
+                return clampPercent(combined);
+              })()}%</span>
             </div>
 
-            <div className="caption-k" style={{ fontSize: "13px", marginTop: "12px" }}>
-              예상 남은 시간 <strong style={{ color: "var(--fg-1)" }}>{formatEta(job?.eta_seconds)}</strong>
+            <div className="caption-k ap-eta">
+              예상 남은 시간 <strong className="ap-eta-val">{formatEta(displayEta)}</strong>
               {job?.queue_position ? ` · 대기 순번 ${job.queue_position}` : ""}
             </div>
 
@@ -233,19 +446,19 @@ export default function AnalysisProgress() {
                 백그라운드 처리
               </Link>
               <button
-                className="mui-btn mui-btn--text"
-                style={{ color: "#d32f2f" }}
+                className="mui-btn mui-btn--text ap-cancel"
                 type="button"
                 disabled={!job || !ACTIVE_STATUSES.has(job.status) || canceling}
                 onClick={handleCancel}
               >
                 {canceling ? "취소 요청 중" : "취소"}
               </button>
-              <div style={{ flex: "1" }} />
+              <div className="ap-spacer" />
               <Link
-                to="/analysis-report"
+                to={job?.status === "completed" ? `/analysis-report` : "#"}
                 className="mui-btn mui-btn--contained"
-                aria-disabled={job?.status !== "completed"}
+                style={job?.status !== "completed" ? { pointerEvents: "none", opacity: 0.4 } : {}}
+                state={{ jobId }}
               >
                 결과 보기
               </Link>
@@ -278,7 +491,7 @@ export default function AnalysisProgress() {
               <div className="models-list">
                 {(job?.stage_logs || []).slice(0, 5).map((log, index) => (
                   <span className="mui-chip mui-chip--md mui-chip--outlined" key={`${log.stage_name}-${index}`}>
-                    {log.stage_name} · {log.total_progress}%
+                    {stageNameKo(log.stage_name)} · {log.total_progress}%
                   </span>
                 ))}
                 {(!job?.stage_logs || job.stage_logs.length === 0) && (
@@ -287,9 +500,9 @@ export default function AnalysisProgress() {
               </div>
             </div>
 
-            <div className="sidebar-card" style={{ background: "rgba(25,118,210,0.04)" }}>
-              <h3 style={{ color: "#1976d2" }}>알림</h3>
-              <div style={{ font: "400 13px/1.5 var(--font-sans)", color: "var(--fg-1)" }}>
+            <div className="sidebar-card ap-notice-card">
+              <h3 className="ap-notice-title">알림</h3>
+              <div className="ap-notice-body">
                 페이지를 벗어나도 서버 작업은 계속됩니다. 완료 후 대시보드와 기록 화면에서 결과를 다시 확인할 수 있습니다.
               </div>
             </div>

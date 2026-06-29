@@ -13,6 +13,65 @@ def _row_mapping(row):
     return row._mapping if hasattr(row, "_mapping") else row
 
 
+def award_pending_ai_refund(db: Session, user_id: str):
+    # 1. Fetch pending AI refund
+    row = db.execute(
+        text("""
+            SELECT pending_ai_refund_usage
+            FROM user_credit_balances
+            WHERE user_id = :user_id
+        """),
+        {"user_id": user_id}
+    ).fetchone()
+    
+    if not row:
+        return 0
+
+    pending = int(row._mapping["pending_ai_refund_usage"])
+    if pending <= 0:
+        return 0
+
+    # 10% refund (round half up or just integer division, let's use standard integer round)
+    refund_amount = round(pending * 0.1)
+
+    if refund_amount > 0:
+        # 2. Add to free_balance and reset pending
+        db.execute(
+            text("""
+                UPDATE user_credit_balances
+                SET
+                    free_balance = free_balance + :refund_amount,
+                    pending_ai_refund_usage = 0,
+                    updated_at = NOW()
+                WHERE user_id = :user_id
+            """),
+            {"user_id": user_id, "refund_amount": refund_amount}
+        )
+
+        # 3. Log to credit_ledger
+        db.execute(
+            text("""
+                INSERT INTO credit_ledger (
+                    user_id, amount, balance_after, entry_type, source_type, source_id, description, created_at
+                )
+                VALUES (
+                    :user_id, :refund_amount, 
+                    (SELECT free_balance FROM user_credit_balances WHERE user_id = :user_id),
+                    'ai_refund', 'system', 'ai_refund', 'AI 활용동의 리워드 10% 환급 (무료 크레딧)', NOW()
+                )
+            """),
+            {"user_id": user_id, "refund_amount": refund_amount}
+        )
+    else:
+        # Just reset
+        db.execute(
+            text("UPDATE user_credit_balances SET pending_ai_refund_usage = 0, updated_at = NOW() WHERE user_id = :user_id"),
+            {"user_id": user_id}
+        )
+
+    return refund_amount
+
+
 def _subscription_payload(row):
     if not row:
         return None

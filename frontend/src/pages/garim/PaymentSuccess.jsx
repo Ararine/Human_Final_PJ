@@ -1,9 +1,14 @@
+/*
+코드 설명:
+Toss 결제 성공 리다이렉트를 받아 백엔드 승인(confirm)을 1회 처리하고, 중복 승인을 방지하며 결제 결과를 보여주는 페이지.
+*/
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom"; // useNavigate 임포트 추가
 
 import GarimPage from "../../components/garim/GarimPage";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { confirmPayment, confirmBillingPayment } from "../../utils/api";
+import "../../css/garim-pages/PaymentSuccess.css";
 
 function getProcessedOrders() {
   try {
@@ -137,13 +142,12 @@ export default function PaymentSuccess() {
       <main className="payment-success-main">
         <div className="payment-success-content">
           <div
-            className={`mui-alert ${status === "error" ? "mui-alert--error" : "mui-alert--success"}`}
-            style={{ marginBottom: "16px" }}
+            className={`mui-alert payment-success-alert ${status === "error" ? "mui-alert--error" : "mui-alert--success"}`}
           >
             {message}
           </div>
 
-          <div className="pay-shell" style={{ maxWidth: "720px" }}>
+          <div className="pay-shell">
             <div className="pay-head">
               <h1>결제 성공</h1>
             </div>
@@ -155,7 +159,7 @@ export default function PaymentSuccess() {
               </div>
               <div className="row">
                 <span>주문번호</span>
-                <span className="v" style={{ fontSize: "13px", wordBreak: "break-all" }}>
+                <span className="v payment-success-orderid">
                   {orderId || "-"}
                 </span>
               </div>

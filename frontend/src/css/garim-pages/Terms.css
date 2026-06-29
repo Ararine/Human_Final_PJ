@@ -30,10 +30,18 @@
   .terms-content ul { padding-left: 20px; margin: 0 0 16px; }
   .terms-content li { font: 400 15px/1.7 var(--font-sans); color: var(--fg-1); margin-bottom: 4px; }
   .terms-content .callout {
-    background: rgba(25,118,210,0.04); border-left: 3px solid #1976d2;
+    background: rgba(25,118,210,0.06); border-left: 3px solid #1976d2;
     padding: 16px 20px; margin: 16px 0; border-radius: 2px;
     font: 400 14px/1.6 var(--font-sans); color: var(--fg-1);
   }
+  .terms-content .callout.warning {
+    background: rgba(237,108,2,0.06); border-left-color: #ed6c02;
+  }
+  .terms-content .callout.success {
+    background: rgba(46,125,50,0.06); border-left-color: #2e7d32;
+  }
+  /* 탭 간격 */
+  .meta-date { font: 400 13px var(--font-sans); color: var(--fg-2); margin-top: 4px; }
   .terms-content table { width: 100%; border-collapse: collapse; margin: 16px 0; }
   .terms-content table th, .terms-content table td {
     padding: 12px; text-align: left; font: 400 13px/1.5 var(--font-sans);
@@ -41,3 +49,19 @@
   }
   .terms-content table th { background: #fafafa; font-weight: 500; }
   .terms-actions { display: flex; gap: 8px; }
+
+  /* ── 다크 모드 보정 ── 탭/목차/본문 흰 배경 → 다크 표면색 */
+  :root[data-theme="dark"] .terms-tabs,
+  :root[data-theme="dark"] .terms-tabs button,
+  :root[data-theme="dark"] .toc-side,
+  :root[data-theme="dark"] .terms-content { background: var(--bg-1); }
+  /* 활성 탭은 라이트/다크 공통 파랑 유지 */
+  :root[data-theme="dark"] .terms-tabs button.active { background: #1976d2; color: #fff; }
+  /* 표 헤더 음영 → 다크 보조 표면 */
+  :root[data-theme="dark"] .terms-content table th { background: var(--surface-alt); }
+  :root[data-theme="dark"] .toc-side a:hover { background: rgba(255,255,255,0.06); }
+
+/* 약관 도구 버튼(인쇄/PDF) 아이콘 크기 */
+.terms-tool-ico {
+  font-size: 18px;
+}
