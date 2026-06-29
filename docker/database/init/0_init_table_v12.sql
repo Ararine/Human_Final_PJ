@@ -218,7 +218,7 @@ CREATE TABLE IF NOT EXISTS analysis_jobs (
     updated_at timestamp,
     CONSTRAINT pk_analysis_jobs PRIMARY KEY (job_id),
     CONSTRAINT ck_analysis_jobs_status CHECK (status IN ('queued','processing','completed','failed','cancelled','cancelling','retrying')),
-    CONSTRAINT ck_analysis_jobs_job_type CHECK (job_type IN ('analysis','preview','render','sns_scan','whitelist_scan'))
+    CONSTRAINT ck_analysis_jobs_job_type CHECK (job_type IN ('analysis','preview','render','sns_scan','whitelist_scan','mask_preview','mask_final','stt_analysis'))
 );
 COMMENT ON TABLE analysis_jobs IS '업로드 파일의 개인정보 탐지 및 처리 작업 상태 관리 테이블';
 COMMENT ON COLUMN analysis_jobs.job_id IS '작업 ID - analysis_jobs 테이블의 기본 식별자';
@@ -258,6 +258,8 @@ CREATE TABLE IF NOT EXISTS detections (
     bbox_h numeric(10,4),
     detected_text text,
     review_status varchar(30) NOT NULL DEFAULT 'pending',
+    pii_id varchar(100),
+    polygon_json text,
     created_at timestamp NOT NULL DEFAULT now(),
     CONSTRAINT pk_detections PRIMARY KEY (detection_id)
 );
@@ -452,6 +454,8 @@ COMMENT ON COLUMN credit_plans.updated_at IS 'Last update timestamp';
 CREATE TABLE IF NOT EXISTS user_credit_balances (
     user_id uuid NOT NULL REFERENCES users(user_id),
     balance integer NOT NULL DEFAULT 0,
+    free_balance integer NOT NULL DEFAULT 0,
+    pending_ai_refund_usage integer NOT NULL DEFAULT 0,
     updated_at timestamp NOT NULL DEFAULT now(),
     CONSTRAINT pk_user_credit_balances PRIMARY KEY (user_id),
     CONSTRAINT ck_user_credit_balances_non_negative CHECK (balance >= 0)
@@ -514,6 +518,7 @@ CREATE TABLE IF NOT EXISTS payments (
     paid_at timestamp,
     refunded_at timestamp,
     created_at timestamp NOT NULL DEFAULT now(),
+    refund_reason varchar(100),
     updated_at timestamp,
     CONSTRAINT pk_payments PRIMARY KEY (payment_id),
     CONSTRAINT ck_payments_product_type CHECK (product_type IN ('subscription','credit'))
@@ -1209,6 +1214,18 @@ COMMENT ON COLUMN admin_policy_settings.updated_by IS 'Admin user who last updat
 CREATE INDEX IF NOT EXISTS idx_admin_policy_settings_key ON admin_policy_settings (policy_key);
 CREATE INDEX IF NOT EXISTS idx_admin_policy_settings_updated_at ON admin_policy_settings (updated_at DESC);
 
+
+
+-- =========================================================
+-- Initial Admin Users
+-- =========================================================
+INSERT INTO users (user_id, email, display_name, role, status, created_at, updated_at)
+VALUES
+    ('fe6d148d-7b8d-4926-86c9-7c32c2cf1ea8', 'socool.kh2@gmail.com', 'Admin 고관홍', 'admin', 'active', NOW(), NOW()),
+    ('288c70f8-4d46-426c-abf6-1687e658cbfa', 'younadme0112@gmail.com', 'Admin 오세덕', 'admin', 'active', NOW(), NOW()),
+    ('bf8c37b7-c53c-4e09-8674-9f9e976452d4', 'jlu4688@gmail.com', 'Admin 임정은', 'admin', 'active', NOW(), NOW())
+ON CONFLICT (user_id) DO NOTHING;
+
 -- Seed default plans
 INSERT INTO plans (
     plan_code, plan_name, badge_label, badge_class, description,
@@ -1218,60 +1235,9 @@ INSERT INTO plans (
     metadata_retention_days, credits
 )
 VALUES
-    (
-        'free',
-        'Free',
-        '기본',
-        'mui-chip--primary',
-        '개인 테스트와 가벼운 분석을 위한 무료 플랜입니다.',
-        5,
-        3,
-        true,
-        0,
-        10,
-        'active',
-        50,
-        3,
-        12,
-        90,
-        5
-    ),
-    (
-        'pro',
-        'Pro',
-        '추천',
-        'mui-chip--soft-warning',
-        '정기적으로 영상을 분석하는 개인 사용자에게 적합합니다.',
-        50,
-        7,
-        false,
-        2900,
-        20,
-        'active',
-        500,
-        10,
-        12,
-        90,
-        50
-    ),
-    (
-        'studio',
-        'Studio',
-        '팀/스튜디오',
-        'mui-chip--secondary',
-        '팀 단위 작업과 대량 분석을 위한 플랜입니다.',
-        null,
-        30,
-        false,
-        19800,
-        30,
-        'active',
-        2048,
-        30,
-        12,
-        90,
-        500
-    )
+    ('free', 'Free', 'Basic', 'mui-chip--primary', '개인 진단과 가벼운 체험을 위한 무료 플랜.', 5, 0, true, 0, 10, 'active', 50, 3, 12, 90, 10),
+    ('pro', 'Pro', 'Most Popular', 'mui-chip--soft-warning', '정기적으로 영상을 다루는 크리에이터를 위한 플랜.', 50, 7, false, 9900, 20, 'active', 500, 10, 12, 90, 60),
+    ('studio', 'Studio', 'Team', 'mui-chip--secondary', '팀 단위 작업과 대량 분석을 위한 최상위 플랜.', null, 14, false, 19800, 30, 'active', 2048, 30, 12, 90, 150)
 ON CONFLICT (plan_code) DO UPDATE
 SET
     plan_name = EXCLUDED.plan_name,
@@ -1291,14 +1257,15 @@ SET
     credits = EXCLUDED.credits,
     updated_at = NOW();
 
--- 기본 크레딧 충전 상품 시드 (가격 오름차순에 맞춰 sort_order 정비)
+-- Seed default credit recharge products
 INSERT INTO credit_plans (
     credit_plan_code, credit_plan_name, price_amount, base_credits,
     bonus_credits, expires_days, sort_order, status
 )
 VALUES
-    ('credit_100', '100 Credits', 5000, 100, 0, NULL, 90, 'active'),
-    ('credit_500', '500 Credits', 20000, 500, 0, NULL, 140, 'active')
+    ('credit_25', '25 크레딧', 5000, 25, 0, NULL, 10, 'active'),
+    ('credit_80', '80 크레딧', 15000, 80, 0, NULL, 20, 'active'),
+    ('credit_150', '150 크레딧', 25000, 150, 0, NULL, 30, 'active')
 ON CONFLICT (credit_plan_code) DO UPDATE
 SET
     credit_plan_name = EXCLUDED.credit_plan_name,
@@ -1307,521 +1274,30 @@ SET
     bonus_credits = EXCLUDED.bonus_credits,
     expires_days = EXCLUDED.expires_days,
     sort_order = EXCLUDED.sort_order,
-    status = EXCLUDED.status,
     updated_at = NOW();
 
+-- abuse_reports 테이블 확장 (제목, 타겟 작업 ID)
+ALTER TABLE IF EXISTS abuse_reports ADD COLUMN IF NOT EXISTS title VARCHAR(255);
+ALTER TABLE IF EXISTS abuse_reports ADD COLUMN IF NOT EXISTS target_job_id VARCHAR(255);
 
 -- =========================================================
--- v9 추가 seed: plans / credit_plans expanded sample data
--- 기존 기본 seed는 그대로 유지하고, 추가 데이터만 upsert한다.
--- 목표:
---   plans 총 20개 / active 총 4개
---   credit_plans 총 20개 / active 총 8개
--- 재실행 안전성:
---   plan_code, credit_plan_code 기준 ON CONFLICT DO UPDATE 사용
+-- notification_events 테이블 (알림)
 -- =========================================================
-
-INSERT INTO plans (
-    plan_code, plan_name, badge_label, badge_class, description,
-    monthly_quota, result_retention_days, watermark_required,
-    price_amount, sort_order, status, file_size_limit, max_jobs,
-    auto_delete_original_hours, metadata_retention_days, credits
-)
-VALUES
-    ('enterprise', 'Enterprise', '엔터프라이즈', 'mui-chip--success', '대규모 팀과 비즈니스를 위한 고급 기능 플랜입니다.', NULL, 90, false, 49000, 40, 'inactive', 10240, 100, 24, 365, 2000),
-    ('starter_light', 'Starter Light', '테스트', 'mui-chip--soft-info', '가벼운 테스트와 데모 환경 검증을 위한 비노출 플랜입니다.', 10, 3, true, 900, 50, 'inactive', 100, 3, 12, 90, 10),
-    ('starter_plus', 'Starter Plus', '테스트', 'mui-chip--soft-info', '소규모 개인 테스트를 위한 예비 플랜입니다.', 20, 5, true, 1900, 60, 'inactive', 200, 5, 12, 90, 20),
-    ('creator_basic', 'Creator Basic', '크리에이터', 'mui-chip--soft-primary', '개인 크리에이터의 정기 영상 분석을 위한 예비 플랜입니다.', 30, 7, false, 3900, 70, 'inactive', 300, 5, 12, 90, 35),
-    ('creator_plus', 'Creator Plus', '크리에이터', 'mui-chip--soft-primary', '영상 업로드가 잦은 크리에이터를 위한 예비 플랜입니다.', 60, 10, false, 5900, 80, 'inactive', 700, 8, 12, 120, 80),
-    ('creator_pro', 'Creator Pro', '크리에이터', 'mui-chip--soft-primary', '고빈도 영상 분석 사용자를 위한 예비 플랜입니다.', 100, 14, false, 8900, 90, 'inactive', 1024, 10, 12, 120, 120),
-    ('team_basic', 'Team Basic', '팀', 'mui-chip--secondary', '소규모 팀 단위 협업을 위한 예비 플랜입니다.', 150, 14, false, 12900, 100, 'inactive', 1536, 15, 12, 180, 180),
-    ('team_plus', 'Team Plus', '팀', 'mui-chip--secondary', '팀 단위 대량 분석을 위한 예비 플랜입니다.', 250, 21, false, 16900, 110, 'inactive', 2048, 20, 12, 180, 300),
-    ('team_pro', 'Team Pro', '팀', 'mui-chip--secondary', '전문 팀의 반복 분석 작업을 위한 예비 플랜입니다.', 400, 30, false, 24900, 120, 'inactive', 3072, 30, 24, 180, 500),
-    ('studio_plus', 'Studio Plus', '스튜디오', 'mui-chip--secondary', '스튜디오급 대용량 파일 처리를 위한 예비 플랜입니다.', NULL, 45, false, 29900, 130, 'inactive', 4096, 40, 24, 270, 800),
-    ('studio_max', 'Studio Max', '스튜디오', 'mui-chip--secondary', '고용량 영상과 다중 작업 처리를 위한 예비 플랜입니다.', NULL, 60, false, 39900, 140, 'inactive', 6144, 60, 24, 270, 1200),
-    ('business_light', 'Business Light', '비즈니스', 'mui-chip--success', '소규모 비즈니스 운영 검증을 위한 예비 플랜입니다.', 500, 45, false, 45900, 150, 'inactive', 5120, 50, 24, 365, 1500),
-    ('business_plus', 'Business Plus', '비즈니스', 'mui-chip--success', '비즈니스 팀의 안정적인 분석 운영을 위한 예비 플랜입니다.', 800, 60, false, 59000, 160, 'inactive', 8192, 80, 24, 365, 2500),
-    ('business_max', 'Business Max', '비즈니스', 'mui-chip--success', '고객사 단위 확장 운영을 위한 예비 플랜입니다.', NULL, 90, false, 79000, 170, 'inactive', 10240, 120, 24, 365, 4000),
-    ('edu_basic', 'Education Basic', '교육', 'mui-chip--soft-warning', '교육기관 테스트를 위한 예비 플랜입니다.', 80, 14, false, 4900, 180, 'inactive', 512, 10, 12, 180, 100),
-    ('edu_plus', 'Education Plus', '교육', 'mui-chip--soft-warning', '교육기관 수업 및 실습용 예비 플랜입니다.', 200, 30, false, 9900, 190, 'inactive', 1024, 20, 12, 180, 250),
-    ('admin_test', 'Admin Test', '관리자', 'mui-chip--default', '관리자 정책 검증을 위한 내부 테스트 플랜입니다.', 999, 7, false, 100, 200, 'inactive', 128, 3, 1, 30, 999)
-ON CONFLICT (plan_code) DO UPDATE
-SET
-    plan_name = EXCLUDED.plan_name,
-    badge_label = EXCLUDED.badge_label,
-    badge_class = EXCLUDED.badge_class,
-    description = EXCLUDED.description,
-    monthly_quota = EXCLUDED.monthly_quota,
-    result_retention_days = EXCLUDED.result_retention_days,
-    watermark_required = EXCLUDED.watermark_required,
-    price_amount = EXCLUDED.price_amount,
-    sort_order = EXCLUDED.sort_order,
-    status = EXCLUDED.status,
-    file_size_limit = EXCLUDED.file_size_limit,
-    max_jobs = EXCLUDED.max_jobs,
-    auto_delete_original_hours = EXCLUDED.auto_delete_original_hours,
-    metadata_retention_days = EXCLUDED.metadata_retention_days,
-    credits = EXCLUDED.credits,
-    updated_at = NOW();
-
-INSERT INTO credit_plans (
-    credit_plan_code, credit_plan_name, price_amount, base_credits,
-    bonus_credits, expires_days, sort_order, status
-)
-VALUES
-    ('credit_event_100', 'Event 100 Credits', 0, 100, 0, 14, 10, 'inactive'),
-    ('credit_event_300', 'Event 300 Credits', 0, 300, 0, 14, 20, 'inactive'),
-    ('credit_admin_9999', 'Admin 9,999 Credits', 0, 9999, 0, NULL, 30, 'inactive'),
-    ('credit_10_trial', '10 Trial Credits', 900, 10, 0, 30, 40, 'inactive'),
-    ('credit_20_trial', '20 Trial Credits', 1500, 20, 0, 30, 50, 'inactive'),
-    ('credit_30', '30 Credits', 1900, 30, 0, NULL, 60, 'active'),
-    ('credit_50', '50 Credits', 2900, 50, 0, NULL, 70, 'active'),
-    ('credit_75', '75 Credits', 3900, 75, 0, NULL, 80, 'inactive'),
-    ('credit_150', '150 Credits', 6900, 150, 10, NULL, 100, 'inactive'),
-    ('credit_200', '200 Credits', 9000, 200, 20, NULL, 110, 'active'),
-    ('credit_250', '250 Credits', 10900, 250, 20, NULL, 120, 'inactive'),
-    ('credit_300', '300 Credits', 12900, 300, 30, NULL, 130, 'active'),
-    ('credit_750', '750 Credits', 27900, 750, 100, NULL, 150, 'inactive'),
-    ('credit_1000', '1,000 Credits', 35000, 1000, 150, NULL, 160, 'active'),
-    ('credit_1500', '1,500 Credits', 49000, 1500, 250, NULL, 170, 'inactive'),
-    ('credit_2000', '2,000 Credits', 59000, 2000, 400, NULL, 180, 'active'),
-    ('credit_3000', '3,000 Credits', 89000, 3000, 600, NULL, 190, 'inactive'),
-    ('credit_5000', '5,000 Credits', 139000, 5000, 1200, NULL, 200, 'inactive')
-ON CONFLICT (credit_plan_code) DO UPDATE
-SET
-    credit_plan_name = EXCLUDED.credit_plan_name,
-    price_amount = EXCLUDED.price_amount,
-    base_credits = EXCLUDED.base_credits,
-    bonus_credits = EXCLUDED.bonus_credits,
-    expires_days = EXCLUDED.expires_days,
-    sort_order = EXCLUDED.sort_order,
-    status = EXCLUDED.status,
-    updated_at = NOW();
-
--- Validation: expected plans total=20 active=4, credit_plans total=20 active=8
-SELECT
-    COUNT(*) AS total_plans,
-    COUNT(*) FILTER (WHERE status = 'active') AS active_plans,
-    COUNT(*) FILTER (WHERE status = 'inactive') AS inactive_plans,
-    COUNT(*) FILTER (WHERE status = 'deleted') AS deleted_plans
-FROM plans;
-
-SELECT
-    COUNT(*) AS total_credit_plans,
-    COUNT(*) FILTER (WHERE status = 'active') AS active_credit_plans,
-    COUNT(*) FILTER (WHERE status = 'inactive') AS inactive_credit_plans,
-    COUNT(*) FILTER (WHERE status = 'deleted') AS deleted_credit_plans
-FROM credit_plans;
-
--- Remove old json policies that are now in plans table
-DELETE FROM admin_policy_settings WHERE policy_key IN ('payment', 'retention');
-
--- Seed policy settings
-INSERT INTO admin_policy_settings (policy_key, policy_value, description)
-VALUES
-    (
-        'file_processing',
-        '{
-            "allowedFormats": ["jpg", "jpeg", "png", "webp", "mp4", "mov"]
-        }'::jsonb,
-        'File processing allowed formats policy'
-    ),
-    (
-        'notification',
-        '{
-            "notifyAbuse": true,
-            "queueDelayMinutes": 30,
-            "autoReport": true
-        }'::jsonb,
-        'Admin notification and compliance report policy'
-    )
-ON CONFLICT (policy_key) DO UPDATE
-SET
-    policy_value = EXCLUDED.policy_value,
-    description = EXCLUDED.description,
-    updated_at = now();
-
-commit;
-
-
--- =========================================================
--- v11 30-day subscription auto-renewal and plan-change model
--- Source: subscription_30day_auto_renewal_final_v2_with_model_guide.md
--- Policy summary:
---   - Current plan is resolved from active subscriptions by highest plans.plan_rank.
---   - Paid plans renew every 30 days when auto_renew=true.
---   - Upgrade is charged/applied immediately and lower-plan remaining period is carried over.
---   - Downgrade is scheduled at current_period_end and charged/applied later.
---   - Free change is treated as cancel-at-period-end.
---   - Existing seed data is preserved.
--- =========================================================
-
--- 1) plans: priority and billing period
-ALTER TABLE IF EXISTS plans
-    ADD COLUMN IF NOT EXISTS plan_rank integer NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS billing_period_days integer NOT NULL DEFAULT 30;
-
-COMMENT ON COLUMN plans.plan_rank IS '플랜 우선순위 - 현재 적용 플랜 계산 시 유효 구독 중 가장 높은 plan_rank를 선택한다. Free=0, Pro=10, Studio=20, Enterprise=30';
-COMMENT ON COLUMN plans.billing_period_days IS '구독 기간 일수 - 유료 플랜은 기본 30일 자동결제 구독 기간을 가진다.';
-
-UPDATE plans
-SET
-    plan_rank = CASE plan_code
-        WHEN 'free' THEN 0
-        WHEN 'pro' THEN 10
-        WHEN 'studio' THEN 20
-        WHEN 'enterprise' THEN 30
-        ELSE COALESCE(NULLIF(plan_rank, 0), 0)
-    END,
-    billing_period_days = CASE
-        WHEN plan_code = 'free' THEN 0
-        ELSE 30
-    END,
-    updated_at = now()
-WHERE plan_code IN ('free', 'pro', 'studio', 'enterprise')
-   OR billing_period_days IS NULL;
-
--- 2) billing_keys: Toss billing key storage
--- IMPORTANT: encrypted_billing_key must store an encrypted value only.
--- Do not return raw billing key through API responses, admin screens, or logs.
-CREATE TABLE IF NOT EXISTS billing_keys (
-    billing_key_id uuid NOT NULL DEFAULT gen_random_uuid(),
-    user_id uuid NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
-    pg_provider varchar(40) NOT NULL DEFAULT 'toss',
-    encrypted_billing_key text NOT NULL,
-    billing_key_hash varchar(128),
-    customer_key varchar(255),
-    card_company varchar(50),
-    masked_card_number varchar(50),
-    method_type varchar(30),
-    status varchar(30) NOT NULL DEFAULT 'active',
-    last_used_at timestamp,
-    revoked_at timestamp,
-    created_at timestamp NOT NULL DEFAULT now(),
-    updated_at timestamp,
-    CONSTRAINT pk_billing_keys PRIMARY KEY (billing_key_id),
-    CONSTRAINT ck_billing_keys_status CHECK (status IN ('active','inactive','revoked','expired')),
-    CONSTRAINT ck_billing_keys_method_type CHECK (method_type IS NULL OR method_type IN ('card','easy_pay','account','unknown'))
-);
-
-COMMENT ON TABLE billing_keys IS 'Toss 자동결제용 Billing Key 암호화 저장 테이블. 원문 billing key는 프론트/API/관리자/로그에 노출하지 않는다.';
-COMMENT ON COLUMN billing_keys.billing_key_id IS 'Billing Key ID - billing_keys 테이블의 기본 식별자';
-COMMENT ON COLUMN billing_keys.user_id IS '사용자 ID - billing key 소유 사용자';
-COMMENT ON COLUMN billing_keys.pg_provider IS 'PG사 - 자동결제 제공자. 기본 toss';
-COMMENT ON COLUMN billing_keys.encrypted_billing_key IS '암호화 Billing Key - 원문 저장 금지. 환경변수 기반 암호화 키로 암호화 저장';
-COMMENT ON COLUMN billing_keys.billing_key_hash IS 'Billing Key 해시 - 복호화 없이 중복 확인 또는 추적이 필요한 경우 사용';
-COMMENT ON COLUMN billing_keys.customer_key IS 'Toss customerKey - billing 인증 기준 고객 키';
-COMMENT ON COLUMN billing_keys.card_company IS '카드사 - 화면 표시용 카드사 정보';
-COMMENT ON COLUMN billing_keys.masked_card_number IS '마스킹 카드번호 - 원문 카드번호 저장 금지';
-COMMENT ON COLUMN billing_keys.method_type IS '결제수단 유형 - card/easy_pay/account/unknown';
-COMMENT ON COLUMN billing_keys.status IS 'Billing Key 상태 - active, inactive, revoked, expired';
-COMMENT ON COLUMN billing_keys.last_used_at IS '마지막 사용 일시 - 자동결제 시 마지막 사용 시각';
-COMMENT ON COLUMN billing_keys.revoked_at IS '폐기 일시 - 결제수단 삭제 또는 인증 해제 시각';
-COMMENT ON COLUMN billing_keys.created_at IS '등록 일시 - 레코드 생성 시각';
-COMMENT ON COLUMN billing_keys.updated_at IS '수정 일시 - 레코드 마지막 수정 시각';
-
--- 3) subscriptions: 30-day period, auto-renewal, cancellation reservation, and proration-based upgrade policy
--- v12 cleanup: remove legacy period-extension fields because upgrades use remaining-value proration, not period extension.
-DROP INDEX IF EXISTS idx_subscriptions_superseded_by;
-
-ALTER TABLE IF EXISTS subscriptions
-    DROP CONSTRAINT IF EXISTS fk_subscriptions_superseded_by,
-    DROP CONSTRAINT IF EXISTS ck_subscriptions_carried_over_days_non_negative,
-    DROP COLUMN IF EXISTS upgraded_at,
-    DROP COLUMN IF EXISTS superseded_by_subscription_id,
-    DROP COLUMN IF EXISTS carried_over_days,
-    DROP COLUMN IF EXISTS original_period_end;
-
-ALTER TABLE IF EXISTS subscription_plan_changes
-    DROP CONSTRAINT IF EXISTS chk_subscription_plan_changes_remaining_days,
-    DROP COLUMN IF EXISTS remaining_days,
-    DROP COLUMN IF EXISTS from_subscription_new_end;
-
-ALTER TABLE IF EXISTS subscriptions
-    ADD COLUMN IF NOT EXISTS current_period_start timestamp,
-    ADD COLUMN IF NOT EXISTS current_period_end timestamp,
-    ADD COLUMN IF NOT EXISTS cancel_at_period_end boolean NOT NULL DEFAULT false,
-    ADD COLUMN IF NOT EXISTS cancelled_at timestamp,
-    ADD COLUMN IF NOT EXISTS next_billing_at timestamp,
-    ADD COLUMN IF NOT EXISTS billing_status varchar(30),
-    ADD COLUMN IF NOT EXISTS auto_renew boolean NOT NULL DEFAULT true,
-    ADD COLUMN IF NOT EXISTS billing_key_id uuid,
-    ADD COLUMN IF NOT EXISTS last_payment_id uuid;
-
-COMMENT ON COLUMN subscriptions.current_period_start IS '현재 구독 기간 시작 - current_period_start <= now()이면 현재 플랜 계산 후보';
-COMMENT ON COLUMN subscriptions.current_period_end IS '현재 구독 기간 종료 - current_period_end > now()이면 현재 플랜 계산 후보';
-COMMENT ON COLUMN subscriptions.cancel_at_period_end IS '기간 종료 시 취소 예약 여부 - true여도 current_period_end 전까지 권한 유지';
-COMMENT ON COLUMN subscriptions.cancelled_at IS '취소 요청 일시 - Free 변경 또는 구독 취소 예약 시각';
-COMMENT ON COLUMN subscriptions.next_billing_at IS '다음 자동결제 예정일 - 자동결제 스케줄러 기준';
-COMMENT ON COLUMN subscriptions.billing_status IS '결제 상태 - ready/paid/failed/billing_key_missing/retry_scheduled 등';
-COMMENT ON COLUMN subscriptions.auto_renew IS '자동결제 여부 - false이면 자동결제 대상 제외. 업그레이드 시 기존 하위 구독은 즉시 cancelled 및 false 처리';
-COMMENT ON COLUMN subscriptions.billing_key_id IS 'Billing Key ID - 자동결제용 billing_keys 참조';
-COMMENT ON COLUMN subscriptions.last_payment_id IS '마지막 결제 ID - 구독 생성/연장 기준 payments 참조';
-
--- Backfill current period columns from legacy columns when available.
-UPDATE subscriptions
-SET
-    current_period_start = COALESCE(current_period_start, started_at),
-    current_period_end = COALESCE(current_period_end, ended_at, renew_at),
-    next_billing_at = COALESCE(next_billing_at, renew_at),
-    billing_status = COALESCE(billing_status, CASE WHEN status = 'active' THEN 'paid' ELSE NULL END),
-    updated_at = now()
-WHERE current_period_start IS NULL
-   OR current_period_end IS NULL
-   OR next_billing_at IS NULL
-   OR billing_status IS NULL;
-
--- 4) subscription_plan_changes: upgrade/downgrade/free change request and reservation history
-CREATE TABLE IF NOT EXISTS subscription_plan_changes (
-    plan_change_id uuid NOT NULL DEFAULT gen_random_uuid(),
-
-    user_id uuid NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
-    subscription_id uuid REFERENCES subscriptions(subscription_id) ON DELETE SET NULL,
-
-    from_plan_id uuid REFERENCES plans(plan_id),
-    to_plan_id uuid NOT NULL REFERENCES plans(plan_id),
-
-    from_subscription_id uuid REFERENCES subscriptions(subscription_id) ON DELETE SET NULL,
-    to_subscription_id uuid REFERENCES subscriptions(subscription_id) ON DELETE SET NULL,
-
-    change_type varchar(30) NOT NULL,
-    apply_timing varchar(30) NOT NULL,
-    status varchar(30) NOT NULL DEFAULT 'scheduled',
-    remaining_seconds integer NOT NULL DEFAULT 0,
-    remaining_amount integer NOT NULL DEFAULT 0,
-    target_plan_amount integer NOT NULL DEFAULT 0,
-    discount_amount integer NOT NULL DEFAULT 0,
-    charged_amount integer NOT NULL DEFAULT 0,
-    from_subscription_original_end timestamp,
-
-    requested_at timestamp NOT NULL DEFAULT now(),
-    effective_at timestamp,
-    applied_at timestamp,
-    cancelled_at timestamp,
-    failure_code varchar(100),
-    failure_message text,
-
-    created_at timestamp NOT NULL DEFAULT now(),
-    updated_at timestamp,
-    CONSTRAINT pk_subscription_plan_changes PRIMARY KEY (plan_change_id),
-    CONSTRAINT chk_subscription_plan_changes_type CHECK (change_type IN ('upgrade', 'downgrade', 'cancel_to_free')),
-    CONSTRAINT chk_subscription_plan_changes_timing CHECK (apply_timing IN ('immediate', 'period_end')),
-    CONSTRAINT chk_subscription_plan_changes_status CHECK (status IN ('scheduled', 'applied', 'cancelled', 'failed', 'retry_scheduled')),
-    CONSTRAINT chk_subscription_plan_changes_remaining_seconds CHECK (remaining_seconds >= 0),
-    CONSTRAINT chk_subscription_plan_changes_remaining_amount CHECK (remaining_amount >= 0),
-    CONSTRAINT chk_subscription_plan_changes_target_plan_amount CHECK (target_plan_amount >= 0),
-    CONSTRAINT chk_subscription_plan_changes_discount_amount CHECK (discount_amount >= 0),
-    CONSTRAINT chk_subscription_plan_changes_charged_amount CHECK (charged_amount >= 0)
-);
-
-COMMENT ON TABLE subscription_plan_changes IS '플랜 변경 요청/예약/적용/실패/취소 이력 테이블. 업그레이드, 다운그레이드, Free 변경을 모두 추적한다.';
-COMMENT ON COLUMN subscription_plan_changes.plan_change_id IS '플랜 변경 ID - subscription_plan_changes 테이블의 기본 식별자';
-COMMENT ON COLUMN subscription_plan_changes.user_id IS '사용자 ID - 플랜 변경 요청 사용자';
-COMMENT ON COLUMN subscription_plan_changes.subscription_id IS '기준 구독 ID - 변경 요청이 발생한 구독';
-COMMENT ON COLUMN subscription_plan_changes.from_plan_id IS '이전 플랜 ID - 변경 전 현재 적용 플랜';
-COMMENT ON COLUMN subscription_plan_changes.to_plan_id IS '대상 플랜 ID - 변경 대상 플랜';
-COMMENT ON COLUMN subscription_plan_changes.from_subscription_id IS '이전 구독 ID - 변경 전 기준 구독';
-COMMENT ON COLUMN subscription_plan_changes.to_subscription_id IS '대상 구독 ID - 즉시 적용 또는 예약 적용 후 생성된 구독';
-COMMENT ON COLUMN subscription_plan_changes.change_type IS '변경 유형 - upgrade/downgrade/cancel_to_free';
-COMMENT ON COLUMN subscription_plan_changes.apply_timing IS '적용 시점 - immediate/period_end';
-COMMENT ON COLUMN subscription_plan_changes.status IS '변경 상태 - scheduled/applied/cancelled/failed/retry_scheduled';
-COMMENT ON COLUMN subscription_plan_changes.remaining_seconds IS '잔여 초 - 업그레이드 정산 계산용 초 단위 값';
-COMMENT ON COLUMN subscription_plan_changes.remaining_amount IS '잔여 이용분 금액 - 기존 하위 플랜의 남은 기간을 금액으로 환산한 값';
-COMMENT ON COLUMN subscription_plan_changes.target_plan_amount IS '대상 플랜 정가 - 업그레이드 대상 플랜의 원 결제 금액';
-COMMENT ON COLUMN subscription_plan_changes.discount_amount IS '정산 차감 금액 - 잔여 이용분으로 대상 플랜 결제에서 차감된 금액';
-COMMENT ON COLUMN subscription_plan_changes.charged_amount IS '실제 청구 금액 - 대상 플랜 정가에서 잔여 이용분 정산 금액을 차감한 최종 결제 금액';
-COMMENT ON COLUMN subscription_plan_changes.from_subscription_original_end IS '기존 구독 원래 종료일 - 업그레이드 전 종료일';
-COMMENT ON COLUMN subscription_plan_changes.requested_at IS '요청 일시 - 사용자 변경 요청 시각';
-COMMENT ON COLUMN subscription_plan_changes.effective_at IS '예약 적용 일시 - 다운그레이드/Free 변경 적용 예정 시각';
-COMMENT ON COLUMN subscription_plan_changes.applied_at IS '적용 완료 일시 - 실제 적용 완료 시각';
-COMMENT ON COLUMN subscription_plan_changes.cancelled_at IS '취소 일시 - 예약 취소 또는 변경 취소 시각';
-COMMENT ON COLUMN subscription_plan_changes.failure_code IS '실패 코드 - 예약 적용/결제 실패 코드';
-COMMENT ON COLUMN subscription_plan_changes.failure_message IS '실패 메시지 - 예약 적용/결제 실패 상세';
-COMMENT ON COLUMN subscription_plan_changes.created_at IS '등록 일시 - 레코드 생성 시각';
-COMMENT ON COLUMN subscription_plan_changes.updated_at IS '수정 일시 - 레코드 마지막 수정 시각';
-
--- 5) payments: link automatic billing keys and plan-change history
-ALTER TABLE IF EXISTS payments
-    ADD COLUMN IF NOT EXISTS billing_key_id uuid,
-    ADD COLUMN IF NOT EXISTS plan_change_id uuid;
-
-COMMENT ON COLUMN payments.billing_key_id IS 'Billing Key ID - 자동결제 결제 시 사용한 billing key 참조';
-COMMENT ON COLUMN payments.plan_change_id IS '플랜 변경 ID - 업그레이드/다운그레이드 예약 적용으로 발생한 결제 연결';
-
--- 6) subscription_billing_attempts: automatic payment attempt history
-CREATE TABLE IF NOT EXISTS subscription_billing_attempts (
-    billing_attempt_id uuid NOT NULL DEFAULT gen_random_uuid(),
-    user_id uuid NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
-    subscription_id uuid REFERENCES subscriptions(subscription_id) ON DELETE SET NULL,
-    plan_change_id uuid REFERENCES subscription_plan_changes(plan_change_id) ON DELETE SET NULL,
-    payment_id uuid REFERENCES payments(payment_id) ON DELETE SET NULL,
-    billing_key_id uuid REFERENCES billing_keys(billing_key_id) ON DELETE SET NULL,
-
-    attempt_type varchar(30) NOT NULL,
+CREATE TABLE IF NOT EXISTS notification_events (
+    notification_event_id uuid NOT NULL DEFAULT gen_random_uuid(),
+    user_id uuid REFERENCES users(user_id),
+    channel varchar(50) DEFAULT 'app',
+    notification_type varchar(50) NOT NULL,
+    title varchar(255),
+    message text NOT NULL,
+    target_type varchar(50),
+    target_id varchar(255),
     status varchar(30) NOT NULL DEFAULT 'pending',
-    attempt_no integer NOT NULL DEFAULT 1,
-    amount integer,
-    pg_provider varchar(40) DEFAULT 'toss',
-    pg_transaction_id varchar(255),
-    failure_code varchar(100),
-    failure_message text,
-    next_retry_at timestamp,
-    attempted_at timestamp NOT NULL DEFAULT now(),
+    error_message text,
     created_at timestamp NOT NULL DEFAULT now(),
-    updated_at timestamp,
-    CONSTRAINT pk_subscription_billing_attempts PRIMARY KEY (billing_attempt_id),
-    CONSTRAINT ck_subscription_billing_attempts_type CHECK (attempt_type IN ('renewal', 'scheduled_downgrade', 'retry')),
-    CONSTRAINT ck_subscription_billing_attempts_status CHECK (status IN ('pending', 'success', 'failed', 'retry_scheduled')),
-    CONSTRAINT ck_subscription_billing_attempts_no CHECK (attempt_no >= 1)
+    sent_at timestamp,
+    read_at timestamp,
+    CONSTRAINT pk_notification_events PRIMARY KEY (notification_event_id)
 );
+COMMENT ON TABLE notification_events IS '관리자 알림 및 시스템 알림 테이블';
 
-COMMENT ON TABLE subscription_billing_attempts IS '30일 자동결제와 예약 다운그레이드 적용 시 결제 시도/성공/실패/재시도 이력 테이블';
-COMMENT ON COLUMN subscription_billing_attempts.billing_attempt_id IS '자동결제 시도 ID - subscription_billing_attempts 테이블의 기본 식별자';
-COMMENT ON COLUMN subscription_billing_attempts.user_id IS '사용자 ID - 결제 대상 사용자';
-COMMENT ON COLUMN subscription_billing_attempts.subscription_id IS '구독 ID - 자동결제 대상 구독';
-COMMENT ON COLUMN subscription_billing_attempts.plan_change_id IS '플랜 변경 ID - 예약 다운그레이드 적용 결제와 연결';
-COMMENT ON COLUMN subscription_billing_attempts.payment_id IS '결제 ID - 성공/실패 후 생성된 payments 레코드';
-COMMENT ON COLUMN subscription_billing_attempts.billing_key_id IS 'Billing Key ID - 결제 시도에 사용한 billing key';
-COMMENT ON COLUMN subscription_billing_attempts.attempt_type IS '시도 유형 - renewal/scheduled_downgrade/retry';
-COMMENT ON COLUMN subscription_billing_attempts.status IS '시도 상태 - pending/success/failed/retry_scheduled';
-COMMENT ON COLUMN subscription_billing_attempts.attempt_no IS '시도 회차 - 동일 구독/변경 건 기준 시도 회차';
-COMMENT ON COLUMN subscription_billing_attempts.amount IS '결제 예정 금액 - KRW';
-COMMENT ON COLUMN subscription_billing_attempts.pg_provider IS 'PG사 - 자동결제 제공자';
-COMMENT ON COLUMN subscription_billing_attempts.pg_transaction_id IS 'PG 거래 ID - PG에서 반환한 거래 ID';
-COMMENT ON COLUMN subscription_billing_attempts.failure_code IS '실패 코드 - 결제 실패 코드';
-COMMENT ON COLUMN subscription_billing_attempts.failure_message IS '실패 메시지 - 결제 실패 상세';
-COMMENT ON COLUMN subscription_billing_attempts.next_retry_at IS '재시도 예정일 - 재시도 예약 시각';
-COMMENT ON COLUMN subscription_billing_attempts.attempted_at IS '시도 일시 - 결제 시도 시각';
-COMMENT ON COLUMN subscription_billing_attempts.created_at IS '등록 일시 - 레코드 생성 시각';
-COMMENT ON COLUMN subscription_billing_attempts.updated_at IS '수정 일시 - 레코드 마지막 수정 시각';
-
--- 7) Data integrity constraints and foreign keys for newly added columns
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_plans_plan_rank_non_negative') THEN
-        ALTER TABLE plans
-            ADD CONSTRAINT ck_plans_plan_rank_non_negative
-            CHECK (plan_rank >= 0);
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_plans_billing_period_days_non_negative') THEN
-        ALTER TABLE plans
-            ADD CONSTRAINT ck_plans_billing_period_days_non_negative
-            CHECK (billing_period_days >= 0);
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_subscriptions_billing_status_v11') THEN
-        ALTER TABLE subscriptions
-            ADD CONSTRAINT ck_subscriptions_billing_status_v11
-            CHECK (
-                billing_status IS NULL OR billing_status IN (
-                    'ready',
-                    'paid',
-                    'failed',
-                    'billing_key_missing',
-                    'retry_scheduled',
-                    'cancelled',
-                    'expired'
-                )
-            );
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_subscriptions_current_period_order_v11') THEN
-        ALTER TABLE subscriptions
-            ADD CONSTRAINT ck_subscriptions_current_period_order_v11
-            CHECK (
-                current_period_start IS NULL
-                OR current_period_end IS NULL
-                OR current_period_end > current_period_start
-            );
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_subscriptions_billing_key') THEN
-        ALTER TABLE subscriptions
-            ADD CONSTRAINT fk_subscriptions_billing_key
-            FOREIGN KEY (billing_key_id) REFERENCES billing_keys(billing_key_id) ON DELETE SET NULL;
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_subscriptions_last_payment') THEN
-        ALTER TABLE subscriptions
-            ADD CONSTRAINT fk_subscriptions_last_payment
-            FOREIGN KEY (last_payment_id) REFERENCES payments(payment_id) ON DELETE SET NULL;
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_payments_billing_key') THEN
-        ALTER TABLE payments
-            ADD CONSTRAINT fk_payments_billing_key
-            FOREIGN KEY (billing_key_id) REFERENCES billing_keys(billing_key_id) ON DELETE SET NULL;
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_payments_plan_change') THEN
-        ALTER TABLE payments
-            ADD CONSTRAINT fk_payments_plan_change
-            FOREIGN KEY (plan_change_id) REFERENCES subscription_plan_changes(plan_change_id) ON DELETE SET NULL;
-    END IF;
-END $$;
-
--- 8) Indexes for current-plan resolution, automatic billing, and plan-change reservation
-CREATE INDEX IF NOT EXISTS idx_plans_status_rank
-ON plans (status, plan_rank DESC);
-
-CREATE INDEX IF NOT EXISTS idx_subscriptions_current_plan
-ON subscriptions (user_id, status, current_period_start, current_period_end);
-
-CREATE INDEX IF NOT EXISTS idx_subscriptions_next_billing
-ON subscriptions (status, auto_renew, cancel_at_period_end, next_billing_at);
-
-CREATE INDEX IF NOT EXISTS idx_subscriptions_billing_key
-ON subscriptions (billing_key_id);
-
-
-CREATE INDEX IF NOT EXISTS idx_billing_keys_user_status
-ON billing_keys (user_id, status);
-
-CREATE INDEX IF NOT EXISTS idx_subscription_billing_attempts_subscription
-ON subscription_billing_attempts (subscription_id, attempted_at DESC);
-
-CREATE INDEX IF NOT EXISTS idx_subscription_billing_attempts_status_retry
-ON subscription_billing_attempts (status, next_retry_at);
-
-CREATE INDEX IF NOT EXISTS idx_subscription_billing_attempts_plan_change
-ON subscription_billing_attempts (plan_change_id);
-
-CREATE INDEX IF NOT EXISTS idx_subscription_plan_changes_user_status
-ON subscription_plan_changes (user_id, status);
-
-CREATE INDEX IF NOT EXISTS idx_subscription_plan_changes_effective
-ON subscription_plan_changes (status, effective_at);
-
-CREATE INDEX IF NOT EXISTS idx_subscription_plan_changes_subscription
-ON subscription_plan_changes (subscription_id);
-
-CREATE INDEX IF NOT EXISTS idx_subscription_plan_changes_type_status
-ON subscription_plan_changes (change_type, status);
-
-CREATE INDEX IF NOT EXISTS idx_payments_billing_key
-ON payments (billing_key_id);
-
-CREATE INDEX IF NOT EXISTS idx_payments_plan_change
-ON payments (plan_change_id);
-
--- 9) Optional current-plan query reference for developers
-COMMENT ON INDEX idx_subscriptions_current_plan IS '현재 적용 플랜 계산용: active subscriptions 중 기간 유효한 구독을 plans.plan_rank desc로 정렬해 선택한다.';
-COMMENT ON INDEX idx_subscriptions_next_billing IS '자동결제 스케줄러용: status=active, auto_renew=true, cancel_at_period_end=false, next_billing_at<=now() 대상 조회';
-
--- v11 validation reference
-SELECT
-    plan_code,
-    plan_name,
-    plan_rank,
-    billing_period_days,
-    status
-FROM plans
-WHERE plan_code IN ('free', 'pro', 'studio', 'enterprise')
-ORDER BY plan_rank;
-
-commit;
-
--- =========================================================
--- v11 추가 끝
--- =========================================================

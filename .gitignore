@@ -35,3 +35,11 @@ AGENTS.md
 
 # Backend 이미지/영상 업로드 폴더
 storage/
+
+# 대용량 AI 모델 파일 (GitHub 업로드 방지)
+STT_Model
+*.bin
+*.pt
+*.pth
+*.h5
+*.safetensors
