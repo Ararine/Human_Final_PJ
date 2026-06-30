@@ -85,6 +85,7 @@ def update_setting(
 
     result["user_id"] = str(result["user_id"])
 
+
     if result.get("created_at"):
         result["created_at"] = result[
             "created_at"
@@ -96,3 +97,50 @@ def update_setting(
         ].strftime("%Y-%m-%d %H:%M:%S")
 
     return result
+
+
+def get_my_login_histories(user_id, current_session_id=None, limit: int = 5):
+    # [한글 주석] 로그인한 유저의 최근 로그인 히스토리를 최대 limit건 만큼 조회하며, 현재 세션 여부도 판별합니다.
+    from utils.database import SessionLocal
+    from sqlalchemy import text
+    from services.admin import _mask_ip, _parse_user_agent_to_device
+
+    db = SessionLocal()
+    try:
+        rows = db.execute(
+            text("""
+                SELECT
+                    ulh.login_history_id,
+                    ulh.provider,
+                    ulh.login_result,
+                    ulh.ip_address,
+                    ulh.user_agent,
+                    ulh.session_id,
+                    ulh.logged_in_at
+                FROM user_login_histories ulh
+                WHERE ulh.user_id = CAST(:user_id AS uuid)
+                ORDER BY ulh.logged_in_at DESC, ulh.login_history_id DESC
+                LIMIT :limit
+            """),
+            {"user_id": user_id, "limit": limit}
+        ).fetchall()
+
+        items = []
+        for row in rows:
+            r = row._mapping
+            is_current = False
+            if r["session_id"] and current_session_id:
+                is_current = (str(r["session_id"]).strip().lower() == str(current_session_id).strip().lower())
+
+            items.append({
+                "login_history_id": str(r["login_history_id"]),
+                "provider": r["provider"] or "",
+                "login_result": r["login_result"],
+                "ip_address": _mask_ip(r["ip_address"]),
+                "browser_device": _parse_user_agent_to_device(r["user_agent"]),
+                "is_current_session": is_current,
+                "logged_in_at": r["logged_in_at"].isoformat() if r["logged_in_at"] else "",
+            })
+        return items
+    finally:
+        db.close()

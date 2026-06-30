@@ -22,9 +22,11 @@
 ---
 
 ## 시연 영상
+
 https://github.com/user-attachments/assets/9fdc3233-0e97-42b6-979c-363f096d64ae
 
 ---
+
 ## 💡 개발 배경 및 목적
 
 소셜 미디어와 영상 콘텐츠의 급증으로 누구나 쉽게 영상을 공유할 수 있게 되었지만, 영상 내에 포함된 주소, 얼굴, 전화번호 등의 개인정보 유출 위험성은 날로 커지고 있습니다. 특히 파편화된 정보를 모아 개인을 특정하는 **퍼즐 독싱(Doxxing)** 범죄를 예방하기 위해, 영상의 시각 정보뿐만 아니라 **음성(STT) 정보**까지 스크리닝하고 마스킹하는 자동화 솔루션을 개발하게 되었습니다.
@@ -70,17 +72,18 @@ graph TD
 
 ---
 
- - 확장팩 없어서 그래프 안보이는 분들은 아래 시각화로 확인해주세요
+- 확장팩 없어서 그래프 안보이는 분들은 아래 시각화로 확인해주세요
 
-**흐름도 시각화**
----
+## **흐름도 시각화**
+
 <img src="./docs/garim_workflow_architecture.png" />
 
-**아키텍처 시각화**
----
+## **아키텍처 시각화**
+
 <img src="./docs/garim_full_architecture.png" />
 
 ---
+
 ## 📂 프로젝트 폴더 구조
 
 ```text
@@ -178,7 +181,7 @@ print("✅ 설치 완료")
 
 # 드라이브에 있는 워커 파일을 그대로 실행
 # (파일 안에서 파이프라인 로드 + run_loop() 자동 실행됨)
-%run /content/drive/MyDrive/final_PJ_model/garim_colab_worker.py
+%run /content/drive/MyDrive/final_test_folder/garim_colab_worker.py
 ```
 
 _(상세한 코랩 환경 세팅 및 파이프라인 파일 업로드 방법은 `colab/COLAB_WORKER_RUNBOOK.md` 문서를 꼼꼼히 참조해 주세요.)_

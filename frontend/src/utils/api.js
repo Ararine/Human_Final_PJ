@@ -64,6 +64,10 @@ export async function getCurrentUser() {
   return requestJson("/auth/me");
 }
 
+export async function refreshAuthSession() {
+  return requestJson("/auth/refresh", { method: "POST" });
+}
+
 export async function getConsents() {
   return requestJson("/auth/consents");
 }
@@ -77,7 +81,17 @@ export async function saveConsents(isAgreed, version) {
 }
 
 export async function logout() {
-  return requestJson("/auth/logout", { method: "POST" });
+  const response = await fetch(`${getApiBaseUrl()}/auth/logout`, {
+    method: "POST",
+    credentials: "include",
+  });
+  const body = await response.json().catch(() => ({ authenticated: false }));
+
+  if (response.ok || response.status === 401) {
+    return body;
+  }
+
+  throw new Error(body.message || body.detail || "로그아웃에 실패했습니다.");
 }
 
 export async function getUserSettings() {
@@ -110,6 +124,16 @@ export async function getAdminUsers(params = {}) {
   if (params.status) query.set("status", params.status);
   const qs = query.toString();
   return requestJson(`/admin/users${qs ? "?" + qs : ""}`);
+}
+
+export async function updateAdminUser(userId, payload) {
+  return requestJson(`/admin/users/${userId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function getAdminPolicySettings() {
@@ -283,6 +307,16 @@ export async function confirmPayment(payment) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payment),
+  });
+}
+
+export async function confirmBillingPayment(billingData) {
+  return requestJson("/payment/billing-confirm", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(billingData),
   });
 }
 
@@ -462,9 +496,14 @@ export async function uploadFile(file) {
 }
 
 let refreshPromise = null;
+let sessionExpiredHandled = false;
 
 // 세션 만료 시 사유 알림 후 로그인 페이지로 이동
 function handleSessionExpired(reason) {
+  if (sessionExpiredHandled) return;
+  sessionExpiredHandled = true;
+
+  if (typeof window === "undefined") return;
   // 이미 로그인 페이지면 알림 없이 종료 (무한 루프 방지)
   if (window.location.pathname === "/login") return;
 
@@ -543,6 +582,42 @@ export async function refundAdminPayment(paymentId, refundReason) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ refund_reason: refundReason }),
   });
+}
+
+export async function getAdminLoginHistories(params = {}) {
+  const query = new URLSearchParams();
+  if (params.page) query.set("page", params.page);
+  if (params.limit) query.set("limit", params.limit);
+  if (params.keyword) query.set("keyword", params.keyword);
+  if (params.period) query.set("period", params.period);
+  if (params.result) query.set("result", params.result);
+  if (params.provider) query.set("provider", params.provider);
+  if (params.ip) query.set("ip", params.ip);
+  if (params.start_date) query.set("start_date", params.start_date);
+  if (params.end_date) query.set("end_date", params.end_date);
+  if (params.search_type) query.set("search_type", params.search_type);
+  if (params.search_keyword) query.set("search_keyword", params.search_keyword);
+  const qs = query.toString();
+  return requestJson(`/admin/login-histories${qs ? "?" + qs : ""}`);
+}
+
+export async function getAdminLoginHistoryDetail(loginHistoryId) {
+  return requestJson(`/admin/login-histories/${loginHistoryId}`);
+}
+
+export function getAdminLoginHistoriesExportUrl(params = {}) {
+  const query = new URLSearchParams();
+  if (params.keyword) query.set("keyword", params.keyword);
+  if (params.period) query.set("period", params.period);
+  if (params.result) query.set("result", params.result);
+  if (params.provider) query.set("provider", params.provider);
+  if (params.ip) query.set("ip", params.ip);
+  if (params.start_date) query.set("start_date", params.start_date);
+  if (params.end_date) query.set("end_date", params.end_date);
+  if (params.search_type) query.set("search_type", params.search_type);
+  if (params.search_keyword) query.set("search_keyword", params.search_keyword);
+  const qs = query.toString();
+  return `${getApiBaseUrl()}/admin/login-histories/export${qs ? "?" + qs : ""}`;
 }
 
 export async function getDashboardData() {

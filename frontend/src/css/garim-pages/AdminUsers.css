@@ -119,12 +119,21 @@ body { background: #fafafa; }
   overflow-x: auto;
 }
 
-.usr-row { display: grid; grid-template-columns: minmax(220px, 280px) minmax(180px, 1fr) 100px 100px 100px 100px 80px; gap: 12px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--mui-divider); font: 400 13px var(--font-sans); min-width: 900px; }
-.usr-row:last-child { border-bottom: none; }
+/* 실제 6열(이메일, 제공자, 역할, 상태, 가입일, 작업) 구조에 맞게 grid-template-columns를 재조정하여 데이터 간 여백을 균일하게 설정합니다. */
+/* 행 전체 대신 자식 span들에 각각 border-bottom을 주어 컬럼별 끊김선 효과 적용 */
+.usr-row { display: grid; grid-template-columns: 2.2fr 1fr 1.2fr 1fr 1.6fr 80px; gap: 12px; align-items: center; padding: 0 16px; font: 400 13px var(--font-sans); min-width: 900px; }
+.usr-row > span { border-bottom: 1px solid var(--mui-divider); padding: 12px 8px; align-self: stretch; display: flex; align-items: center; min-width: 0; }
+.usr-row:last-child > span { border-bottom: none; }
 .adm-shell .usr-row.tbl-head { display: grid; background: #fafafa; font: 500 11px var(--font-sans); text-transform: uppercase; letter-spacing: 0.5px; color: var(--fg-2); }
+/* 제공자, 역할, 상태, 가입일 및 작업 데이터 셀(2번째 span부터 끝까지)을 중앙 정렬합니다. */
+.usr-row > span:nth-child(n+2) {
+  display: flex;
+  justify-content: center;
+  text-align: center;
+}
 .usr-row:not(.tbl-head):hover { background: rgba(0,0,0,0.02); }
 .usr-row .mono { font-family: var(--font-mono); font-size: 12px; color: var(--fg-2); }
-.usr-actions { display: flex; gap: 4px; }
+.usr-actions { display: flex; gap: 4px; justify-content: center; width: 100%; }
 
 .usr-pagination {
   display: grid;
@@ -168,4 +177,149 @@ body { background: #fafafa; }
 }
 .usr-state--empty {
   color: var(--fg-3);
+}
+
+/* 사용자 편집 모달 팝업 스타일 */
+.usr-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.usr-modal {
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  background: #fff;
+  border: 1px solid var(--mui-border);
+  border-radius: 6px;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.18);
+}
+
+.usr-modal-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 22px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.usr-modal-head h2 {
+  margin: 0 0 4px;
+  color: #111827;
+  font: 800 16px var(--font-sans);
+}
+
+.usr-modal-head p {
+  margin: 0;
+  color: #64748b;
+  font: 400 12px/1.5 var(--font-sans);
+}
+
+.usr-modal-body {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.usr-modal-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.usr-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.usr-form-group label {
+  font: 600 11px var(--font-sans);
+  color: var(--fg-2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: left;
+}
+
+.usr-form-group input,
+.usr-form-group select {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--mui-border);
+  border-radius: 4px;
+  background: #f8fafc;
+  color: var(--fg-1);
+  font: 400 13px var(--font-sans);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.usr-form-group input:disabled {
+  background: #f1f5f9;
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+.usr-form-group select {
+  background: #fff;
+  cursor: pointer;
+}
+
+.usr-form-group select:focus {
+  border-color: #1976d2;
+}
+
+.usr-radio-group {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  height: 38px;
+}
+
+.usr-radio-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 400 13px var(--font-sans);
+  color: var(--fg-1);
+  cursor: pointer;
+}
+
+.usr-radio-label input {
+  margin: 0;
+  cursor: pointer;
+}
+
+.usr-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 18px;
+}
+
+.usr-provider-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  border: 1px solid var(--mui-border);
+  border-radius: 4px;
+  background: #f8fafc;
+  font: 500 13px var(--font-sans);
+  color: var(--fg-1);
+  box-sizing: border-box;
 }

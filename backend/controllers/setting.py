@@ -138,3 +138,19 @@ async def update_setting(
             {"message": "수정 실패 " + str(e)},
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+def get_my_login_histories(access_token: str | None = Cookie(default=None)):
+    current_user = auth.authenticate_access_token(access_token)
+    data = setting.get_my_login_histories(
+        current_user["id"],
+        current_session_id=current_user.get("session_id"),
+        limit=5
+    )
+    return JSONResponse(
+        {
+            "data": data,
+            "message": "최근 로그인 히스토리 조회 완료",
+        },
+        status_code=status.HTTP_200_OK,
+    )

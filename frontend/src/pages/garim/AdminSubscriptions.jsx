@@ -3,22 +3,18 @@ import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import "../../css/garim-pages/AdminSubscriptions.css";
 import GarimPage from "../../components/garim/GarimPage";
 import {
-  cancelAdminSubscription,
   getAdminSubscriptionDetail,
   getAdminSubscriptions,
 } from "../../utils/api";
+import { formatKstDate, formatKstDateTime } from "../../utils/timezone";
 
 function formatDateTime(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("ko-KR", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatKstDateTime(value);
+}
+
+// 구독 기간 종료일 등을 연.월.일 형식으로 간결하게 렌더링하여 모달 카드를 두 줄로 맞추기 위한 한국어 날짜 헬퍼 함수
+function formatDateOnly(value) {
+  return formatKstDate(value);
 }
 
 function formatMoney(value) {
@@ -89,7 +85,7 @@ export default function AdminSubscriptions() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
 
-  const [searchKey, setSearchKey] = useState("email");
+  const [searchKey, setSearchKey] = useState("all");
   const [searchValue, setSearchValue] = useState("");
   const [planCode, setPlanCode] = useState("");
   const [subscriptionStatus, setSubscriptionStatus] = useState("");
@@ -107,11 +103,6 @@ export default function AdminSubscriptions() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [detailData, setDetailData] = useState(null);
-
-  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
-  const [cancelTarget, setCancelTarget] = useState(null);
-  const [cancelReason, setCancelReason] = useState("");
-  const [cancelLoading, setCancelLoading] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -177,7 +168,7 @@ export default function AdminSubscriptions() {
   };
 
   const handleReset = () => {
-    setSearchKey("email");
+    setSearchKey("all");
     setSearchValue("");
     setPlanCode("");
     setSubscriptionStatus("");
@@ -207,69 +198,12 @@ export default function AdminSubscriptions() {
     }
   };
 
-  /* 구독 강제 취소 — 취소 사유 입력 모달 열기 */
-  const handleCancelSubscriptionClick = (subscription) => {
-    const userEmail = detailData?.user?.email || "해당 사용자";
 
-    // ── 구독 취소 경고 조건 체크 ──
-    const warnings = [];
-
-    // 조건 1: 최근 결제일 기준 14일 경과
-    if (subscription.days_since_last_payment != null && subscription.days_since_last_payment >= 14) {
-      warnings.push(`[${userEmail}] 사용자는 결제일 기준 14일이 지난 사용자입니다.`);
-    }
-    // 조건 2: 플랜 크레딧의 15% 이상 사용
-    if (subscription.plan_credits > 0 && subscription.credit_used_ratio >= 15) {
-      warnings.push(`[${userEmail}] 사용자는 충전 크레딧의 15% 이상 사용한 사용자입니다.`);
-    }
-    if (warnings.length > 0) {
-      alert(`⚠️ 구독 취소 주의 사항\n\n${warnings.join("\n\n")}`);
-    }
-
-    setCancelTarget(subscription);
-    setCancelReason("");
-    setCancelConfirmOpen(true);
-  };
-
-  /* 모달에서 실제 취소 API 호출 */
-  const handleConfirmCancel = async () => {
-    if (!cancelTarget || !detailData) return;
-    const reason = cancelReason.trim();
-    if (!reason) {
-      alert("취소 사유를 입력해주세요.");
-      return;
-    }
-    if (reason.length > 30) {
-      alert("취소 사유는 30글자 이내로 입력해주세요.");
-      return;
-    }
-
-    setCancelLoading(true);
-    try {
-      const userId = detailData.user.user_id;
-      const res = await cancelAdminSubscription(userId, cancelTarget.subscription_id, reason);
-      const restored = res?.data?.restored_plan || "Free";
-      alert(`구독이 취소되었습니다.\n복원된 플랜: ${restored}`);
-
-      setCancelConfirmOpen(false);
-      setCancelTarget(null);
-
-      /* 상세 모달 새로고침 */
-      const detail = await getAdminSubscriptionDetail(userId);
-      setDetailData(detail.data);
-
-      /* 목록 새로고침 */
-      setQueryVersion((v) => v + 1);
-    } catch (err) {
-      alert("구독 취소 중 오류가 발생했습니다: " + (err.message || "알 수 없는 오류"));
-    } finally {
-      setCancelLoading(false);
-    }
-  };
 
   return (
     <GarimPage bodyClass="" screenLabel="31 Admin Subscriptions">
       <div className="adm-shell">
+        {/* 일관된 순서로 정비된 공통 관리자 사이드바 */}
         <aside className="adm-side">
           <div className="sec">운영</div>
           <a href="/admin/monitoring">
@@ -284,14 +218,14 @@ export default function AdminSubscriptions() {
             <span className="material-icons">verified_user</span>
             컴플라이언스
           </a>
-          <div className="sec">서비스</div>
+          <div className="sec">시스템</div>
           <a href="/admin/users">
             <span className="material-icons">people</span>
             사용자
           </a>
-          <a href="/admin/analytics">
-            <span className="material-icons">analytics</span>
-            분석
+          <a href="/admin/login-history">
+            <span className="material-icons">manage_history</span>
+            로그인 히스토리
           </a>
           <a href="/admin/policy">
             <span className="material-icons">tune</span>
@@ -305,7 +239,11 @@ export default function AdminSubscriptions() {
             <span className="material-icons">payments</span>
             사용자 결제 확인
           </a>
-                  <a href="/admin/reports">
+          <a href="/admin/analytics">
+            <span className="material-icons">analytics</span>
+            분석
+          </a>
+          <a href="/admin/reports">
             <span className="material-icons">report_problem</span>
             문의 내역
           </a>
@@ -411,15 +349,21 @@ export default function AdminSubscriptions() {
                   <label>검색</label>
                   <div className="sb-search-input-wrap">
                     <select value={searchKey} onChange={(e) => setSearchKey(e.target.value)}>
+                      <option value="all">전체 검색</option>
                       <option value="email">이메일</option>
                       <option value="user_id">사용자 ID</option>
-                      <option value="all">전체 검색</option>
                     </select>
                     <input
                       type="search"
                       value={searchValue}
                       onChange={(e) => setSearchValue(e.target.value)}
-                      placeholder="사용자 검색"
+                      placeholder={
+                        searchKey === "email"
+                          ? "이메일 검색"
+                          : searchKey === "user_id"
+                          ? "사용자 ID 검색"
+                          : "전체 검색"
+                      }
                     />
                   </div>
                 </div>
@@ -472,9 +416,9 @@ export default function AdminSubscriptions() {
                 <span>사용자</span>
                 <span>현재 플랜</span>
                 <span>구독 상태</span>
+                <span>결제 상태</span>
                 <span>자동결제</span>
                 <span>다음 결제일</span>
-                <span>결제 상태</span>
                 <span>예약 변경</span>
                 <span>관리</span>
               </div>
@@ -489,18 +433,12 @@ export default function AdminSubscriptions() {
                 <div className="sb-data-row" key={row.user_id}>
                   <span className="sb-user-cell">
                     <strong>{row.email}</strong>
-                    <small className="mono">{row.user_id}</small>
                   </span>
 
                   <span className="sb-plan-cell">
                     <span className={getPlanTone(row.current_plan_code)}>
                       {row.current_plan_name}
                     </span>
-                    {row.carried_over_subscription && (
-                      <small className="sb-subtext">
-                        이월: {row.carried_over_subscription.plan_name} {row.carried_over_subscription.carried_over_days}일
-                      </small>
-                    )}
                   </span>
 
                   <span className="sb-state-cell">
@@ -508,17 +446,23 @@ export default function AdminSubscriptions() {
                     <small className="sb-subtext">active {row.active_subscription_count}건</small>
                   </span>
 
-                  <span>{boolLabel(row.current_subscription?.auto_renew)}</span>
-                  <span className="mono">{formatDateTime(row.current_subscription?.next_billing_at)}</span>
-
+                  {/* 결제 상태 컬럼 */}
                   <span className="sb-status-cell">
-                    <span className={`mui-chip ${statusChipClass(row.current_subscription?.billing_status)}`}>
-                      {mapStatusLabel(row.current_subscription?.billing_status)}
-                    </span>
+                    {row.current_subscription?.billing_status ? (
+                      <span className={`mui-chip ${statusChipClass(row.current_subscription.billing_status)}`}>
+                        {mapStatusLabel(row.current_subscription.billing_status)}
+                      </span>
+                    ) : (
+                      "-"
+                    )}
                     {row.latest_billing_attempt?.failure_reason && (
                       <small className="sb-subtext">{row.latest_billing_attempt.failure_reason}</small>
                     )}
                   </span>
+
+                  {/* 자동 결제 및 다음 결제일 컬럼 */}
+                  <span>{boolLabel(row.current_subscription?.auto_renew)}</span>
+                  <span className="mono">{formatDateTime(row.current_subscription?.next_billing_at)}</span>
 
                   <span className="sb-scheduled-cell">
                     {row.scheduled_plan_change ? (
@@ -600,39 +544,39 @@ export default function AdminSubscriptions() {
                   <div className="sb-detail-summary-card">
                     <span className="sb-detail-label">현재 적용 플랜</span>
                     <strong>{detailData.current_applied_plan?.plan_name || "-"}</strong>
-                    <small className="mono">{detailData.current_applied_plan?.subscription_id || "-"}</small>
+                    {/* [한글 주석] 이월/대체 관련 설명 대신 빈 공간으로 둡니다. */}
+                    <small>-</small>
                   </div>
                   <div className="sb-detail-summary-card">
                     <span className="sb-detail-label">다음 결제일</span>
                     <strong>{formatDateTime(detailData.current_applied_plan?.next_billing_at)}</strong>
-                    <small>period end {formatDateTime(detailData.current_applied_plan?.current_period_end)}</small>
+                    {/* 종료일 한글화 및 날짜 포맷 최적화로 깔끔한 두 줄 완성 - Free 플랜이 아닐 때만 렌더링 */}
+                    {detailData.current_applied_plan?.plan_code !== "free" && (
+                      <small>종료일: {formatDateOnly(detailData.current_applied_plan?.current_period_end)}</small>
+                    )}
                   </div>
                   <div className="sb-detail-summary-card">
                     <span className="sb-detail-label">자동결제 / 취소예약</span>
                     <strong>{boolLabel(detailData.current_applied_plan?.auto_renew)} / {boolLabel(detailData.current_applied_plan?.cancel_at_period_end)}</strong>
-                    <small>billing {mapStatusLabel(detailData.current_applied_plan?.billing_status)}</small>
-                  </div>
-                  <div className="sb-detail-summary-card">
-                    <span className="sb-detail-label">이월 기간</span>
-                    <strong>{detailData.current_applied_plan?.carried_over_days ?? 0}일</strong>
-                    <small>superseded {detailData.current_applied_plan?.superseded_by_subscription_id || "-"}</small>
+                    {/* 영문 상태값을 한글로 매핑하여 표시 - Free 플랜이 아닐 때만 렌더링 */}
+                    {detailData.current_applied_plan?.plan_code !== "free" && (
+                      <small>결제 상태: {mapStatusLabel(detailData.current_applied_plan?.billing_status)}</small>
+                    )}
                   </div>
                 </section>
 
                 <section className="sb-detail-section">
                   <div className="sb-section-head">
                     <h3>활성 구독 목록</h3>
-                    <p>현재 사용자에게 유효한 active subscription 목록입니다.</p>
+                    {/* active subscription 한글화 */}
+                    <p>현재 사용자에게 유효한 활성 구독 목록입니다.</p>
                   </div>
                   <div className="sb-detail-table">
+                    {/* [한글 주석] 이월 및 대체 컬럼을 지우고 플랜, 종료 일시, 자동결제 여부만 노출합니다. */}
                     <div className="sb-detail-row sb-detail-head sb-detail-row-subscription">
                       <span>플랜</span>
-                      <span>subscription_id</span>
-                      <span>period end</span>
+                      <span>종료 일시</span>
                       <span>자동결제</span>
-                      <span>carryover</span>
-                      <span>superseded_by</span>
-                      <span>관리</span>
                     </div>
                     {detailData.active_subscriptions.length === 0 && (
                       <div className="sb-empty">활성 구독이 없습니다.</div>
@@ -640,24 +584,8 @@ export default function AdminSubscriptions() {
                     {detailData.active_subscriptions.map((subscription) => (
                       <div className="sb-detail-row sb-detail-row-subscription" key={subscription.subscription_id}>
                         <span>{subscription.plan_name}</span>
-                        <span className="mono">{subscription.subscription_id}</span>
                         <span className="mono">{formatDateTime(subscription.current_period_end)}</span>
                         <span>{boolLabel(subscription.auto_renew)}</span>
-                        <span>{subscription.carried_over_days || 0}일</span>
-                        <span className="mono">{subscription.superseded_by_subscription_id || "-"}</span>
-                        <span>
-                          {/* Free 플랜은 취소 불가 */}
-                          {subscription.plan_code !== "free" && (
-                            <button
-                              type="button"
-                              className="sb-cancel-sub-btn"
-                              onClick={() => handleCancelSubscriptionClick(subscription)}
-                            >
-                              <span className="material-icons">cancel</span>
-                              구독 취소
-                            </button>
-                          )}
-                        </span>
                       </div>
                     ))}
                   </div>
@@ -701,13 +629,17 @@ export default function AdminSubscriptions() {
                     <p>업그레이드, 다운그레이드 예약, Free 변경 예약 이력입니다.</p>
                   </div>
                   <div className="sb-detail-table">
+                    {/* [한글 주석] 이전 플랜 정보 외에 정산 차액 4개 필드 중 대표 필드 3개(대상 요금, 이용분 차감, 실제 청구액)를 테이블로 노출합니다. */}
                     <div className="sb-detail-row sb-detail-head sb-detail-row-change">
                       <span>생성 일시</span>
                       <span>유형</span>
                       <span>상태</span>
-                      <span>from</span>
-                      <span>to</span>
+                      <span>이전 플랜</span>
+                      <span>변경 플랜</span>
                       <span>적용 시점</span>
+                      <span>대상 요금</span>
+                      <span>이용분 차감</span>
+                      <span>실제 청구액</span>
                     </div>
                     {detailData.plan_changes.length === 0 && (
                       <div className="sb-empty">플랜 변경 이력이 없습니다.</div>
@@ -724,76 +656,15 @@ export default function AdminSubscriptions() {
                         <span>{change.from_plan_name || "-"}</span>
                         <span>{change.to_plan_name || "-"}</span>
                         <span className="mono">{formatDateTime(change.effective_at)}</span>
+                        <span>{change.change_type === "upgrade" && change.status === "applied" ? `${formatMoney(change.target_plan_amount)}원` : "-"}</span>
+                        <span>{change.change_type === "upgrade" && change.status === "applied" ? `${formatMoney(change.discount_amount)}원` : "-"}</span>
+                        <span>{change.change_type === "upgrade" && change.status === "applied" ? `${formatMoney(change.charged_amount)}원` : "-"}</span>
                       </div>
                     ))}
                   </div>
                 </section>
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {cancelConfirmOpen && cancelTarget && detailData && (
-        <div className="sb-modal-backdrop" onClick={() => !cancelLoading && setCancelConfirmOpen(false)}>
-          <div className="sb-modal sb-modal--narrow" onClick={(e) => e.stopPropagation()}>
-            <div className="sb-modal-head">
-              <div>
-                <h2>구독 취소 확인</h2>
-                <p>선택한 구독을 강제 취소합니다.</p>
-              </div>
-              <button
-                type="button"
-                className="sb-icon-btn"
-                onClick={() => setCancelConfirmOpen(false)}
-                disabled={cancelLoading}
-              >
-                <span className="material-icons">close</span>
-              </button>
-            </div>
-            
-            <div className="sb-detail-body sb-cancel-body">
-              <div className="sb-cancel-target">
-                <strong>사용자:</strong> {detailData.user.email} <br/>
-                <strong>취소 플랜:</strong> {cancelTarget.plan_name}
-              </div>
-              <div className="sb-reason-field">
-                <label className="sb-reason-label">
-                  취소 사유 <span className="sb-required-mark">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="취소 사유를 30글자 이내로 요약해주세요"
-                  maxLength={30}
-                  value={cancelReason}
-                  onChange={(e) => setCancelReason(e.target.value)}
-                  autoFocus
-                  className="sb-reason-input"
-                />
-                <span className="sb-reason-count">
-                  {cancelReason.length}/30
-                </span>
-              </div>
-            </div>
-
-            <div className="sb-modal-foot">
-              <button
-                type="button"
-                className="mui-btn mui-btn--outlined"
-                onClick={() => setCancelConfirmOpen(false)}
-                disabled={cancelLoading}
-              >
-                닫기
-              </button>
-              <button
-                type="button"
-                className="mui-btn mui-btn--contained mui-btn--error"
-                onClick={handleConfirmCancel}
-                disabled={cancelLoading || !cancelReason.trim()}
-              >
-                구독 취소
-              </button>
-            </div>
           </div>
         </div>
       )}

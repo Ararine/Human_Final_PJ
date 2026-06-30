@@ -1,105 +1,33 @@
-/*
-코드 설명:
-요금/크레딧 정책의 기본값과 포맷 유틸, 정책→플랜 변환 로직을 모은 모듈. usePricingPlans 훅은 관리자 정책을
-불러와 기본값과 병합한 뒤 정렬된 구독/크레딧 플랜 목록을 제공한다.
-*/
 import { useEffect, useMemo, useState } from "react";
 import { getAdminPolicySettings } from "../utils/api";
 
 export const PLAN_KEYS = ["free", "pro", "studio"];
 
-export const DEFAULT_POLICY = {
+const EMPTY_POLICY = {
   file_processing: {
-    plans: {
-      free: {
-        fileSizeLimit: 50,
-        maxJobs: 3,
-        monthlyQuota: 5,
-        resultRetention: 0,
-      },
-      pro: {
-        fileSizeLimit: 500,
-        maxJobs: 10,
-        monthlyQuota: 50,
-        resultRetention: 7,
-      },
-      studio: {
-        fileSizeLimit: 2048,
-        maxJobs: 30,
-        monthlyQuota: null,
-        resultRetention: 14,
-      },
-    },
+    plans: {},
     allowedFormats: ["jpg", "jpeg", "png", "webp", "mp4", "mov"],
   },
   payment: {
-    plans: {
-      free: {
-        credits: 10,
-        price: 0,
-        sortOrder: 10,
-        status: "active",
-      },
-      pro: {
-        credits: 60,
-        price: 9900,
-        sortOrder: 20,
-        status: "active",
-      },
-      studio: {
-        credits: 150,
-        price: 19800,
-        sortOrder: 30,
-        status: "active",
-      },
-    },
-    creditPlans: {
-      credit_25: {
-        name: "25 크레딧",
-        credits: 25,
-        bonusCredits: 0,
-        price: 5000,
-        sortOrder: 10,
-        status: "active",
-      },
-      credit_80: {
-        name: "80 크레딧",
-        credits: 80,
-        bonusCredits: 0,
-        price: 15000,
-        sortOrder: 20,
-        status: "active",
-      },
-      credit_150: {
-        name: "150 크레딧",
-        credits: 150,
-        bonusCredits: 0,
-        price: 25000,
-        sortOrder: 30,
-        status: "active",
-      },
-    },
+    plans: {},
+    creditPlans: {},
   },
   retention: {
-    plans: {
-      free: { autoDeleteOriginalHours: 12, metadataRetentionDays: 90 },
-      pro: { autoDeleteOriginalHours: 12, metadataRetentionDays: 90 },
-      studio: { autoDeleteOriginalHours: 12, metadataRetentionDays: 90 },
-    },
+    plans: {},
   },
 };
 
 export const PLAN_META = {
   free: {
-    name: "Free",
-    badge: "Basic",
+    name: "무료",
+    badge: "기본",
     badgeClass: "mui-chip--primary",
     description: "개인 진단과 가벼운 체험을 위한 무료 플랜.",
     cta: "무료로 시작",
   },
   pro: {
     name: "Pro",
-    badge: "Most Popular",
+    badge: "인기",
     badgeClass: "mui-chip--soft-warning",
     featured: true,
     description: "정기적으로 영상을 다루는 크리에이터를 위한 플랜.",
@@ -107,7 +35,7 @@ export const PLAN_META = {
   },
   studio: {
     name: "Studio",
-    badge: "Team",
+    badge: "팀",
     badgeClass: "mui-chip--secondary",
     description: "팀 단위 작업과 대량 분석을 위한 최상위 플랜.",
     cta: "Studio 시작하기",
@@ -132,34 +60,29 @@ export function formatFileSize(value) {
   return `${size.toLocaleString("ko-KR")}MB`;
 }
 
-export function mergePolicy(base, incoming = {}) {
-  const incomingFilePlans = incoming.file_processing?.plans;
-  const incomingPaymentPlans = incoming.payment?.plans;
-  const incomingRetentionPlans = incoming.retention?.plans;
-  const incomingCreditPlans = incoming.payment?.creditPlans;
-
+export function normalizePolicy(incoming = {}) {
   return {
     file_processing: {
-      ...base.file_processing,
+      ...EMPTY_POLICY.file_processing,
       ...(incoming.file_processing || {}),
-      plans: incomingFilePlans || base.file_processing.plans,
+      plans: incoming.file_processing?.plans || {},
     },
     payment: {
-      ...base.payment,
+      ...EMPTY_POLICY.payment,
       ...(incoming.payment || {}),
-      plans: incomingPaymentPlans || base.payment.plans,
-      creditPlans: incomingCreditPlans || base.payment.creditPlans,
+      plans: incoming.payment?.plans || {},
+      creditPlans: incoming.payment?.creditPlans || {},
     },
     retention: {
-      ...base.retention,
+      ...EMPTY_POLICY.retention,
       ...(incoming.retention || {}),
-      plans: incomingRetentionPlans || base.retention.plans,
+      plans: incoming.retention?.plans || {},
     },
   };
 }
 
 export function buildPricingPlans(policy) {
-  return Object.entries(policy.payment.plans || {})
+  return Object.entries(policy?.payment?.plans || {})
     .map(([key, payment]) => {
       const meta = PLAN_META[key] || {
         name: payment.name || key,
@@ -175,19 +98,13 @@ export function buildPricingPlans(policy) {
         badge: payment.badgeLabel || meta.badge,
         badgeClass: payment.badgeClass || meta.badgeClass,
         description: payment.description || meta.description,
-        // 버튼 문구: 플랜 메타(cta)를 우선 사용, 없으면 price 기준 기본값
         cta: meta.cta || (Number(payment.price || 0) === 0 ? "무료로 시작" : "결제하기"),
         sortOrder: Number(payment.sortOrder ?? 0),
+        planRank: Number(payment.planRank ?? 0),
         status: payment.status || "active",
-        file:
-          policy.file_processing.plans[key] ||
-          DEFAULT_POLICY.file_processing.plans[key] ||
-          {},
+        file: policy?.file_processing?.plans?.[key] || {},
         payment,
-        retention:
-          policy.retention.plans[key] ||
-          DEFAULT_POLICY.retention.plans[key] ||
-          {},
+        retention: policy?.retention?.plans?.[key] || {},
       };
     })
     .filter((plan) => plan.status === "active")
@@ -195,7 +112,7 @@ export function buildPricingPlans(policy) {
 }
 
 export function buildCreditPlans(policy) {
-  return Object.entries(policy.payment.creditPlans || {})
+  return Object.entries(policy?.payment?.creditPlans || {})
     .map(([key, credit]) => ({
       key,
       productType: "credit",
@@ -209,13 +126,14 @@ export function buildCreditPlans(policy) {
         bonusCredits: credit.bonusCredits || 0,
       },
       expiresDays: credit.expiresDays,
+      popularityCount: Number(credit.popularityCount ?? 0),
     }))
     .filter((plan) => plan.status === "active")
     .sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
 export function usePricingPlans() {
-  const [policy, setPolicy] = useState(DEFAULT_POLICY);
+  const [policy, setPolicy] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -226,7 +144,7 @@ export function usePricingPlans() {
       try {
         const response = await getAdminPolicySettings();
         if (cancelled) return;
-        setPolicy(mergePolicy(DEFAULT_POLICY, response.data || {}));
+        setPolicy(normalizePolicy(response.data || {}));
       } catch (err) {
         console.error("Failed to load pricing policy", err);
         if (!cancelled) setError(err);
@@ -241,8 +159,9 @@ export function usePricingPlans() {
     };
   }, []);
 
-  const plans = useMemo(() => buildPricingPlans(policy), [policy]);
-  const creditPlans = useMemo(() => buildCreditPlans(policy), [policy]);
+  const normalizedPolicy = policy || EMPTY_POLICY;
+  const plans = useMemo(() => buildPricingPlans(normalizedPolicy), [normalizedPolicy]);
+  const creditPlans = useMemo(() => buildCreditPlans(normalizedPolicy), [normalizedPolicy]);
 
-  return { plans, creditPlans, policy, loading, error };
+  return { plans, creditPlans, policy: normalizedPolicy, loading, error };
 }

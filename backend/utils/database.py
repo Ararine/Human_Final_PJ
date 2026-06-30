@@ -19,9 +19,11 @@ DB_NAME = os.getenv("DB_NAME") or os.getenv("POSTGRES_DB", "postgres")
 
 DATABASE_URL = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-# DB 객체 생성
+# [한글 주석] DB 객체 생성 - connect_args로 PostgreSQL 세션 타임존을 KST(Asia/Seoul)로 고정
+# 이 설정으로 인해 DB의 NOW(), CURRENT_TIMESTAMP 등 모든 시간 함수가 KST 기준으로 동작한다.
 engine = create_engine(
-    DATABASE_URL
+    DATABASE_URL,
+    connect_args={"options": "-c timezone=Asia/Seoul"}
 )
 
 # 세션 관리 설정

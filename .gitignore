@@ -26,6 +26,9 @@ superpowers
 Microsoft
 .tmp_*
 
+# 작업 폴더
+reports/
+
 # LLM 공통 설정
 GEMINI.md
 AGENTS.md
@@ -40,3 +43,6 @@ STT_Model
 *.pth
 *.h5
 *.safetensors
+
+# output_file 폴더
+output_file/

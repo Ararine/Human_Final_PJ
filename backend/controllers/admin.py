@@ -1,5 +1,5 @@
 from fastapi import Body, Query, status, Cookie
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from services import admin as admin_service
 from services import auth as auth_service
@@ -303,6 +303,89 @@ def refund_payment(payment_id: str, payload: dict = Body(default={}), access_tok
         )
     except ValueError as ve:
         return JSONResponse({"message": str(ve)}, status_code=400)
+    except Exception as e:
+        return _json_error(e)
+
+
+def list_login_histories(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    keyword: str = Query(None),
+    period: str = Query(None),
+    result: str = Query(None),
+    provider: str = Query(None),
+    ip: str = Query(None),
+    start_date: str = Query(None),
+    end_date: str = Query(None),
+    search_type: str = Query(None),
+    search_keyword: str = Query(None),
+):
+    # [한글 주석] 로그인 히스토리 목록 데이터를 필터 파라미터와 함께 조회하는 컨트롤러입니다.
+    try:
+        data = admin_service.get_login_histories_list(
+            page=page,
+            limit=limit,
+            keyword=keyword,
+            period=period,
+            result=result,
+            provider=provider,
+            ip=ip,
+            start_date=start_date,
+            end_date=end_date,
+            search_type=search_type,
+            search_keyword=search_keyword,
+        )
+        return JSONResponse(
+            {"data": data, "message": "Login histories loaded successfully."},
+            status_code=200,
+        )
+    except Exception as e:
+        return _json_error(e)
+
+
+def get_login_history_detail(login_history_id: str):
+    # [한글 주석] 로그인 히스토리 단건의 상세 정보를 조회하는 컨트롤러입니다.
+    try:
+        data = admin_service.get_login_history_detail(login_history_id)
+        return JSONResponse(
+            {"data": data, "message": "Login history detail loaded successfully."},
+            status_code=200,
+        )
+    except ValueError as ve:
+        return JSONResponse({"message": str(ve)}, status_code=404)
+    except Exception as e:
+        return _json_error(e)
+
+
+def export_login_histories_csv(
+    keyword: str = Query(None),
+    period: str = Query(None),
+    result: str = Query(None),
+    provider: str = Query(None),
+    ip: str = Query(None),
+    start_date: str = Query(None),
+    end_date: str = Query(None),
+    search_type: str = Query(None),
+    search_keyword: str = Query(None),
+):
+    # [한글 주석] 필터링된 로그인 히스토리를 CSV 파일 스트림 형태로 다운로드하는 컨트롤러입니다.
+    try:
+        generator = admin_service.export_login_histories_csv_stream(
+            keyword=keyword,
+            period=period,
+            result=result,
+            provider=provider,
+            ip=ip,
+            start_date=start_date,
+            end_date=end_date,
+            search_type=search_type,
+            search_keyword=search_keyword,
+        )
+        headers = {
+            "Content-Disposition": 'attachment; filename="garim_login_histories.csv"',
+            "Content-Type": "text/csv; charset=utf-8-sig",
+        }
+        return StreamingResponse(generator, headers=headers, media_type="text/csv")
     except Exception as e:
         return _json_error(e)
 

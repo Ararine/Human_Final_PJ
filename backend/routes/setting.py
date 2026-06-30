@@ -29,6 +29,12 @@ router.add_api_route(
 )
 
 router.add_api_route(
+    "/me/login-histories",
+    setting.get_my_login_histories,
+    methods=["GET"]
+)
+
+router.add_api_route(
     "/{user_id}",
     setting.get_setting,
     methods=["GET"]

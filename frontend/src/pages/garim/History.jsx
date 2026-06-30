@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { getHistoryList, getDownloadUrl, deleteAnalysisJob, getApiBaseUrl } from "../../utils/api";
+import { parseKstDate } from "../../utils/timezone";
 import "../../css/garim-pages/History.css";
 
 import GarimPage from "../../components/garim/GarimPage";
@@ -13,6 +14,18 @@ function formatBytes(bytes, decimals = 1) {
   const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
+function formatHistoryDate(date) {
+  return date.toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" });
+}
+
+function formatHistoryTime(date) {
+  return date.toLocaleTimeString("ko-KR", {
+    timeZone: "Asia/Seoul",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export default function History() {
@@ -152,7 +165,7 @@ export default function History() {
               const isAudio = job.media_type === "audio";
               const isImage = job.media_type === "image";
               const iconName = isVideo ? "movie" : isAudio ? "graphic_eq" : "image";
-              const dateObj = job.created_at ? new Date(job.created_at) : new Date();
+              const dateObj = parseKstDate(job.created_at) || new Date();
 
               return (
                 <div className="hist-row" key={job.job_id}>
@@ -170,21 +183,21 @@ export default function History() {
                     </div>
                   </div>
                   <div className="date">
-                    {dateObj.toLocaleDateString()}
+                    {formatHistoryDate(dateObj)}
                     <br />
                     <span className="caption-k hist-cap-time">
-                      {dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {formatHistoryTime(dateObj)}
                     </span>
                   </div>
                   <div className="date hist-col-pad">
                     {(() => {
-                      const expireDate = job.expires_at ? new Date(job.expires_at) : new Date(dateObj.getTime() + 7 * 24 * 60 * 60 * 1000);
+                      const expireDate = parseKstDate(job.expires_at) || new Date(dateObj.getTime() + 7 * 24 * 60 * 60 * 1000);
                       return (
                         <>
-                          <span className="hist-expire-date">{expireDate.toLocaleDateString()}</span>
+                          <span className="hist-expire-date">{formatHistoryDate(expireDate)}</span>
                           <br />
                           <span className="caption-k hist-expire-time">
-                            {expireDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {formatHistoryTime(expireDate)}
                           </span>
                         </>
                       );

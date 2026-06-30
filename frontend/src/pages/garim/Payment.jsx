@@ -21,12 +21,12 @@ const PLAN_PAYMENT = {
     defaultAmount: 49500,
   },
   credit_100: {
-    label: "100 Credits",
+    label: "100 크레딧",
     defaultCredits: 100,
     defaultAmount: 5000,
   },
   credit_500: {
-    label: "500 Credits",
+    label: "500 크레딧",
     defaultCredits: 500,
     defaultAmount: 20000,
   },
@@ -40,6 +40,16 @@ function formatPrice(value) {
   return Number(value || 0).toLocaleString("ko-KR");
 }
 
+function getBillingCustomerKey() {
+  const storageKey = "garimBillingCustomerKey";
+  const stored = sessionStorage.getItem(storageKey);
+  if (stored) return stored;
+
+  const generated = `customer-${crypto.randomUUID()}`;
+  sessionStorage.setItem(storageKey, generated);
+  return generated;
+}
+
 export default function Payment() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -48,6 +58,7 @@ export default function Payment() {
   // 새 URL 파라미터: productType, productCode (구 plan 파라미터 fallback 지원)
   const productType = (searchParams.get("productType") || "subscription").toLowerCase();
   const productCode = (searchParams.get("productCode") || searchParams.get("plan") || "pro").toLowerCase();
+  const billingCycle = searchParams.get("billingCycle") === "yearly" ? "yearly" : "monthly";
   const isEmbed = searchParams.get("embed") === "1";
 
   const basePlan = PLAN_PAYMENT[productCode] || PLAN_PAYMENT.pro;
@@ -79,23 +90,40 @@ export default function Payment() {
 
     setIsSubmitting(true);
     try {
-      const tempOrder = await createPaymentTempOrder({
-        product_type: productType,
-        product_code: productCode,
-        amount: plan.amount,
-      });
-
-      sessionStorage.setItem("lastOrderId", tempOrder.orderId);
-
       const tossPayments = await loadTossPayments(clientKey);
-      await tossPayments.requestPayment("CARD", {
-        amount: tempOrder.amount,
-        orderId: tempOrder.orderId,
-        orderName: `Garim ${tempOrder.orderName}`,
-        customerName: "Garim 사용자",
-        successUrl: `${window.location.origin}/payment/success`,
-        failUrl: `${window.location.origin}/payment/fail`,
-      });
+
+      if (productType === "credit") {
+        /* [한글 주석] 크레딧 충전의 경우 기존의 1회성 카드 결제창(requestPayment)을 띄우고 성공 시 /payment/success로 보냅니다. */
+        const tempOrder = await createPaymentTempOrder({
+          product_type: productType,
+          product_code: productCode,
+          amount: plan.amount,
+        });
+
+        sessionStorage.setItem("lastOrderId", tempOrder.orderId);
+
+        await tossPayments.requestPayment("CARD", {
+          amount: tempOrder.amount,
+          orderId: tempOrder.orderId,
+          orderName: `Garim ${tempOrder.orderName}`,
+          customerName: "Garim 사용자",
+          successUrl: `${window.location.origin}/payment/success`,
+          failUrl: `${window.location.origin}/payment/fail`,
+        });
+      } else {
+        /* [한글 주석] 정기 구독 요금제의 경우, 자동 결제용 빌링키 인증창(requestBillingAuth)을 띄우고 성공 시 /payment/billing-success로 리다이렉트합니다. */
+        const customerKey = getBillingCustomerKey();
+        const successParams = new URLSearchParams({
+          planCode: productCode,
+          billingCycle,
+        });
+
+        await tossPayments.requestBillingAuth("CARD", {
+          customerKey,
+          successUrl: `${window.location.origin}/payment/billing-success?${successParams.toString()}`,
+          failUrl: `${window.location.origin}/payment/fail`,
+        });
+      }
     } catch (err) {
       console.error(err);
       alert(err.message || "결제창 실행에 실패했습니다.");

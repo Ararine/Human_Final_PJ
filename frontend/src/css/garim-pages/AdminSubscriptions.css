@@ -290,12 +290,26 @@
 
 .sb-data-row {
   display: grid;
-  grid-template-columns: 1.7fr 1.15fr 1fr 72px 1.05fr 1.1fr 1.25fr 82px;
+  /* 여백이 골고루(균일하게) 분배되도록 컬럼 너비 비율 조정 (사용자/현재 플랜/구독 상태/결제 상태/자동결제/다음 결제일/예약 변경/관리) */
+  grid-template-columns: 2.2fr 1.2fr 1.2fr 1.2fr 1fr 1.4fr 1.4fr 1fr;
   gap: 12px;
   align-items: center;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--mui-divider);
   font: 400 13px var(--font-sans);
+}
+
+.sb-data-row > * {
+  border-bottom: 1px solid var(--mui-divider);
+  padding-bottom: 12px;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.sb-data-row:last-child > * {
+  border-bottom: none;
 }
 
 .sb-data-head {
@@ -310,15 +324,30 @@
   background: rgba(0, 0, 0, 0.02);
 }
 
-.sb-user-cell,
+/* 사용자 세로 배치 셀: 좌측 정렬 유지 */
+.sb-user-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* 플랜, 구독 상태, 결제 상태, 예약 변경 세로 배치 셀: 테이블 컬럼 내에서 가로로 늘어나지 않고 내용에 맞춰 중앙 정렬되도록 함 */
 .sb-plan-cell,
 .sb-state-cell,
 .sb-status-cell,
 .sb-scheduled-cell {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 4px;
   min-width: 0;
+}
+
+/* 사용자(이메일)를 제외한 모든 컬럼(플랜/상태/결제/자동결제/결제일/예약변경/관리) 내 텍스트 및 헤더를 중앙 정렬함 */
+.sb-data-row > *:not(:first-child) {
+  text-align: center;
 }
 
 .sb-user-cell strong,
@@ -357,7 +386,8 @@
 
 .sb-action-cell {
   display: flex;
-  justify-content: flex-end;
+  /* 상세 버튼이 관리 헤더 아래 가운데 정렬이 되도록 배치함 */
+  justify-content: center;
 }
 
 .sb-dash {
@@ -471,9 +501,10 @@
   min-width: 0;
 }
 
+/* [한글 주석] 이월 요약 카드가 제거됨에 따라 3컬럼 그리드로 정렬을 최적화합니다. */
 .sb-detail-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -541,9 +572,15 @@
   min-width: 0;
 }
 
+/* [한글 주석] 대체 구독 및 이월 컬럼 삭제로 인해 3개 컬럼(플랜, 종료일시, 자동결제) 레이아웃으로 축소 조정합니다. */
 .sb-detail-row-subscription {
-  grid-template-columns: 100px 1.3fr 1fr 86px 86px 1.2fr;
-  min-width: 760px;
+  grid-template-columns: 1.5fr 2.5fr 1fr;
+  min-width: 620px;
+}
+
+/* 활성 구독 목록 테이블 내 첫 번째 셀(플랜)을 제외한 모든 셀(대체 플랜, 종료일시, 자동결제, 이월기간) 중앙 정렬 */
+.sb-detail-row-subscription > *:not(:first-child) {
+  text-align: center;
 }
 
 .sb-detail-row-attempt {
@@ -551,9 +588,10 @@
   min-width: 720px;
 }
 
+/* [한글 주석] 업그레이드 정산 내역 3개 컬럼 추가에 따라 9개 컬럼 레이아웃으로 변경하고 가로 스크롤 최소 너비를 확장합니다. */
 .sb-detail-row-change {
-  grid-template-columns: 1.1fr 140px 110px 120px 120px 1.1fr;
-  min-width: 760px;
+  grid-template-columns: 1.1fr 100px 90px 100px 100px 1.1fr 100px 100px 100px;
+  min-width: 960px;
 }
 
 .sb-detail-head {
@@ -748,7 +786,8 @@
   }
 
   .sb-data-row {
-    grid-template-columns: 1.6fr 1fr 0.95fr 64px 1fr 1fr 1.1fr 76px;
+    /* 미디어 쿼리 해상도에 맞춘 컬럼 배치 간격 균형 최적화 */
+    grid-template-columns: 2fr 1.1fr 1.1fr 1.1fr 64px 1.3fr 1.3fr 72px;
   }
 
   .sb-detail-summary {

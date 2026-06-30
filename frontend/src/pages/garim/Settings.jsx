@@ -10,6 +10,7 @@ import {
   getMyPaymentInfo, // 백엔드 결제 조회 API 함수 임포트
   getMyLoginHistories, // 최근 로그인 이력 API 함수 임포트
 } from "../../utils/api";
+import { formatKstDate, formatKstDateTime } from "../../utils/timezone";
 import "../../css/garim-pages/Settings.css";
 
 import GarimPage from "../../components/garim/GarimPage";
@@ -23,34 +24,9 @@ const DEFAULT_SETTINGS = {
 // --- 한국 시간(KST) 변환 유틸리티 함수 ---
 function formatToKST(dateString, isDateOnly = false) {
   if (!dateString) return "-";
-
-  // 백엔드에서 온 데이터에 타임존 표시(Z나 +)가 없다면 UTC로 간주하여 'Z'를 붙여줍니다.
-  let safeString = dateString;
-  if (!safeString.includes("Z") && !safeString.includes("+")) {
-    safeString += "Z";
-  }
-
-  const date = new Date(safeString);
-
-  if (isDateOnly) {
-    return new Intl.DateTimeFormat("ko-KR", {
-      timeZone: "Asia/Seoul",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(date);
-  }
-
-  return new Intl.DateTimeFormat("ko-KR", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(date);
+  return isDateOnly
+    ? formatKstDate(dateString)
+    : formatKstDateTime(dateString, { second: "2-digit", hour12: false });
 }
 
 // --- User-Agent 파싱 유틸리티 함수 ---
@@ -77,6 +53,26 @@ function parseUserAgent(uaString) {
   return `${browser} / ${os}`;
 }
 // ----------------------------------------
+
+function formatOrderName(value) {
+  if (!value) return "-";
+  return String(value)
+    .replace(/yearly subscription/gi, "연 구독")
+    .replace(/monthly subscription/gi, "월 구독")
+    .replace(/renewal/gi, "자동결제 갱신")
+    .replace(/scheduled downgrade/gi, "예약 다운그레이드")
+    .replace(/\bFree\b/g, "무료");
+}
+
+function formatPaymentMethod(value) {
+  const normalized = String(value || "").toLowerCase();
+  if (!normalized) return "-";
+  if (normalized === "billing") return "자동결제";
+  if (normalized === "card") return "카드";
+  if (normalized === "easy_pay") return "간편결제";
+  if (normalized === "free_bypass") return "무료 처리";
+  return value;
+}
 
 export default function Settings() {
   useDocumentTitle("프로필·환경 설정 · Garim");
@@ -351,8 +347,12 @@ export default function Settings() {
                     {planInfo.name.includes("크레딧")
                       ? paymentHistory.find(
                         (pay) => !pay.orderName.includes("크레딧"),
-                      )?.orderName || "무료 플랜"
-                      : planInfo.name}
+                      )?.orderName
+                        ? formatOrderName(paymentHistory.find(
+                          (pay) => !pay.orderName.includes("크레딧"),
+                        )?.orderName)
+                        : "무료 플랜"
+                      : formatOrderName(planInfo.name)}
                   </strong>
                   <span
                     style={{
@@ -380,7 +380,7 @@ export default function Settings() {
                   {isPremium ? (
                     <>
                       <span className="mui-chip mui-chip--soft-success">
-                        Active
+                        사용 중
                       </span>
                       <a
                         href="/billing"
@@ -442,7 +442,7 @@ export default function Settings() {
                             fontSize: "14px",
                           }}
                         >
-                          {pay.orderName}
+                          {formatOrderName(pay.orderName)}
                         </div>
                         <div
                           style={{
@@ -568,7 +568,7 @@ export default function Settings() {
               }}
             >
               <strong className="set-policy-strong">자동 삭제 정책</strong>— 원본
-              파일은 처리 후 12시간 / 결과 파일은 플랜별 (Free 7일·Pro 90일) /
+              파일은 처리 후 12시간 / 결과 파일은 플랜별 (무료 7일·Pro 90일) /
               처리 메타데이터는 90일 (워터마크 역추적용).
             </div>
           </div>
@@ -661,7 +661,7 @@ export default function Settings() {
               <div className="row">
                 <span className="lbl">주문명</span>
                 <span className="val set-val-bold">
-                  {selectedReceipt.orderName}
+                  {formatOrderName(selectedReceipt.orderName)}
                 </span>
               </div>
               <div className="row">
@@ -672,7 +672,7 @@ export default function Settings() {
               </div>
               <div className="row">
                 <span className="lbl">결제 수단</span>
-                <span className="val">{selectedReceipt.method}</span>
+                <span className="val">{formatPaymentMethod(selectedReceipt.method)}</span>
               </div>
               <div className="row total">
                 <span className="lbl">결제 금액</span>

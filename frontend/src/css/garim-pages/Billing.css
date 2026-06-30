@@ -48,7 +48,7 @@
 
 .billing-hero {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start; /* 1번(메타 정보) 영역이 왼쪽 상단에 배치되도록 설정 */
   justify-content: space-between;
   gap: 16px;
   background: linear-gradient(135deg, #f5f8ff 0%, #eef6f2 100%);
@@ -70,6 +70,7 @@
   white-space: nowrap;
   font: 600 34px var(--font-sans);
   color: #1d5f7a;
+  align-self: flex-end; /* 2번(가격 정보) 영역이 오른쪽 하단에 배치되도록 설정 */
 }
 
 .billing-hero__price small {
@@ -214,6 +215,10 @@
   font: 400 13px var(--font-sans);
 }
 
+.billing-history__row > div:last-child {
+  text-align: right;
+}
+
 @media (max-width: 900px) {
   .billing-grid,
   .billing-definition,
@@ -227,6 +232,10 @@
   .billing-history__row {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .billing-history__row > div:last-child {
+    text-align: left;
   }
 
   .billing-hero__price {

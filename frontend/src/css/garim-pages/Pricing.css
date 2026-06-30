@@ -242,22 +242,36 @@
   color: #f4f1ea;
 }
 
-/* 현재 이용 중 플랜 (라이트/다크 공통 그린) */
-.price-card--current {
-  border-color: #2e7d32 !important;
-  box-shadow: 0 10px 28px rgba(46, 125, 50, 0.16) !important;
+/* 현재 이용 중 플랜은 추천 카드보다 한 단계 더 강하게 강조 */
+.pricing-page .price-card--current {
+  position: relative;
+  z-index: 2;
+  border: 2px solid #2e7d32 !important;
+  box-shadow: 0 24px 58px rgba(46, 125, 50, 0.24) !important;
+  transform: scale(1.055);
 }
 
-.price-card--current .price-card__badge {
+.pricing-page .price-card--current:hover {
+  border-color: #1b5e20 !important;
+  box-shadow: 0 28px 64px rgba(46, 125, 50, 0.28) !important;
+  transform: scale(1.055) translateY(-8px);
+}
+
+.pricing-page .price-card--current .price-card__badge {
   background: #e8f5e9;
   color: #1b5e20;
 }
 
-.price-card--current .mui-btn:disabled {
+.pricing-page .price-card--current .price-card__cta--current {
   background: #2e7d32 !important;
   color: #fff !important;
-  cursor: default;
+  border-color: #2e7d32 !important;
   opacity: 1;
+}
+
+.pricing-page .price-card--current .price-card__cta--current:hover {
+  background: #1b5e20 !important;
+  border-color: #1b5e20 !important;
 }
 
 @media (max-width: 1100px) {
@@ -575,6 +589,34 @@ table.compare .x {
 
 :root[data-theme="dark"] .pricing-page .price-card--featured .mui-btn:hover {
   background: linear-gradient(90deg, #e3c570, #d4ad53);
+}
+
+:root[data-theme="dark"] .pricing-page .price-card--current {
+  background: linear-gradient(165deg, rgba(27, 94, 32, 0.28) 0%, #111812 100%);
+  border: 2px solid #66bb6a !important;
+  box-shadow: 0 24px 58px rgba(102, 187, 106, 0.24) !important;
+}
+
+:root[data-theme="dark"] .pricing-page .price-card--current:hover {
+  border-color: #81c784 !important;
+  box-shadow: 0 28px 64px rgba(102, 187, 106, 0.3) !important;
+}
+
+:root[data-theme="dark"] .pricing-page .price-card--current .price-card__badge {
+  background: #66bb6a;
+  color: #071708;
+}
+
+:root[data-theme="dark"] .pricing-page .price-card--current .price-card__price,
+:root[data-theme="dark"] .pricing-page .price-card--current .price-card__credit-line {
+  color: #a5d6a7;
+}
+
+:root[data-theme="dark"] .pricing-page .price-card--current .price-card__cta--current,
+:root[data-theme="dark"] .pricing-page .price-card--current .price-card__cta--current:hover {
+  background: #66bb6a !important;
+  color: #071708 !important;
+  border-color: #66bb6a !important;
 }
 
 /* 충전 카드 (다크) */

@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 from schemas.payment import (
     BillingKeyRegisterRequest,
     PaymentConfirmRequest,
-    TempOrderRequest
+    TempOrderRequest,
+    BillingConfirmRequest,
 )
 
 from services import billing, payment
@@ -122,3 +123,26 @@ def list_billing_keys(current_user: dict, db: Session):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# [한글 주석] 정기 결제 빌링 인증 성공 시 최초 승인 및 구독 개시를 처리하는 컨트롤러 함수
+async def confirm_billing_payment(
+    body: BillingConfirmRequest,
+    current_user: dict,
+    db: Session,
+):
+    try:
+        result = await payment.confirm_billing_payment(
+            db=db,
+            auth_key=body.authKey,
+            customer_key=body.customerKey,
+            plan_code=body.planCode,
+            billing_cycle=body.billingCycle,
+            user_id=current_user["id"],
+        )
+        return result
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

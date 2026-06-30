@@ -24,12 +24,14 @@ def sanitize_filename(filename):
     return Path(filename or "upload.bin").name
 
 
+# KST 기준 시간 변환 헬퍼를 사용하여 만료 여부를 판별합니다.
+from utils.timezone import now_kst, to_kst
+
 def _is_expired(expires_at) -> bool:
     if not expires_at:
         return False
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    return expires_at <= datetime.now(timezone.utc)
+    # 만료 기한과 현재 KST 시간을 비교합니다.
+    return to_kst(expires_at) <= now_kst()
 
 
 def _mark_upload_status(db, upload_id: str, upload_status: str) -> None:
@@ -118,7 +120,9 @@ def init_upload(
     stored_filename = f"{upload_id}_{original_name}"
     stored_path = str(get_upload_dir() / stored_filename)
     temp_dir_path = str(get_temp_base_dir() / upload_id)
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=CHUNK_UPLOAD_EXPIRE_HOURS)
+    # KST 기준 현재 시간에 만료 시간을 더하여 expires_at을 생성합니다.
+    from utils.timezone import now_kst
+    expires_at = now_kst() + timedelta(hours=CHUNK_UPLOAD_EXPIRE_HOURS)
 
     db = SessionLocal()
     try:

@@ -291,6 +291,22 @@ def update_user_status_query(conn, user_id, status):
     ).fetchone()
 
 
+# 사용자의 역할(role)과 상태(status)를 동시에 업데이트하고 업데이트된 결과를 반환하는 쿼리 함수
+def update_user_role_and_status_query(conn, user_id, role, status):
+    return conn.execute(
+        text(
+            """
+            UPDATE users
+            SET role = :role,
+                status = :status,
+                updated_at = NOW()
+            WHERE user_id = :user_id
+            RETURNING user_id AS id, email, display_name AS name, profile_image_url, role, status
+            """
+        ),
+        {"user_id": user_id, "role": role, "status": status},
+    ).fetchone()
+
 def get_user_consent_query(conn, user_id):
     return conn.execute(
         text(

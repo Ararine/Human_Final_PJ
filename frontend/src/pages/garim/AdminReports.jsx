@@ -1,20 +1,34 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { getAdminReports, getAdminReportDetail, updateAdminReportStatus, deleteAdminReport, getApiBaseUrl } from "../../utils/api";
+import { formatKstDateTime } from "../../utils/timezone";
 import GarimHeader from "../../components/garim/GarimHeader";
 import "../../css/garim-pages/AdminReports.css";
 
 // 탭 정의 (report_type)
 const TABS = [
-  { id: "all",        label: "전체" },
-  { id: "general",    label: "일반 문의" },
-  { id: "billing",    label: "결제/구독" },
-  { id: "account",    label: "계정/로그인" },
-  { id: "bug_report", label: "오탐지 신고" },
-  { id: "illegal",    label: "불법/위반" },
-  { id: "other",      label: "기타" },
+  { id: "all",        label: "전체", tabLabel: "전체" },
+  { id: "general",    label: "일반 문의", tabLabel: "일반" },
+  { id: "billing",    label: "결제/환불", tabLabel: "결제" },
+  { id: "bug_report", label: "버그 및 오탐지 신고", tabLabel: "오탐지" },
+  { id: "abuse_report", label: "불법 콘텐츠 및 악용 신고", tabLabel: "악용" },
+  { id: "other",      label: "기타", tabLabel: "기타" },
 ];
+
+const STATUS_META = {
+  received: { label: "대기중", chip: "mui-chip--warning" },
+  in_progress: { label: "처리중", chip: "mui-chip--primary" },
+  completed: { label: "완료", chip: "mui-chip--success" },
+};
+
+function getTypeLabel(type) {
+  return TABS.find((tab) => tab.id === type)?.label || type || "-";
+}
+
+function getStatusMeta(status) {
+  return STATUS_META[status] || STATUS_META.received;
+}
 
 export default function AdminReports() {
   useDocumentTitle("문의 내역 관리 · Garim Admin");
@@ -162,6 +176,18 @@ export default function AdminReports() {
 
   const highlighted = getHighlightedJson();
   const matchCount = highlighted.matchCount;
+  const currentTabLabel = TABS.find((tab) => tab.id === activeTab)?.label || "전체";
+  const pageStatusCounts = useMemo(() => {
+    return reports.reduce(
+      (acc, report) => {
+        if (report.status === "completed") acc.completed += 1;
+        else if (report.status === "in_progress") acc.inProgress += 1;
+        else acc.received += 1;
+        return acc;
+      },
+      { received: 0, inProgress: 0, completed: 0 },
+    );
+  }, [reports]);
 
   const handleNextMatch = () => {
     if (matchCount > 0) {
@@ -237,6 +263,7 @@ export default function AdminReports() {
     <div className="admin-layout">
       <GarimHeader layout="admin" />
       <div className="adm-shell">
+        {/* 일관된 순서로 정비된 공통 관리자 사이드바 */}
         <aside className="adm-side">
           <div className="sec">운영</div>
           <a href="/admin/monitoring">
@@ -256,9 +283,9 @@ export default function AdminReports() {
             <span className="material-icons">people</span>
             사용자
           </a>
-          <a href="/admin/analytics">
-            <span className="material-icons">analytics</span>
-            분석
+          <a href="/admin/login-history">
+            <span className="material-icons">manage_history</span>
+            로그인 히스토리
           </a>
           <a href="/admin/policy">
             <span className="material-icons">tune</span>
@@ -272,6 +299,10 @@ export default function AdminReports() {
             <span className="material-icons">payments</span>
             사용자 결제 확인
           </a>
+          <a href="/admin/analytics">
+            <span className="material-icons">analytics</span>
+            분석
+          </a>
           <a href="/admin/reports" className="active">
             <span className="material-icons">report_problem</span>
             문의 내역
@@ -284,77 +315,110 @@ export default function AdminReports() {
           </div>
 
           <div className="arp-pad-20">
+            <div className="arp-summary-grid">
+              <div className="arp-summary-card">
+                <span className="lbl">선택 탭</span>
+                <strong>{currentTabLabel}</strong>
+                <span className="hint">{total.toLocaleString("ko-KR")}건</span>
+              </div>
+              <div className="arp-summary-card warn">
+                <span className="lbl">현재 페이지 대기</span>
+                <strong>{pageStatusCounts.received.toLocaleString("ko-KR")}</strong>
+                <span className="hint">접수 후 확인 필요</span>
+              </div>
+              <div className="arp-summary-card info">
+                <span className="lbl">현재 페이지 처리중</span>
+                <strong>{pageStatusCounts.inProgress.toLocaleString("ko-KR")}</strong>
+                <span className="hint">응대 진행 중</span>
+              </div>
+              <div className="arp-summary-card success">
+                <span className="lbl">현재 페이지 완료</span>
+                <strong>{pageStatusCounts.completed.toLocaleString("ko-KR")}</strong>
+                <span className="hint">처리 완료</span>
+              </div>
+            </div>
+
             {/* 탭 헤더 */}
-            <div className="terms-tabs" style={{ marginBottom: "20px", borderBottom: "1px solid rgba(255,255,255,0.1)", display: "flex", gap: "10px" }}>
+            <div className="arp-tabs">
               {TABS.map((tab) => (
                 <button
                   key={tab.id}
-                  className={`btn ${activeTab === tab.id ? "active" : ""}`}
+                  type="button"
+                  className={activeTab === tab.id ? "active" : ""}
                   onClick={() => handleTabChange(tab.id)}
-                  style={{
-                    background: activeTab === tab.id ? "#1976d2" : "transparent",
-                    color: activeTab === tab.id ? "#fff" : "rgba(255,255,255,0.6)",
-                    border: "none",
-                    padding: "10px 20px",
-                    cursor: "pointer",
-                    borderBottom: activeTab === tab.id ? "2px solid #fff" : "2px solid transparent",
-                    borderRadius: "4px 4px 0 0"
-                  }}
                 >
-                  {tab.label}
+                  {tab.tabLabel || tab.label}
                 </button>
               ))}
             </div>
 
             {viewMode === "list" && (
               <div className="report-list-view">
+                <div className="arp-list-head">
+                  <div>
+                    <h2>문의 목록</h2>
+                    <p>{currentTabLabel} 기준으로 접수 내역을 최신순으로 확인합니다.</p>
+                  </div>
+                  <span className="arp-list-count">
+                    {total === 0
+                      ? "0건"
+                      : `${(page - 1) * size + 1}-${Math.min(page * size, total)} / ${total.toLocaleString("ko-KR")}건`}
+                  </span>
+                </div>
                 {loading ? (
                   <div className="arp-loading">데이터를 불러오는 중입니다...</div>
                 ) : reports.length === 0 ? (
                   <div className="arp-empty">해당 조건의 문의 내역이 없습니다.</div>
                 ) : (
                   <>
-                    <table className="admin-table">
-                      <thead>
-                        <tr>
-                          <th>ID</th>
-                          <th>유형</th>
-                          <th>제목</th>
-                          <th>작성자</th>
-                          <th>작성일</th>
-                          <th>상태</th>
-                          <th>관리</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {reports.map((r) => (
-                          <tr key={r.id} onClick={() => handleReportClick(r.id)} className="arp-row-click">
-                            <td className="arp-td-id">{r.id.substring(0,8)}</td>
-                            <td>
-                              <span className="mui-chip mui-chip--sm mui-chip--outlined">
-                                {TABS.find(t => t.id === r.type)?.label || r.type}
-                              </span>
-                            </td>
-                            <td>{r.title}</td>
-                            <td>{r.userId ? r.userId.substring(0,8) : "비회원"}</td>
-                            <td>{new Date(r.createdAt).toLocaleString()}</td>
-                            <td>
-                              <span className={`mui-chip mui-chip--sm ${r.status === 'completed' ? 'mui-chip--success' : r.status === 'in_progress' ? 'mui-chip--primary' : 'mui-chip--warning'}`}>
-                                {r.status === 'completed' ? '완료' : r.status === 'in_progress' ? '처리중' : '대기중'}
-                              </span>
-                            </td>
-                            <td>
-                              <button
-                                className="mui-btn mui-btn--sm mui-btn--outlined arp-del-btn"
-                                onClick={(e) => handleDelete(e, r.id)}
-                              >
-                                삭제
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <div className="arp-data-table">
+                      <div className="arp-row arp-row--head">
+                        <span>ID</span>
+                        <span>유형</span>
+                        <span>제목</span>
+                        <span>작성자</span>
+                        <span>작성일</span>
+                        <span>상태</span>
+                        <span>관리</span>
+                      </div>
+                      {reports.map((r) => (
+                        <div
+                          key={r.id}
+                          onClick={() => handleReportClick(r.id)}
+                          className="arp-row arp-row-click"
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              handleReportClick(r.id);
+                            }
+                          }}
+                        >
+                          <span className="arp-td-id">{r.id.substring(0, 8)}</span>
+                          <span>
+                            <span className="mui-chip mui-chip--sm mui-chip--outlined">
+                              {getTypeLabel(r.type)}
+                            </span>
+                          </span>
+                          <span className="arp-title-cell">{r.title || "-"}</span>
+                          <span>{r.userId ? r.userId.substring(0, 8) : "비회원"}</span>
+                          <span>{formatKstDateTime(r.createdAt)}</span>
+                          <span>
+                            <span className={`mui-chip mui-chip--sm ${getStatusMeta(r.status).chip}`}>
+                              {getStatusMeta(r.status).label}
+                            </span>
+                          </span>
+                          <span>
+                            <button
+                              className="mui-btn mui-btn--sm mui-btn--outlined arp-del-btn"
+                              onClick={(e) => handleDelete(e, r.id)}
+                            >
+                              삭제
+                            </button>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
 
                     {/* Pagination */}
                     {totalPages > 1 && (
@@ -395,14 +459,17 @@ export default function AdminReports() {
                   <div className="arp-loading">상세 정보를 불러오는 중입니다...</div>
                 ) : (
                   <div className="report-detail-content">
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px", paddingBottom: "15px", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+                    <div className="arp-detail-head">
                       <div>
                         <div className="arp-mb-8">
                           <span className="mui-chip mui-chip--sm mui-chip--outlined arp-chip-mr">
-                            {TABS.find(t => t.id === detailData.type)?.label || detailData.type}
+                            {getTypeLabel(detailData.type)}
+                          </span>
+                          <span className={`mui-chip mui-chip--sm ${getStatusMeta(detailData.status).chip} arp-chip-mr`}>
+                            {getStatusMeta(detailData.status).label}
                           </span>
                           <span className="arp-meta-date">
-                            {new Date(detailData.createdAt).toLocaleString()}
+                            {formatKstDateTime(detailData.createdAt)}
                           </span>
                         </div>
                         <h2 className="arp-detail-title">{detailData.title}</h2>
@@ -415,22 +482,22 @@ export default function AdminReports() {
                       </button>
                     </div>
 
-                    <div style={{ 
-                      background: "rgba(0,0,0,0.2)", 
-                      padding: "20px", 
-                      borderRadius: "8px", 
-                      minHeight: "150px", 
-                      marginBottom: "30px",
-                      whiteSpace: "pre-wrap",
-                      lineHeight: "1.6"
-                    }}>
+                    <section className="arp-section">
+                      <div className="arp-section-head">
+                        <h3>문의 내용</h3>
+                      </div>
+                      <div className="arp-description">
                       {detailData.description}
-                    </div>
+                      </div>
+                    </section>
 
                     {/* 오탐지 신고 관련 파일 첨부 */}
                     {detailData.targetJobId && detailData.files && detailData.files.length > 0 && (
-                      <div className="arp-mb-30">
-                        <h3 className="arp-attach-title">첨부 파일 (관련 작업 ID: {detailData.targetJobId.substring(0,8)})</h3>
+                      <section className="arp-section">
+                        <div className="arp-section-head">
+                          <h3>첨부 파일</h3>
+                          <span>관련 작업 ID: {detailData.targetJobId.substring(0, 8)}</span>
+                        </div>
                         <div className="arp-attach-list">
                           {[...detailData.files].sort((a, b) => {
                             const aIsJson = a.filename.toLowerCase().endsWith('.json');
@@ -442,7 +509,6 @@ export default function AdminReports() {
                             <button 
                               key={idx} 
                               onClick={(e) => handleFileClick(e, file)}
-                              className="mui-btn mui-btn--outlined mui-btn--sm"
                               className="mui-btn mui-btn--outlined mui-btn--sm arp-attach-btn"
                             >
                               <span className="material-icons arp-ico-18">
@@ -455,19 +521,11 @@ export default function AdminReports() {
                         <p className="arp-attach-note">
                           * 위 파일들은 신고 접수 시점에 안전하게 복사되어 보존된 원본(상세보기) 및 결과 데이터입니다.
                         </p>
-                      </div>
+                      </section>
                     )}
 
                     {/* 상태 처리 */}
-                    <div style={{ 
-                      padding: "20px", 
-                      background: "rgba(25, 118, 210, 0.1)", 
-                      border: "1px solid rgba(25, 118, 210, 0.3)",
-                      borderRadius: "8px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between"
-                    }}>
+                    <div className="arp-status-panel">
                       <div>
                         <span className="arp-status-label">처리 상태 관리</span>
                         <div className="arp-status-btns">
@@ -492,23 +550,9 @@ export default function AdminReports() {
 
                     {/* 첨부파일 미리보기 영역 */}
                     {(selectedMediaUrl || selectedJsonContent) && (
-                      <div style={{ 
-                        marginTop: "20px", 
-                        display: "flex", 
-                        gap: "20px", 
-                        height: "500px" 
-                      }}>
-                        {/* 미디어 미리보기 (빨간 박스 영역) */}
-                        <div style={{ 
-                          flex: 1, 
-                          border: "2px solid #ef5350", 
-                          borderRadius: "8px", 
-                          background: "#000",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          overflow: "hidden"
-                        }}>
+                      <div className="arp-preview-grid">
+                        <div className="arp-preview-panel arp-preview-panel--media">
+                          <div className="arp-preview-head">미디어 미리보기</div>
                           {!selectedMediaUrl ? (
                             <span className="arp-media-empty">이미지/영상을 선택하세요</span>
                           ) : selectedMediaIsVideo ? (
@@ -518,17 +562,8 @@ export default function AdminReports() {
                           )}
                         </div>
 
-                        {/* JSON 코드 뷰어 (파란 박스 영역) */}
-                        <div style={{ 
-                          flex: 1, 
-                          border: "2px solid #29b6f6", 
-                          borderRadius: "8px", 
-                          background: "#1e1e1e",
-                          overflow: "hidden",
-                          display: "flex",
-                          flexDirection: "column",
-                          position: "relative"
-                        }}>
+                        <div className="arp-preview-panel arp-preview-panel--json">
+                          <div className="arp-preview-head">JSON 데이터</div>
                           {!selectedJsonContent ? (
                             <div className="arp-json-empty">
                               JSON 파일을 선택하세요
@@ -536,30 +571,13 @@ export default function AdminReports() {
                           ) : (
                             <>
                               {/* 찾기 (Ctrl+F 기능) 헤더 */}
-                              <div style={{
-                                padding: "8px 12px",
-                                background: "#252526",
-                                borderBottom: "1px solid #333",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "10px"
-                              }}>
+                              <div className="arp-json-toolbar">
                                 <input
                                   type="text"
                                   placeholder="JSON 내에서 찾기... (Enter로 다음)"
                                   value={jsonSearchTerm}
                                   onChange={handleSearchChange}
                                   onKeyDown={handleSearchKeyDown}
-                                  style={{
-                                    background: "#3c3c3c",
-                                    border: "1px solid #007fd4",
-                                    color: "#ccc",
-                                    padding: "4px 8px",
-                                    borderRadius: "2px",
-                                    outline: "none",
-                                    fontSize: "13px",
-                                    flex: 1
-                                  }}
                                 />
                                 {jsonSearchTerm && (
                                   <span className="arp-match-count">
@@ -582,16 +600,7 @@ export default function AdminReports() {
                                 </button>
                               </div>
 
-                              <pre style={{ 
-                                margin: 0, 
-                                padding: "16px", 
-                                color: "#d4d4d4", 
-                                fontSize: "13px", 
-                                lineHeight: "1.5",
-                                fontFamily: "monospace",
-                                overflow: "auto",
-                                flex: 1
-                              }}>
+                              <pre className="arp-json-pre">
                                 {jsonSearchTerm ? highlighted.elements : selectedJsonContent}
                               </pre>
                             </>

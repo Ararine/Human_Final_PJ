@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { useAuthUser } from "../../hooks/useAuthStatus";
 import { getDashboardData, deleteAnalysisUpload, getApiBaseUrl, getDownloadUrl } from "../../utils/api";
+import { formatKstDate } from "../../utils/timezone";
 import { useNotifications, relativeTime } from "../../context/NotificationContext";
 import "../../css/garim-pages/Dashboard.css";
 
@@ -263,7 +264,7 @@ export default function Dashboard() {
                       <div className="body db-hist-body">
                         <div className="name db-hist-name">{job.filename}</div>
                         <div className="meta db-hist-meta">
-                          · {new Date(job.created_at).toLocaleDateString()} · {job.status === "completed" ? (job.detected > 0 && job.replaced < job.detected ? "일부 완료" : "처리 완료") : "실패"} · {job.replaced}건 처리
+                          · {formatKstDate(job.created_at)} · {job.status === "completed" ? (job.detected > 0 && job.replaced < job.detected ? "일부 완료" : "처리 완료") : "실패"} · {job.replaced}건 처리
                         </div>
                       </div>
                     </div>

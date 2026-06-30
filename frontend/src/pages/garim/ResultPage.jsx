@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { getAnalysisJob, getDownloadUrl, getResultFile, getTrimUrl } from "../../utils/api";
+import { formatKstDate } from "../../utils/timezone";
 import "../../css/garim-pages/Preview.css";
 import "../../css/garim-pages/ResultPage.css";
 
@@ -200,11 +201,7 @@ export default function ResultPage() {
   /* ── 만료일 포맷 ──────────────────────────────────────────────── */
   const formatExpiry = (isoStr) => {
     if (!isoStr) return "해당 없음";
-    try {
-      return new Date(isoStr).toLocaleDateString("ko-KR", {
-        year: "numeric", month: "long", day: "numeric",
-      });
-    } catch { return isoStr; }
+    return formatKstDate(isoStr, { month: "long" });
   };
 
   /* ── 전체 다운로드 ────────────────────────────────────────────── */

@@ -4,12 +4,14 @@ import hmac
 import json
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import uuid4
 
 from fastapi import Cookie, HTTPException, status
+from sqlalchemy import text
 
 from services import redis_store, users
+from utils.timezone import KST, now_kst
 
 
 ACCESS_COOKIE_NAME = "access_token"
@@ -136,8 +138,8 @@ def create_login_session(user, user_agent=None, ip_address=None):
             "role": role,
             "user_agent": user_agent,
             "ip": ip_address,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "expires_at": datetime.fromtimestamp(refresh_expires_at, timezone.utc).isoformat(),
+            "created_at": now_kst().isoformat(),
+            "expires_at": datetime.fromtimestamp(refresh_expires_at, KST).isoformat(),
         },
     )
     return {
@@ -191,7 +193,7 @@ def refresh_login_session(refresh_token):
             "refresh_jti": new_refresh_jti,
             "refresh_hash": hash_refresh_token(new_refresh_token),
             "role": role,
-            "expires_at": datetime.fromtimestamp(refresh_expires_at, timezone.utc).isoformat(),
+            "expires_at": datetime.fromtimestamp(refresh_expires_at, KST).isoformat(),
         }
     )
     redis_store.save_session(session_id, session)
@@ -250,6 +252,17 @@ def set_auth_cookies(response, token_pair):
         path="/api/v1/auth/refresh",
         max_age=get_refresh_ttl_seconds(),
     )
+    # [한글 주석] 프론트엔드 자바스크립트가 로그인 여부를 간접 식별할 수 있도록 비-HttpOnly 쿠키를 심어줍니다.
+    # 만료 기한은 세션 전체 수명(Refresh Token 만료 기한)과 동일하게 7일로 설정합니다.
+    response.set_cookie(
+        key="logged_in",
+        value="yes",
+        httponly=False,
+        secure=get_cookie_secure(),
+        samesite=get_cookie_samesite(),
+        path="/",
+        max_age=get_refresh_ttl_seconds(),
+    )
 
 
 def delete_auth_cookies(response):
@@ -261,8 +274,18 @@ def delete_auth_cookies(response):
     response.delete_cookie(ACCESS_COOKIE_NAME, path="/", **cookie_options)
     response.delete_cookie(REFRESH_COOKIE_NAME, path="/api/v1/auth/refresh", **cookie_options)
     response.delete_cookie(REFRESH_COOKIE_NAME, path="/", **cookie_options)
+    
+    # [한글 주석] 로그아웃 시 프론트엔드 인식용 비-HttpOnly 쿠키 logged_in도 함께 지워줍니다.
+    non_httponly_options = {
+        "secure": get_cookie_secure(),
+        "httponly": False,
+        "samesite": get_cookie_samesite(),
+    }
+    response.delete_cookie("logged_in", path="/", **non_httponly_options)
+
     for cookie_name in LEGACY_AUTH_COOKIE_NAMES:
         response.delete_cookie(cookie_name, path="/", **cookie_options)
+
 
 
 def delete_session_from_tokens(access_token=None, refresh_token=None, *extra_tokens):
@@ -285,3 +308,91 @@ def ensure_active_user(user):
 
 def raise_auth_error():
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required.")
+
+
+def record_login_attempt(
+    db,
+    user_id: str | None,
+    provider: str,
+    provider_user_id: str | None,
+    provider_email: str | None,
+    login_result: str,  # success, failed, blocked, deleted, error
+    failure_reason: str | None,
+    ip_address: str,
+    user_agent: str,
+    session_id: str | None = None,
+    refresh_jti: str | None = None,
+    oauth_account_id: str | None = None,
+):
+    # [한글 주석] 로그인 성공/실패 시도 이력을 DB의 user_login_histories 테이블에 적재합니다.
+    try:
+        db.execute(
+            text("""
+                INSERT INTO user_login_histories (
+                    user_id,
+                    oauth_account_id,
+                    provider,
+                    provider_user_id,
+                    provider_email,
+                    login_result,
+                    failure_reason,
+                    ip_address,
+                    user_agent,
+                    session_id,
+                    refresh_jti,
+                    logged_in_at
+                )
+                VALUES (
+                    CAST(:user_id AS uuid),
+                    CAST(:oauth_account_id AS uuid),
+                    :provider,
+                    :provider_user_id,
+                    :provider_email,
+                    :login_result,
+                    :failure_reason,
+                    :ip_address,
+                    :user_agent,
+                    CAST(:session_id AS uuid),
+                    CAST(:refresh_jti AS uuid),
+                    NOW()
+                )
+            """),
+            {
+                "user_id": user_id if user_id else None,
+                "oauth_account_id": oauth_account_id if oauth_account_id else None,
+                "provider": provider,
+                "provider_user_id": provider_user_id,
+                "provider_email": provider_email,
+                "login_result": login_result,
+                "failure_reason": failure_reason,
+                "ip_address": ip_address,
+                "user_agent": user_agent,
+                "session_id": session_id if session_id else None,
+                "refresh_jti": refresh_jti if refresh_jti else None,
+            }
+        )
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        import logging
+        logging.getLogger(__name__).error("[auth] failed to record login attempt: %s", str(e))
+        return
+
+    if login_result != "success" or not user_id:
+        return
+
+    try:
+        db.execute(
+            text("""
+                UPDATE users
+                SET last_login_at = NOW(),
+                    updated_at = NOW()
+                WHERE user_id = CAST(:user_id AS uuid)
+            """),
+            {"user_id": user_id},
+        )
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        import logging
+        logging.getLogger(__name__).error("[auth] failed to update last_login_at cache: %s", str(e))

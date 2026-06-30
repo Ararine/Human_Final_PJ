@@ -37,7 +37,9 @@ body { background: #fafafa; }
   .adm-card .head { padding: 12px 16px; border-bottom: 1px solid var(--mui-divider); display: flex; align-items: center; gap: 12px; }
   .adm-card .head h3 { font: 500 13px var(--font-sans); margin: 0; flex: 1; }
 
-  .job-row { display: grid; grid-template-columns: 100px 1fr 90px 100px 110px 80px; gap: 12px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--mui-divider); }
+  .job-row { display: grid; grid-template-columns: 100px 1fr 90px 100px 110px 80px; gap: 12px; align-items: center; padding: 10px 16px; }
+  .job-row > * { border-bottom: 1px solid var(--mui-divider); padding-bottom: 10px; align-self: stretch; display: flex; align-items: center; min-width: 0; }
+  .job-row:last-child > * { border-bottom: none; }
   .adm-shell .job-row.tbl-head { display: grid; background: #fafafa; font: 500 11px var(--font-sans); text-transform: uppercase; letter-spacing: 0.5px; color: var(--fg-2); }
   .job-row .jid { font-family: var(--font-mono); font-size: 12px; }
   .job-row .file { font: 400 12px var(--font-sans); overflow: hidden; }

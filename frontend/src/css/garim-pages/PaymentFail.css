@@ -1,7 +1,96 @@
 /*
 코드 설명:
 결제 실패 안내 페이지 전용 스타일.
+PaymentSuccess와 동일한 레이아웃 구조를 사용하며,
+실패를 나타내는 붉은색 아이콘과 배너 색상을 적용한다.
 */
-.payment-fail {
-  padding: 40px;
+
+/* ── 페이지 레이아웃 ─────────────────────────────────── */
+.page-payment-fail {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.payment-fail-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+}
+
+.payment-fail-content {
+  width: min(720px, 100%);
+}
+
+/* ── 실패 알림 배너 ──────────────────────────────────── */
+.payment-fail-alert {
+  margin-bottom: 16px;
+}
+
+/* ── 카드 너비 조정 ──────────────────────────────────── */
+.page-payment-fail .pay-shell {
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+/* ── 아이콘 영역 ─────────────────────────────────────── */
+.pay-fail-visual {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #fde8e8 0%, #fff5f5 100%);
+  box-shadow: inset 0 0 0 1px #f5c2c2, 0 4px 16px rgba(211, 47, 47, 0.12);
+  display: grid;
+  place-items: center;
+  margin: 0 auto 20px;
+}
+
+:root[data-theme="dark"] .pay-fail-visual {
+  background: linear-gradient(135deg, rgba(211, 47, 47, 0.18) 0%, var(--bg-1) 100%);
+  box-shadow: inset 0 0 0 1px rgba(211, 47, 47, 0.4);
+}
+
+.pay-fail-icon {
+  font-size: 48px !important;
+  color: #d32f2f !important;
+  filter: drop-shadow(0 4px 8px rgba(211, 47, 47, 0.28));
+  /* pay-disabled .material-icons의 margin-bottom 상속 차단 */
+  margin: 0 !important;
+  line-height: 1;
+}
+
+/* ── 하단 버튼 ───────────────────────────────────────── */
+.payment-fail-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+  flex-wrap: wrap;
+}
+
+.payment-fail-back-btn {
+  min-width: 160px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.payment-fail-back-btn .material-icons {
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* ── 반응형 ──────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .payment-fail-main {
+    padding: 32px 16px;
+  }
+
+  .payment-fail-back-btn {
+    width: 100%;
+  }
 }

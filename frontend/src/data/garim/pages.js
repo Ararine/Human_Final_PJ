@@ -34,6 +34,7 @@ import AdminAnalytics from "../../pages/garim/AdminAnalytics";
 import AdminPolicy from "../../pages/garim/AdminPolicy";
 import AdminSubscriptions from "../../pages/garim/AdminSubscriptions";
 import AdminPaymentCheck from "../../pages/garim/AdminPaymentCheck";
+import AdminLoginHistory from "../../pages/garim/AdminLoginHistory";
 import AdminReports from "../../pages/garim/AdminReports";
 
 export const garimPages = [
@@ -52,7 +53,9 @@ export const garimPages = [
   { path: "/sns-results", name: "SnsResults", component: SnsResults, file: "12-sns-results.html", layout: "app", current: "sns" },
   { path: "/payment", name: "Payment", component: Payment, file: "14-payment.html", layout: "app", current: "pricing" },
   { path: "/payment/success", name: "PaymentSuccess", component: PaymentSuccess, file: "14-payment-success.html", layout: "app", current: "pricing" },
+  { path: "/payment/billing-success", name: "PaymentSuccess", component: PaymentSuccess, file: "14-payment-success.html", layout: "app", current: "pricing" },
   { path: "/payment/fail", name: "PaymentFail", component: PaymentFail, file: "14-payment-fail.html", layout: "app", current: "pricing" },
+  { path: "/payment/billing-fail", name: "PaymentFail", component: PaymentFail, file: "14-payment-fail.html", layout: "app", current: "pricing" },
   { path: "/replace-options", name: "ReplaceOptions", component: ReplaceOptions, file: "15-replace-options.html", layout: "app", current: "detect" },
   { path: "/preview", name: "Preview", component: Preview, file: "16-preview.html", layout: "app", current: "detect" },
   { path: "/result", name: "ResultPage", component: ResultPage, file: "17-result.html", layout: "app", current: "detect" },
@@ -69,5 +72,6 @@ export const garimPages = [
   { path: "/admin/policy", name: "AdminPolicy", component: AdminPolicy, file: "30-admin-policy.html", layout: "admin", current: "policy" },
   { path: "/admin/subscriptions", name: "AdminSubscriptions", component: AdminSubscriptions, file: "31-admin-subscriptions.html", layout: "admin", current: "subscriptions" },
   { path: "/admin/payments", name: "AdminPaymentCheck", component: AdminPaymentCheck, file: "32-admin-payments.html", layout: "admin", current: "payments" },
-  { path: "/admin/reports", name: "AdminReports", component: AdminReports, file: "33-admin-reports.html", layout: "admin", current: "reports" },
+  { path: "/admin/login-history", name: "AdminLoginHistory", component: AdminLoginHistory, file: "33-admin-login-history.html", layout: "admin", current: "login-history" },
+  { path: "/admin/reports", name: "AdminReports", component: AdminReports, file: "34-admin-reports.html", layout: "admin", current: "reports" },
 ];

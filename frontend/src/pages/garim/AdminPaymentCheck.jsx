@@ -3,6 +3,7 @@ import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import "../../css/garim-pages/AdminPaymentCheck.css";
 import GarimPage from "../../components/garim/GarimPage";
 import { getAdminPayments, getAdminPaymentDetail, refundAdminPayment } from "../../utils/api";
+import { formatKstDateTime } from "../../utils/timezone";
 
 function formatDateParam(date) {
   const y = date.getFullYear();
@@ -19,6 +20,10 @@ function getRecent7DayRange() {
     from: formatDateParam(from),
     to: formatDateParam(to),
   };
+}
+
+function formatPaymentDate(value) {
+  return formatKstDateTime(value, { second: "2-digit", hour12: false });
 }
 
 export default function AdminPaymentCheck() {
@@ -252,6 +257,7 @@ export default function AdminPaymentCheck() {
   return (
     <GarimPage bodyClass="" screenLabel="31 Admin Payment Check">
       <div className="adm-shell">
+        {/* 일관된 순서로 정비된 공통 관리자 사이드바 */}
         <aside className="adm-side">
           <div className="sec">운영</div>
           <a href="/admin/monitoring">
@@ -271,9 +277,9 @@ export default function AdminPaymentCheck() {
             <span className="material-icons">people</span>
             사용자
           </a>
-          <a href="/admin/analytics">
-            <span className="material-icons">analytics</span>
-            분석
+          <a href="/admin/login-history">
+            <span className="material-icons">manage_history</span>
+            로그인 히스토리
           </a>
           <a href="/admin/policy">
             <span className="material-icons">tune</span>
@@ -287,7 +293,11 @@ export default function AdminPaymentCheck() {
             <span className="material-icons">payments</span>
             사용자 결제 확인
           </a>
-                  <a href="/admin/reports">
+          <a href="/admin/analytics">
+            <span className="material-icons">analytics</span>
+            분석
+          </a>
+          <a href="/admin/reports">
             <span className="material-icons">report_problem</span>
             문의 내역
           </a>
@@ -474,10 +484,10 @@ export default function AdminPaymentCheck() {
 
                 {!isLoading && !error && payments.map((payment) => (
                   <div className="pm-data-row" key={payment.payment_id}>
-                    <span className="pm-date-cell">{payment.paid_at.replace("T", " ")}</span>
+                    <span className="pm-date-cell">{formatPaymentDate(payment.paid_at)}</span>
                     <span className="pm-user-cell">
                       <strong>{payment.user_email || "—"}</strong>
-                      <small>{payment.user_id}</small>
+                      {/* 사용자 ID(키값) 노출 제거 */}
                     </span>
                     <span className="pm-uuid-cell mono">{maskPaymentId(payment.payment_id)}</span>
                     <span className="pm-product-cell">
@@ -578,7 +588,7 @@ export default function AdminPaymentCheck() {
                       {getStatusLabel(detailData.status)}
                     </span>
                     <span>
-                      {(detailData.approved_at || detailData.paid_at || detailData.created_at || "").replace("T", " ")}
+                      {formatPaymentDate(detailData.approved_at || detailData.paid_at || detailData.created_at)}
                     </span>
                   </div>
 
@@ -593,7 +603,7 @@ export default function AdminPaymentCheck() {
                     <div>
                       <span className="pm-detail-lbl">사용자</span>
                       <strong className="pm-detail-val">{detailData.user_email || "—"}</strong>
-                      <small className="pm-detail-sub mono">{detailData.user_id || "—"}</small>
+                      {/* 사용자 ID(키값) 노출 제거 */}
                     </div>
                     <div>
                       <span className="pm-detail-lbl">상품</span>

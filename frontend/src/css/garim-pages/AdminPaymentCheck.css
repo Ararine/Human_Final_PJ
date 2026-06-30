@@ -258,15 +258,25 @@
 
 .pm-data-row {
   display: grid;
-  grid-template-columns: 1.2fr 1.8fr 1.3fr 2fr 1fr 1fr 1fr 0.8fr;
+  /* 실제 8열(결제일, 사용자, 주문 식별자, 상품, 금액, 상태, 결제수단, 관리) 구조에 맞춰 균형있게 재배치하고 gap을 12px로 추가하여 여백을 균일하게 만듭니다. */
+  grid-template-columns: 1.3fr 2.2fr 2fr 2fr 1fr 1fr 1fr 72px;
+  gap: 12px;
   align-items: center;
-  border-bottom: 1px solid var(--border-soft);
   padding: 14px 16px;
   font-size: 13px;
   color: var(--text-primary);
 }
 
-.pm-data-row:last-child {
+.pm-data-row > span {
+  border-bottom: 1px solid var(--border-soft);
+  padding-bottom: 14px;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.pm-data-row:last-child > span {
   border-bottom: none;
 }
 
@@ -274,10 +284,14 @@
   background: var(--bg-card-head);
   font-weight: 600;
   color: var(--text-secondary);
-  border-bottom: 2px solid var(--border-soft);
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.pm-data-row.pm-data-head > span {
+  border-bottom: 2px solid var(--border-soft);
+  font-weight: 600;
 }
 
 /* 각 열 정렬 */
@@ -289,13 +303,12 @@
   padding: 0 4px;
 }
 
-/* 사용자 & 상품 셀은 왼쪽 정렬 */
-.pm-data-row > .pm-user-cell,
-.pm-data-row > .pm-product-cell {
-  justify-content: flex-start;
-  text-align: left;
+/* 사용자 셀 중앙 정렬 */
+.pm-data-row > .pm-user-cell {
+  justify-content: center;
+  text-align: center;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
 }
 
 /* 셀 텍스트 디자인 */
@@ -324,6 +337,7 @@
   display: flex;
   flex-direction: row !important;
   align-items: center !important;
+  justify-content: center !important; /* 상품 셀 중앙 정렬 적용 */
   gap: 8px;
 }
 
@@ -903,7 +917,9 @@
 }
 
 .pm-data-row {
-  grid-template-columns: 1.1fr 1.7fr 1.35fr 1.8fr 0.95fr 0.95fr 1fr 78px;
+  /* 화면이 정비된 mockup refinement 적용 해상도에서의 8열 균형 배치 및 gap 12px 추가 */
+  grid-template-columns: 1.3fr 2.2fr 2fr 2fr 1fr 1fr 1fr 72px;
+  gap: 12px;
   min-height: 56px;
   padding: 0 20px;
   border-bottom: 1px solid #e5e7eb;
@@ -955,7 +971,7 @@
 
 .pm-product-cell {
   flex-direction: row !important;
-  justify-content: flex-start !important;
+  justify-content: center !important; /* 상품 셀 중앙 정렬 적용 */
   align-items: center !important;
   gap: 8px;
 }
@@ -967,6 +983,18 @@
   padding: 0 8px;
   border-radius: 11px;
   font: 800 10px var(--font-sans);
+}
+
+/* 구독 상품: 소프트한 보라색 뱃지 테마 */
+.pm-prod-badge.subscription {
+  background-color: #ede7f6;
+  color: #5e35b1;
+}
+
+/* 크레딧 상품: 소프트한 주황색 뱃지 테마 */
+.pm-prod-badge.credit {
+  background-color: #fff3e0;
+  color: #e65100;
 }
 
 .pm-status {

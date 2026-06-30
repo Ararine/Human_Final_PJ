@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
+import { formatFileSize, formatQuota } from "../../hooks/usePricingPlans";
 import "../../css/garim-pages/AdminPolicy.css";
 
 import GarimPage from "../../components/garim/GarimPage";
@@ -24,6 +25,7 @@ const SUBSCRIPTION_DEFAULT = {
   result_retention_days: "",
   watermark_required: false,
   price_amount: "0",
+  yearly_price_amount: "",
   sort_order: "0",
   status: "active",
   file_size_limit: "50",
@@ -31,6 +33,7 @@ const SUBSCRIPTION_DEFAULT = {
   auto_delete_original_hours: "12",
   metadata_retention_days: "90",
   credits: "0",
+  yearly_credits: "",
 };
 
 const CREDIT_DEFAULT = {
@@ -48,12 +51,14 @@ const SUBSCRIPTION_NUMBER_FIELDS = [
   "monthly_quota",
   "result_retention_days",
   "price_amount",
+  "yearly_price_amount",
   "sort_order",
   "file_size_limit",
   "max_jobs",
   "auto_delete_original_hours",
   "metadata_retention_days",
   "credits",
+  "yearly_credits",
 ];
 
 const CREDIT_NUMBER_FIELDS = [
@@ -62,19 +67,6 @@ const CREDIT_NUMBER_FIELDS = [
   "bonus_credits",
   "expires_days",
   "sort_order",
-];
-
-const BADGE_CLASS_OPTIONS = [
-  "mui-chip--primary",
-  "mui-chip--secondary",
-  "mui-chip--soft-warning",
-  "mui-chip--soft-info",
-  "mui-chip--soft-success",
-  "mui-chip--soft-error",
-  "mui-chip--warning",
-  "mui-chip--success",
-  "mui-chip--info",
-  "mui-chip--error",
 ];
 
 const STATUS_OPTIONS = ["active", "inactive", "deleted"];
@@ -118,6 +110,18 @@ function formatMoney(value) {
   return Number(value || 0).toLocaleString("ko-KR");
 }
 
+function resolveYearlyPrice(form) {
+  const yearly = numberOrNull(form.yearly_price_amount);
+  if (yearly && yearly > 0) return yearly;
+  return Number(form.price_amount || 0) * 10;
+}
+
+function resolveYearlyCredits(form) {
+  const yearly = numberOrNull(form.yearly_credits);
+  if (yearly && yearly > 0) return yearly;
+  return Number(form.credits || 0) * 12;
+}
+
 function statusLabel(status) {
   if (status === "deleted") return "삭제";
   if (status === "inactive") return "미사용";
@@ -142,6 +146,7 @@ export default function AdminPolicy() {
   const [selectedCreditPlanId, setSelectedCreditPlanId] = useState(null);
   const [planForm, setPlanForm] = useState(SUBSCRIPTION_DEFAULT);
   const [creditForm, setCreditForm] = useState(CREDIT_DEFAULT);
+  const [planBillingCycle, setPlanBillingCycle] = useState("monthly");
   const [isLoading, setIsLoading] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
 
@@ -242,12 +247,14 @@ export default function AdminPolicy() {
   function openEditSubscriptionPlan(plan) {
     setSelectedPlanId(plan.plan_id);
     setPlanForm(normalizeForm(plan, SUBSCRIPTION_DEFAULT));
+    setPlanBillingCycle("monthly");
     setPlanModalOpen(true);
   }
 
   function openNewSubscriptionPlan() {
     setSelectedPlanId(null);
     setPlanForm(SUBSCRIPTION_DEFAULT);
+    setPlanBillingCycle("monthly");
     setPlanModalOpen(true);
   }
 
@@ -365,9 +372,40 @@ export default function AdminPolicy() {
     }
   }
 
+  // 구독 플랜 검색(조회) 핸들러 함수
+  const handlePlanSearch = (e) => {
+    if (e) e.preventDefault();
+    setSubscriptionPage(1);
+    loadSubscriptionPlans(planSearch, planStatus, 1, subscriptionLimit);
+  };
+
+  // 구독 플랜 필터 초기화 핸들러 함수
+  const handlePlanReset = () => {
+    setPlanSearch("");
+    setPlanStatus("all");
+    setSubscriptionPage(1);
+    loadSubscriptionPlans("", "all", 1, subscriptionLimit);
+  };
+
+  // 크레딧 플랜 검색(조회) 핸들러 함수
+  const handleCreditSearch = (e) => {
+    if (e) e.preventDefault();
+    setCreditPage(1);
+    loadCreditPlans(creditSearch, creditStatus, 1, creditLimit);
+  };
+
+  // 크레딧 플랜 필터 초기화 핸들러 함수
+  const handleCreditReset = () => {
+    setCreditSearch("");
+    setCreditStatus("all");
+    setCreditPage(1);
+    loadCreditPlans("", "all", 1, creditLimit);
+  };
+
   return (
     <GarimPage bodyClass="" screenLabel="30 Admin policy">
       <div className="adm-shell">
+        {/* 일관된 순서로 정비된 공통 관리자 사이드바 */}
         <aside className="adm-side">
           <div className="sec">운영</div>
           <a href="/admin/monitoring">
@@ -387,9 +425,9 @@ export default function AdminPolicy() {
             <span className="material-icons">people</span>
             사용자
           </a>
-          <a href="/admin/analytics">
-            <span className="material-icons">analytics</span>
-            분석
+          <a href="/admin/login-history">
+            <span className="material-icons">manage_history</span>
+            로그인 히스토리
           </a>
           <a href="/admin/policy" className="active">
             <span className="material-icons">tune</span>
@@ -403,7 +441,11 @@ export default function AdminPolicy() {
             <span className="material-icons">payments</span>
             사용자 결제 확인
           </a>
-                  <a href="/admin/reports">
+          <a href="/admin/analytics">
+            <span className="material-icons">analytics</span>
+            분석
+          </a>
+          <a href="/admin/reports">
             <span className="material-icons">report_problem</span>
             문의 내역
           </a>
@@ -495,21 +537,28 @@ export default function AdminPolicy() {
                             <option value="inactive">미사용</option>
                             <option value="deleted">삭제</option>
                           </select>
-                          <div className="pol-search">
-                            <span className="material-icons">search</span>
-                            <input
-                              type="search"
-                              value={planSearch}
-                              onChange={(e) => setPlanSearch(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  setSubscriptionPage(1);
-                                  loadSubscriptionPlans(planSearch, planStatus, 1, subscriptionLimit);
-                                }
-                              }}
-                              placeholder="코드, 이름, 상태 검색"
-                            />
-                          </div>
+                          <form onSubmit={handlePlanSearch} className="pol-search-form" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                            <div className="pol-search">
+                              <span className="material-icons">search</span>
+                              <input
+                                type="search"
+                                value={planSearch}
+                                onChange={(e) => setPlanSearch(e.target.value)}
+                                placeholder="코드, 이름, 상태 검색"
+                              />
+                            </div>
+                            <div className="pol-filter-actions" style={{ display: "flex", gap: "6px" }}>
+                              {/* 검색(조회) 버튼 */}
+                              <button type="submit" className="mui-btn mui-btn--contained pol-btn-submit" style={{ height: "38px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                <span className="material-icons" style={{ fontSize: "18px" }}>search</span>
+                                조회
+                              </button>
+                              {/* 초기화 버튼 */}
+                              <button type="button" className="mui-btn mui-btn--outlined pol-btn-reset" onClick={handlePlanReset} style={{ height: "38px" }}>
+                                초기화
+                              </button>
+                            </div>
+                          </form>
                         </div>
                       </div>
                     </div>
@@ -520,7 +569,9 @@ export default function AdminPolicy() {
                       <span>플랜명</span>
                       <span>상태</span>
                       <span>월 결제 금액</span>
-                      <span>월 제공 크레딧</span>
+                      <span>월 크레딧</span>
+                      <span>년 결제 금액</span>
+                      <span>년 크레딧</span>
                       <span>최대 파일 크기</span>
                       <span>결과 보존 기간</span>
                       <span>작업</span>
@@ -539,22 +590,25 @@ export default function AdminPolicy() {
                               </span>
                             )}
                           </span>
-                          <small>{plan.plan_code}</small>
                         </span>
                         <span>
                           <span className={`pol-status ${plan.status}`}>
                             {statusLabel(plan.status)}
                           </span>
                         </span>
+                        {/* 월 결제 금액 표출 */}
+                        <span>₩{formatMoney(plan.price_amount)}</span>
+                        {/* 월 크레딧 표출 */}
+                        <span>{formatMoney(plan.credits)} 크레딧</span>
+                        {/* 년 결제 금액 표출 */}
                         <span className="pol-price-cell">
-                          ₩{formatMoney(plan.price_amount)}
-                          {Number(plan.price_amount) > 0 && (
-                            <small className="pol-subprice">
-                              연 ₩{formatMoney(Number(plan.price_amount) * 10)} (2개월 무료)
-                            </small>
+                          ₩{formatMoney(plan.yearly_price_amount || Number(plan.price_amount || 0) * 10)}
+                          {Number(plan.price_amount) > 0 && !plan.yearly_price_amount && (
+                            <small className="pol-subprice">(2개월 무료)</small>
                           )}
                         </span>
-                        <span>{formatMoney(plan.credits)} 크레딧</span>
+                        {/* 년 크레딧 표출 */}
+                        <span>{formatMoney(plan.yearly_credits || Number(plan.credits || 0) * 12)} 크레딧</span>
                         <span>{formatMoney(plan.file_size_limit)}MB</span>
                         <span>{plan.result_retention_days ?? "-"}일</span>
                         <span className="pol-row-actions">
@@ -647,21 +701,28 @@ export default function AdminPolicy() {
                             <option value="inactive">미사용</option>
                             <option value="deleted">삭제</option>
                           </select>
-                          <div className="pol-search">
-                            <span className="material-icons">search</span>
-                            <input
-                              type="search"
-                              value={creditSearch}
-                              onChange={(e) => setCreditSearch(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  setCreditPage(1);
-                                  loadCreditPlans(creditSearch, creditStatus, 1, creditLimit);
-                                }
-                              }}
-                              placeholder="코드, 이름, 상태 검색"
-                            />
-                          </div>
+                          <form onSubmit={handleCreditSearch} className="pol-search-form" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                            <div className="pol-search">
+                              <span className="material-icons">search</span>
+                              <input
+                                type="search"
+                                value={creditSearch}
+                                onChange={(e) => setCreditSearch(e.target.value)}
+                                placeholder="코드, 이름, 상태 검색"
+                              />
+                            </div>
+                            <div className="pol-filter-actions" style={{ display: "flex", gap: "6px" }}>
+                              {/* 검색(조회) 버튼 */}
+                              <button type="submit" className="mui-btn mui-btn--contained pol-btn-submit" style={{ height: "38px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                <span className="material-icons" style={{ fontSize: "18px" }}>search</span>
+                                조회
+                              </button>
+                              {/* 초기화 버튼 */}
+                              <button type="button" className="mui-btn mui-btn--outlined pol-btn-reset" onClick={handleCreditReset} style={{ height: "38px" }}>
+                                초기화
+                              </button>
+                            </div>
+                          </form>
                         </div>
                       </div>
                     </div>
@@ -771,14 +832,22 @@ export default function AdminPolicy() {
                       : "구독 플랜 추가"
                   }
                   form={planForm}
+                  billingCycle={planBillingCycle}
+                  onBillingCycleChange={setPlanBillingCycle}
                   onChange={updatePlanForm}
                   onSave={saveSubscriptionPlan}
-                  onReset={() => setPlanForm(SUBSCRIPTION_DEFAULT)}
+                  onReset={() => {
+                    setPlanForm(SUBSCRIPTION_DEFAULT);
+                    setPlanBillingCycle("monthly");
+                  }}
                   onClose={() => setPlanModalOpen(false)}
                 />
               </div>
               <div className="pol-modal-preview-col">
-                <PlanPreviewPanel form={planForm} />
+                <PlanPreviewPanel
+                  form={planForm}
+                  billingCycle={planBillingCycle}
+                />
               </div>
             </div>
           </div>
@@ -861,7 +930,16 @@ function PlanPagination({ page, limit, total, onPageChange }) {
   );
 }
 
-function PlanFormPanel({ title, form, onChange, onSave, onReset, onClose }) {
+function PlanFormPanel({
+  title,
+  form,
+  billingCycle,
+  onBillingCycleChange,
+  onChange,
+  onSave,
+  onReset,
+  onClose,
+}) {
   return (
     <aside className="pol-edit-panel pol-edit-panel--modal">
       <div className="pol-card-head">
@@ -882,12 +960,6 @@ function PlanFormPanel({ title, form, onChange, onSave, onReset, onClose }) {
           label="배지 문구"
           value={form.badge_label}
           onChange={(v) => onChange("badge_label", v)}
-        />
-        <SelectField
-          label="배지 스타일"
-          value={form.badge_class || SUBSCRIPTION_DEFAULT.badge_class}
-          onChange={(v) => onChange("badge_class", v)}
-          options={BADGE_CLASS_OPTIONS}
         />
         <NumberField
           label="노출 순서"
@@ -933,16 +1005,37 @@ function PlanFormPanel({ title, form, onChange, onSave, onReset, onClose }) {
       </FormSection>
 
       <FormSection title="결제 정책">
-        <NumberField
-          label="월 결제 금액"
-          value={form.price_amount}
-          onChange={(v) => onChange("price_amount", v)}
+        <BillingCycleTabs
+          value={billingCycle}
+          onChange={onBillingCycleChange}
         />
-        <NumberField
-          label="제공 크레딧"
-          value={form.credits}
-          onChange={(v) => onChange("credits", v)}
-        />
+        {billingCycle === "monthly" ? (
+          <>
+            <NumberField
+              label="월 결제 금액"
+              value={form.price_amount}
+              onChange={(v) => onChange("price_amount", v)}
+            />
+            <NumberField
+              label="월 제공 크레딧"
+              value={form.credits}
+              onChange={(v) => onChange("credits", v)}
+            />
+          </>
+        ) : (
+          <>
+            <NumberField
+              label="연 결제 금액"
+              value={form.yearly_price_amount}
+              onChange={(v) => onChange("yearly_price_amount", v)}
+            />
+            <NumberField
+              label="연 제공 크레딧"
+              value={form.yearly_credits}
+              onChange={(v) => onChange("yearly_credits", v)}
+            />
+          </>
+        )}
       </FormSection>
 
       <FormSection title="데이터 보존 정책">
@@ -979,11 +1072,7 @@ function PlanFormPanel({ title, form, onChange, onSave, onReset, onClose }) {
           저장
         </button>
       </div>
-              <a href="/admin/reports">
-            <span className="material-icons">report_problem</span>
-            문의 내역
-          </a>
-        </aside>
+    </aside>
   );
 }
 
@@ -1055,22 +1144,72 @@ function CreditFormPanel({ title, form, onChange, onSave, onReset, onClose }) {
           저장
         </button>
       </div>
-              <a href="/admin/reports">
-            <span className="material-icons">report_problem</span>
-            문의 내역
-          </a>
-        </aside>
+    </aside>
   );
 }
 
-function PlanPreviewPanel({ form }) {
-  const badgeClass = form.badge_class || "mui-chip--primary";
-  const badgeLabel = form.badge_label || "플랜";
+function BillingCycleTabs({ value, onChange, preview = false }) {
+  return (
+    <div className={`pol-billing-tabs${preview ? " pol-billing-tabs--preview" : ""}`}>
+      <button
+        type="button"
+        className={value === "monthly" ? "active" : ""}
+        onClick={() => onChange("monthly")}
+      >
+        월 결제
+      </button>
+      <button
+        type="button"
+        className={value === "yearly" ? "active" : ""}
+        onClick={() => onChange("yearly")}
+      >
+        연 결제
+      </button>
+    </div>
+  );
+}
+
+function PlanPreviewPanel({ form, billingCycle }) {
   const planName = form.plan_name || "플랜명";
   const description =
     form.description || "pricing 페이지에 표시될 플랜 설명입니다.";
-  // 버튼 문구는 price_amount 기준 고정 분기값 사용 (cta_label 제거)
-  const ctaLabel = Number(form.price_amount || 0) === 0 ? "무료로 시작" : "결제하기";
+
+  const isFree = form.plan_code === "free" || String(form.plan_name).toLowerCase().includes("free");
+  const monthlyPrice = Number(form.price_amount || 0);
+
+  // 가격 구성
+  let mainPrice = monthlyPrice;
+  let priceUnit = "원/월";
+  let perMonthSubText = null;
+
+  if (monthlyPrice === 0) {
+    mainPrice = 0;
+    priceUnit = "원";
+  } else if (billingCycle === "yearly") {
+    const yearlyPrice = resolveYearlyPrice(form);
+    const perMonth = Math.round(yearlyPrice / 12);
+    mainPrice = yearlyPrice;
+    priceUnit = "원/년";
+    perMonthSubText = `월 ${formatMoney(perMonth)}원 상당`;
+  }
+
+  // 버튼 CTA 라벨을 Pricing.jsx의 플랜 시작하기 대문자 포맷과 일치시킵니다.
+  const getCtaLabel = () => {
+    if (monthlyPrice === 0) return "무료로 시작";
+    const nameUpper = String(form.plan_name || "PRO").toUpperCase();
+    return `${nameUpper} 시작하기`;
+  };
+  const ctaLabel = getCtaLabel();
+
+  const getVideoFeature = () => {
+    const monthlyCredits = Number(form.credits || 0);
+    if (billingCycle === "yearly" && monthlyPrice > 0 && !isFree) {
+      const yearlyCredits = resolveYearlyCredits(form);
+      const perYear = Math.floor(yearlyCredits / 3);
+      return `영상 약 ${perYear.toLocaleString("ko-KR")}편 / 년`;
+    }
+    return `영상 약 ${Math.floor(monthlyCredits / 3).toLocaleString("ko-KR")}편 / 월`;
+  };
 
   return (
     <aside className="pol-preview-panel pol-preview-panel--modal">
@@ -1079,38 +1218,57 @@ function PlanPreviewPanel({ form }) {
       </div>
       <div className="pol-preview-body">
         <div className="pol-price-preview">
-          <span className={`mui-chip ${badgeClass} price-card__badge`}>
-            {badgeLabel}
-          </span>
           <span className="overline-k">{planName}</span>
           <div className="price-card__price">
-            {formatMoney(form.price_amount)}
-            <small>원 / 월</small>
+            {formatMoney(mainPrice)}
+            <small>{priceUnit}</small>
           </div>
-          {/* 연 결제 파생 금액 — 월 × 10 (2개월 무료), pricing 페이지와 동일 공식 */}
-          {Number(form.price_amount || 0) > 0 && (
-            <div className="pol-preview-yearly">
-              연 결제 {formatMoney(Number(form.price_amount) * 10)}원
-              <span> (2개월 무료 · 월 {formatMoney(Math.round(Number(form.price_amount) * 10 / 12))}원 상당)</span>
-            </div>
+          {perMonthSubText && (
+            <div className="price-card__permonth">{perMonthSubText}</div>
           )}
           <p className="caption-k">{description}</p>
+
+          {(() => {
+            const monthlyCredits = Number(form.credits || 0);
+            const isFreePlan = form.plan_code === "free" || String(form.plan_name).toLowerCase().includes("free");
+            const isYearly = billingCycle === "yearly" && Number(form.price_amount || 0) > 0 && !isFreePlan;
+            const yearlyCredits = resolveYearlyCredits(form);
+            return (
+              <div className="price-card__credit-line">
+                {isYearly ? (
+                  <>
+                    크레딧 {formatMoney(yearlyCredits)}개 / 년
+                    <span className="price-card__credit-note">
+                      월 {formatMoney(monthlyCredits)}개씩 제공
+                    </span>
+                  </>
+                ) : (
+                  `크레딧 ${formatMoney(monthlyCredits)}개`
+                )}
+              </div>
+            );
+          })()}
+
           <ul className="price-card__feats">
             <li>
-              <span className="material-icons">check</span>크레딧{" "}
-              {formatMoney(form.credits)}개
+              <span className="material-icons">check</span>월 처리{" "}
+              {formatQuota(form.monthly_quota)}
             </li>
             <li>
-              <span className="material-icons">check</span>월 처리 한도{" "}
-              {form.monthly_quota || "무제한"}건
+              <span className="material-icons">check</span>최대{" "}
+              {formatFileSize(form.file_size_limit)}
             </li>
             <li>
-              <span className="material-icons">check</span>최대 파일 크기{" "}
-              {formatMoney(form.file_size_limit)}MB
+              <span className="material-icons">check</span>
+              {Number(form.result_retention_days || 0) > 0
+                ? `결과 ${form.result_retention_days}일 보관`
+                : "결과 보관 없음"}
             </li>
             <li>
-              <span className="material-icons">check</span>결과 파일{" "}
-              {form.result_retention_days || 0}일 보관
+              <span className="material-icons">check</span>
+              {form.plan_code === "free" || String(form.plan_name).toLowerCase().includes("free")
+                ? "워터마크 미리보기"
+                : getVideoFeature()}
             </li>
           </ul>
           <button
@@ -1121,11 +1279,7 @@ function PlanPreviewPanel({ form }) {
           </button>
         </div>
       </div>
-              <a href="/admin/reports">
-            <span className="material-icons">report_problem</span>
-            문의 내역
-          </a>
-        </aside>
+    </aside>
   );
 }
 
@@ -1164,11 +1318,7 @@ function CreditPreviewPanel({ form }) {
           </button>
         </div>
       </div>
-              <a href="/admin/reports">
-            <span className="material-icons">report_problem</span>
-            문의 내역
-          </a>
-        </aside>
+    </aside>
   );
 }
 
@@ -1247,15 +1397,26 @@ function SelectField({ label, value, onChange, options = STATUS_OPTIONS }) {
   );
 }
 
+// 워터마크 필수 여부를 설정하는 토글 스위치 컴포넌트
 function ToggleField({ label, checked, onChange }) {
   return (
-    <label className="pol-switch-wrap pol-switch-wrap--field">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-      />
+    <div className="pol-field">
       <span>{label}</span>
-    </label>
+      <div className="pol-input pol-input--switch">
+        {/* 활성화 여부에 따라 "필수 적용" 또는 "선택 적용" 텍스트를 출력 */}
+        <span className="pol-switch-state">
+          {checked ? "필수 적용" : "선택 적용"}
+        </span>
+        {/* 토글 스위치 버튼 */}
+        <button
+          type="button"
+          className={`pol-switch ${checked ? "on" : ""}`}
+          onClick={() => onChange(!checked)}
+        >
+          <div className="knob" />
+        </button>
+      </div>
+    </div>
   );
 }
+

@@ -1,10 +1,11 @@
 from fastapi import APIRouter
 
-from controllers import admin
+from controllers import admin, oauth
 
 router = APIRouter(tags=["admin"])
 
 router.add_api_route("/users", admin.list_users, methods=["GET"])
+router.add_api_route("/users/{user_id}", oauth.update_user_role_and_status, methods=["PATCH"])
 router.add_api_route("/policy", admin.get_policy_settings, methods=["GET"])
 router.add_api_route("/policy", admin.update_policy_settings, methods=["PUT"])
 router.add_api_route("/plans", admin.list_subscription_plans, methods=["GET"])
@@ -21,6 +22,9 @@ router.add_api_route("/subscriptions/{user_id}/{subscription_id}", admin.cancel_
 router.add_api_route("/payments", admin.list_payments, methods=["GET"])
 router.add_api_route("/payments/{payment_id}", admin.get_payment_detail, methods=["GET"])
 router.add_api_route("/payments/{payment_id}/refund", admin.refund_payment, methods=["POST"])
+router.add_api_route("/login-histories", admin.list_login_histories, methods=["GET"])
+router.add_api_route("/login-histories/export", admin.export_login_histories_csv, methods=["GET"])
+router.add_api_route("/login-histories/{login_history_id}", admin.get_login_history_detail, methods=["GET"])
 
 # 회원 관리
 router.add_api_route("/monitoring/overview", admin.get_monitoring_overview, methods=["GET"])

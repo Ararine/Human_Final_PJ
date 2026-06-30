@@ -84,8 +84,13 @@ def _find_due_renewal_subscriptions(db: Session, limit: int = 50):
                 s.next_billing_at,
                 p.plan_code,
                 p.plan_name,
-                p.price_amount,
-                p.credits
+                CASE
+                    WHEN s.billing_period_days >= 365
+                    THEN COALESCE(NULLIF(p.yearly_price_amount, 0), p.price_amount * 10)
+                    ELSE p.price_amount
+                END AS price_amount,
+                p.credits,
+                p.billing_period_days -- [한글 주석] 동적 만료일 설정을 위해 추가
             FROM subscriptions s
             JOIN plans p ON p.plan_id = s.plan_id
             WHERE s.status = 'active'
@@ -115,10 +120,11 @@ def _find_due_scheduled_downgrades(db: Session, limit: int = 50):
                 p.plan_code,
                 p.plan_name,
                 p.price_amount,
-                p.credits
+                p.credits,
+                p.billing_period_days -- [한글 주석] 동적 만료일 설정을 위해 추가
             FROM subscription_plan_changes pc
             JOIN plans p ON p.plan_id = pc.to_plan_id
-            WHERE pc.change_type = 'downgrade'
+            WHERE pc.change_type IN ('downgrade', 'cancel_to_free') -- [한글 주석] 취소 예약 건도 스케줄러에서 함께 회수
               AND pc.status = 'scheduled'
               AND pc.effective_at <= NOW()
             ORDER BY pc.effective_at ASC, pc.created_at ASC
@@ -203,6 +209,7 @@ def _process_subscription_renewal(db: Session, subscription, charge_client=None)
         db=db,
         subscription_id=subscription["subscription_id"],
         payment_id=payment["payment_id"],
+        period_days=subscription.get("billing_period_days"), # [한글 주석] 플랜 주기 전달
     )
     attempt = _record_billing_attempt(
         db=db,
@@ -294,10 +301,28 @@ def _process_scheduled_downgrade(db: Session, plan_change, charge_client=None):
             "failure_code": charge.get("failure_code") or "billing_failed",
         }
 
+    # [한글 주석] 다운그레이드/취소가 성공적으로 진행되므로 기존 상위 유료 구독은 cancelled로 만료 처리
+    if plan_change.get("from_subscription_id"):
+        db.execute(
+            text("""
+                UPDATE subscriptions
+                SET
+                    status = 'cancelled',
+                    ended_at = NOW(),
+                    current_period_end = NOW(),
+                    billing_status = 'cancelled',
+                    updated_at = NOW()
+                WHERE subscription_id = :from_subscription_id
+                  AND status = 'active'
+            """),
+            {"from_subscription_id": plan_change["from_subscription_id"]},
+        )
+
     new_subscription = _insert_scheduled_downgrade_subscription(
         db=db,
         plan_change=plan_change,
         billing_key_id=billing_key["billing_key_id"],
+        period_days=plan_change.get("billing_period_days"), # [한글 주석] 플랜 주기 전달
     )
     payment = _insert_renewal_payment(
         db=db,
@@ -375,11 +400,21 @@ def _process_scheduled_downgrade(db: Session, plan_change, charge_client=None):
 
 
 def _charge_subscription(subscription, billing_key, charge_client=None, order_suffix="renewal"):
+    amount = int(subscription.get("price_amount") or 0)
+    
+    # [한글 주석] 결제 금액이 0원인 무료 플랜의 경우 PG사 승인 요청을 건너뛰고 즉시 성공 처리
+    if amount <= 0:
+        return {
+            "success": True,
+            "pg_transaction_id": f"free-bypass-{uuid.uuid4()}",
+            "method": "free_bypass",
+        }
+
     if charge_client:
         return charge_client(
             billing_key=billing_key["billing_key"],
             customer_key=billing_key.get("customer_key"),
-            amount=int(subscription.get("price_amount") or 0),
+            amount=amount,
             order_id=str(uuid.uuid4()),
             order_name=f"{subscription.get('plan_name') or subscription.get('plan_code')} {order_suffix}",
         )
@@ -469,7 +504,9 @@ def _insert_renewal_payment(
     return _row_mapping(row)
 
 
-def _insert_scheduled_downgrade_subscription(db: Session, plan_change, billing_key_id):
+def _insert_scheduled_downgrade_subscription(db: Session, plan_change, billing_key_id, period_days=None):
+    # [한글 주석] period_days가 전달되지 않았을 경우 plans 테이블 기본값(30일)으로 fallback 처리
+    p_days = int(period_days) if period_days is not None else 30
     row = db.execute(
         text("""
             INSERT INTO subscriptions (
@@ -486,6 +523,7 @@ def _insert_scheduled_downgrade_subscription(db: Session, plan_change, billing_k
                 auto_renew,
                 cancel_at_period_end,
                 billing_status,
+                billing_period_days,
                 created_at,
                 updated_at
             )
@@ -495,14 +533,15 @@ def _insert_scheduled_downgrade_subscription(db: Session, plan_change, billing_k
                 :billing_key_id,
                 'active',
                 NOW(),
-                NOW() + INTERVAL '30 days',
-                NOW() + INTERVAL '30 days',
+                NOW() + CAST(:period_days || ' days' AS interval), -- [한글 주석] 동적 만료일 설정
+                NOW() + CAST(:period_days || ' days' AS interval), -- [한글 주석] 동적 갱신일 설정
                 NOW(),
-                NOW() + INTERVAL '30 days',
-                NOW() + INTERVAL '30 days',
+                NOW() + CAST(:period_days || ' days' AS interval), -- [한글 주석] 동적 만료일 설정
+                NOW() + CAST(:period_days || ' days' AS interval), -- [한글 주석] 동적 다음결제일 설정
                 true,
                 false,
                 'paid',
+                :period_days,
                 NOW(),
                 NOW()
             )
@@ -512,20 +551,23 @@ def _insert_scheduled_downgrade_subscription(db: Session, plan_change, billing_k
             "user_id": plan_change["user_id"],
             "plan_id": plan_change["to_plan_id"],
             "billing_key_id": billing_key_id,
+            "period_days": p_days,
         },
     ).fetchone()
     return _row_mapping(row)
 
 
-def _extend_subscription_period(db: Session, subscription_id, payment_id):
+def _extend_subscription_period(db: Session, subscription_id, payment_id, period_days=None):
+    # [한글 주석] period_days가 전달되지 않았을 경우 plans 테이블 기본값(30일)으로 fallback 처리
+    p_days = int(period_days) if period_days is not None else 30
     row = db.execute(
         text("""
             UPDATE subscriptions
             SET
-                current_period_end = current_period_end + INTERVAL '30 days',
-                ended_at = current_period_end + INTERVAL '30 days',
-                renew_at = current_period_end + INTERVAL '30 days',
-                next_billing_at = current_period_end + INTERVAL '30 days',
+                current_period_end = current_period_end + CAST(:period_days || ' days' AS interval), -- [한글 주석] 동적 만료일 설정
+                ended_at = current_period_end + CAST(:period_days || ' days' AS interval), -- [한글 주석] 동적 만료일 설정
+                renew_at = current_period_end + CAST(:period_days || ' days' AS interval), -- [한글 주석] 동적 갱신일 설정
+                next_billing_at = current_period_end + CAST(:period_days || ' days' AS interval), -- [한글 주석] 동적 다음결제일 설정
                 billing_status = 'paid',
                 last_payment_id = :payment_id,
                 updated_at = NOW()
@@ -535,6 +577,7 @@ def _extend_subscription_period(db: Session, subscription_id, payment_id):
         {
             "subscription_id": subscription_id,
             "payment_id": payment_id,
+            "period_days": p_days,
         },
     ).fetchone()
     return _row_mapping(row)
