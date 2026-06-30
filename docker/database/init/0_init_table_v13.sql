@@ -203,6 +203,7 @@ CREATE TABLE IF NOT EXISTS analysis_jobs (
     queue_position integer CHECK (queue_position IS NULL OR queue_position >= 0),
     eta_seconds integer CHECK (eta_seconds IS NULL OR eta_seconds >= 0),
     message text,
+    target_pii_id varchar(100),
     cancel_requested boolean NOT NULL DEFAULT false,
     duration_seconds integer,
     width integer,
@@ -232,6 +233,7 @@ COMMENT ON COLUMN analysis_jobs.total_progress IS '전체 진행률';
 COMMENT ON COLUMN analysis_jobs.queue_position IS '큐 대기 순번';
 COMMENT ON COLUMN analysis_jobs.eta_seconds IS '예상 남은 시간 초';
 COMMENT ON COLUMN analysis_jobs.message IS '진행 메시지';
+COMMENT ON COLUMN analysis_jobs.target_pii_id IS '대상 PII ID - 마스킹 미리보기/본처리 작업에서 단일 PII를 지정하기 위한 식별자. null이면 사용자 선택 전체 대상';
 COMMENT ON COLUMN analysis_jobs.cancel_requested IS '취소 요청 여부';
 COMMENT ON COLUMN analysis_jobs.duration_seconds IS '원본 길이 초 - 원본 길이 초 정보를 저장하는 컬럼';
 COMMENT ON COLUMN analysis_jobs.width IS '원본 너비 - 원본 너비 정보를 저장하는 컬럼';
@@ -1010,6 +1012,7 @@ ALTER TABLE analysis_jobs
     ADD COLUMN IF NOT EXISTS queue_position integer CHECK (queue_position IS NULL OR queue_position >= 0),
     ADD COLUMN IF NOT EXISTS eta_seconds integer CHECK (eta_seconds IS NULL OR eta_seconds >= 0),
     ADD COLUMN IF NOT EXISTS message text,
+    ADD COLUMN IF NOT EXISTS target_pii_id varchar(100),
     ADD COLUMN IF NOT EXISTS cancel_requested boolean NOT NULL DEFAULT false,
     ADD COLUMN IF NOT EXISTS error_code varchar(100),
     ADD COLUMN IF NOT EXISTS result_file_path text,
@@ -1022,6 +1025,7 @@ COMMENT ON COLUMN analysis_jobs.total_progress IS '전체 진행률 - 작업 전
 COMMENT ON COLUMN analysis_jobs.queue_position IS '큐 대기 순번 - Free 사용자 내 앞 N명 표시 및 관리자 큐 모니터링용';
 COMMENT ON COLUMN analysis_jobs.eta_seconds IS '예상 남은 시간 초 - 진행 화면의 ETA 표시용';
 COMMENT ON COLUMN analysis_jobs.message IS '진행 메시지 - 현재 처리 상태를 사용자 또는 관리자에게 표시하는 문구';
+COMMENT ON COLUMN analysis_jobs.target_pii_id IS '대상 PII ID - mask_preview/mask_final 작업에서 단일 PII를 지정하기 위한 식별자. null이면 사용자 선택 전체 대상';
 COMMENT ON COLUMN analysis_jobs.cancel_requested IS '취소 요청 여부 - 사용자가 작업 취소를 요청했는지 여부';
 COMMENT ON COLUMN analysis_jobs.error_code IS '오류 코드 - 워커/검증/인코딩 실패 유형 식별자';
 COMMENT ON COLUMN analysis_jobs.result_file_path IS '결과 파일 경로 - 최종 처리 결과물 파일 경로 또는 객체 스토리지 키';

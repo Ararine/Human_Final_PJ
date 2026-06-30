@@ -43,3 +43,6 @@ STT_Model
 *.pth
 *.h5
 *.safetensors
+
+# output_file 폴더
+output_file/
