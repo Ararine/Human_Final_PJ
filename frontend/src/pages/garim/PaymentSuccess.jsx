@@ -41,6 +41,26 @@ function storePaymentResult(orderId, data) {
   }
 }
 
+function formatOrderName(value) {
+  if (!value) return "Garim 결제";
+  return String(value)
+    .replace(/yearly subscription/gi, "연 구독")
+    .replace(/monthly subscription/gi, "월 구독")
+    .replace(/renewal/gi, "자동결제 갱신")
+    .replace(/scheduled downgrade/gi, "예약 다운그레이드")
+    .replace(/\bFree\b/g, "무료");
+}
+
+function formatPaymentMethod(value) {
+  const normalized = String(value || "").toLowerCase();
+  if (!normalized) return "-";
+  if (normalized === "billing") return "자동결제";
+  if (normalized === "card") return "카드";
+  if (normalized === "easy_pay") return "간편결제";
+  if (normalized === "free_bypass") return "무료 처리";
+  return value;
+}
+
 export default function PaymentSuccess() {
   useDocumentTitle("결제 성공 · Garim");
   const navigate = useNavigate(); // useNavigate 훅 초기화
@@ -78,6 +98,7 @@ export default function PaymentSuccess() {
         const authKey = searchParams.get("authKey") || "";
         const customerKey = searchParams.get("customerKey") || "";
         const planCode = searchParams.get("planCode") || "";
+        const billingCycle = searchParams.get("billingCycle") === "yearly" ? "yearly" : "monthly";
 
         if (!authKey || !customerKey || !planCode) {
           setStatus("error");
@@ -90,6 +111,7 @@ export default function PaymentSuccess() {
             authKey,
             customerKey,
             planCode,
+            billingCycle,
           });
           setResult(data);
           setStatus("success");
@@ -135,7 +157,7 @@ export default function PaymentSuccess() {
     }
 
     runConfirm();
-  }, [orderId, paymentKey, requestedAmount, searchParams]);
+  }, [navigate, orderId, paymentKey, requestedAmount, searchParams]);
 
   return (
     <GarimPage bodyClass="page-app page-payment-success" screenLabel="Payment Success">
@@ -155,7 +177,7 @@ export default function PaymentSuccess() {
             <div className="summary">
               <div className="row">
                 <span>주문명</span>
-                <span className="v">{result?.orderName || "Garim 결제"}</span>
+                <span className="v">{formatOrderName(result?.orderName)}</span>
               </div>
               <div className="row">
                 <span>주문번호</span>
@@ -166,7 +188,7 @@ export default function PaymentSuccess() {
               {result?.method && (
                 <div className="row">
                   <span>결제 수단</span>
-                  <span className="v">{result.method}</span>
+                  <span className="v">{formatPaymentMethod(result.method)}</span>
                 </div>
               )}
               <div className="row total">

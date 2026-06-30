@@ -1,0 +1,59 @@
+services:
+  final_db:
+    image: pgvector/pgvector:pg16
+    container_name: final_db
+    restart: always
+
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB}"
+      TZ: "Asia/Seoul"
+
+    ports:
+      - "${DB_PORT}:5432"
+
+    volumes:
+      - "./database/postgre_data:/var/lib/postgresql/data"
+      - "./database/init:/docker-entrypoint-initdb.d"
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - garim_network
+
+  final_redis:
+    image: redis:7
+    container_name: final_redis
+    restart: always
+
+    environment:
+      TZ: "Asia/Seoul"
+
+    ports:
+      - "${REDIS_PORT}:6379"
+
+    ### 데이터 영속성 고려시 아래 주석 해제 ###
+    # volumes:
+    #   - "./database/redis_data:/data"
+
+    ## 모든 write 명령을 파일에 기록
+    # command: redis-server --appendonly yes
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    networks:
+      - garim_network
+
+networks:
+  garim_network:
+    driver: bridge

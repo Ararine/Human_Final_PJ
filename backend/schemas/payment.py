@@ -36,4 +36,5 @@ class BillingConfirmRequest(BaseModel):
     authKey: str
     customerKey: str
     planCode: str
+    billingCycle: Literal["monthly", "yearly"] = "monthly"
 

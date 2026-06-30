@@ -107,6 +107,7 @@ export default function AdminMonitoring() {
   return (
     <GarimPage bodyClass="" screenLabel="25 Admin monitor">
       <div className="adm-shell">
+        {/* 일관된 순서로 정비된 공통 관리자 사이드바 */}
         <aside className="adm-side">
           <div className="sec">운영</div>
           <a href="/admin/monitoring" className="active">
@@ -130,10 +131,6 @@ export default function AdminMonitoring() {
             <span className="material-icons">manage_history</span>
             로그인 히스토리
           </a>
-          <a href="/admin/analytics">
-            <span className="material-icons">analytics</span>
-            분석
-          </a>
           <a href="/admin/policy">
             <span className="material-icons">tune</span>
             정책 및 상품 관리
@@ -145,6 +142,10 @@ export default function AdminMonitoring() {
           <a href="/admin/payments">
             <span className="material-icons">payments</span>
             사용자 결제 확인
+          </a>
+          <a href="/admin/analytics">
+            <span className="material-icons">analytics</span>
+            분석
           </a>
           <a href="/admin/reports">
             <span className="material-icons">report_problem</span>

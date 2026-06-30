@@ -201,23 +201,36 @@
   text-align: left;
 }
 
+.login-history-table tr {
+  display: grid;
+  grid-template-columns: 1.4fr 2fr 0.8fr 0.8fr 1.5fr 1fr 1.3fr 70px;
+  gap: 12px;
+  align-items: center;
+  padding: 0 16px;
+}
+
 .login-history-table th {
   background: #fafafa;
   color: var(--fg-2);
   font: 600 11px var(--font-sans);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  padding: 12px 16px;
+  padding: 12px 4px;
   border-bottom: 1px solid var(--mui-divider);
   white-space: nowrap;
+  display: flex;
+  align-items: center;
 }
 
 .login-history-table td {
-  padding: 12px 16px;
+  padding: 12px 4px;
   border-bottom: 1px solid var(--mui-divider);
   font: 400 13px var(--font-sans);
   color: var(--fg-1);
   vertical-align: middle;
+  display: flex;
+  align-items: center;
+  min-width: 0;
 }
 
 .login-history-table tr:hover {
@@ -235,18 +248,9 @@
 }
 
 /* 특정 컬럼 데이터 중앙 정렬 (제공자, 결과, 실패 사유, IP 주소, 브라우저/OS, 작업) */
-.login-history-table th:nth-child(3),
-.login-history-table td:nth-child(3),
-.login-history-table th:nth-child(4),
-.login-history-table td:nth-child(4),
-.login-history-table th:nth-child(5),
-.login-history-table td:nth-child(5),
-.login-history-table th:nth-child(6),
-.login-history-table td:nth-child(6),
-.login-history-table th:nth-child(7),
-.login-history-table td:nth-child(7),
-.login-history-table th:nth-child(8),
-.login-history-table td:nth-child(8) {
+.login-history-table th:nth-child(n+3),
+.login-history-table td:nth-child(n+3) {
+  justify-content: center;
   text-align: center;
 }
 
@@ -272,13 +276,14 @@
   font-family: var(--font-mono);
 }
 
-/* 실패 사유 셀 줄임 처리 */
+/* 실패 사유 셀 줄임 처리: 고정 max-width 대신 컬럼 크기에 100% 맞춤 */
 .reason-cell {
-  max-width: 150px;
+  width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   color: #c62828;
+  text-align: center;
 }
 
 /* 상태 및 에러 표시 셀 */
@@ -565,3 +570,113 @@
 .btn-primary:hover {
   background: #1565c0;
 }
+
+/* =========================================================
+   🌙 다크 모드 대응 (.admin-login-history 페이지 전용)
+   ========================================================= */
+:root[data-theme="dark"] body {
+  background: var(--bg-2);
+}
+
+/* 제목 텍스트 컬러 보정 */
+:root[data-theme="dark"] .table-header-left h2,
+:root[data-theme="dark"] .table-card-header h2,
+:root[data-theme="dark"] .login-detail-modal__head h2 {
+  color: var(--fg-1);
+}
+
+/* 테이블 카드 배경 및 보더 보정 */
+:root[data-theme="dark"] .table-card {
+  background: var(--bg-1);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* 입력 필드 및 셀렉트 박스 다크 모드 보정 */
+:root[data-theme="dark"] .limit-selector select,
+:root[data-theme="dark"] .table-filter-grid input,
+:root[data-theme="dark"] .table-filter-grid select {
+  background: var(--bg-1);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--fg-1);
+}
+
+:root[data-theme="dark"] .search-select-input-group .search-type-select {
+  background: var(--surface-alt) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* 날짜 필드(캘린더) 대응 */
+:root[data-theme="dark"] .filter-date-range .filter-group input[type="date"] {
+  background: var(--bg-1);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--fg-1);
+}
+
+/* 테이블 헤더 및 로우 보정 */
+:root[data-theme="dark"] .login-history-table th {
+  background: var(--surface-alt);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] .login-history-table td {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] .login-history-table tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+:root[data-theme="dark"] .login-history-table tr.highlighted-row {
+  background: rgba(144, 202, 249, 0.12);
+}
+
+/* 테이블 푸터 보정 */
+:root[data-theme="dark"] .table-footer-controls {
+  background: var(--surface-alt);
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+/* 상세 팝업 모달 다크 모드 보정 */
+:root[data-theme="dark"] .login-detail-modal {
+  background: var(--bg-1);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+}
+
+:root[data-theme="dark"] .login-detail-modal__head {
+  background: var(--bg-1);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] .modal-close-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--fg-1);
+}
+
+:root[data-theme="dark"] .detail-user-agent {
+  background: var(--surface-alt);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] .login-detail-modal__foot {
+  background: var(--surface-alt);
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] .btn-secondary {
+  color: var(--fg-2);
+  border-color: rgba(255, 255, 255, 0.15);
+  background: transparent;
+}
+
+:root[data-theme="dark"] .btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--fg-1);
+}
+
+/* 로그인 결과 및 제공자 뱃지 다크모드 가독성 향상 */
+:root[data-theme="dark"] .provider-pill,
+:root[data-theme="dark"] .result-badge {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+

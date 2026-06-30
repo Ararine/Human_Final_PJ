@@ -38,6 +38,15 @@
   .accordion .feedback .caption-k { margin-right: auto; }
   .accordion .feedback button { padding: 6px 12px; border-radius: 4px; border: 1px solid var(--mui-border); background: #fff; cursor: pointer; font: 500 13px var(--font-sans); color: var(--fg-2); display: inline-flex; align-items: center; gap: 6px; }
   .accordion .feedback button:hover { background: rgba(0,0,0,0.04); }
+  .faq-empty {
+    padding: 32px 20px;
+    border: 1px solid var(--mui-border);
+    border-radius: 4px;
+    background: #fff;
+    color: var(--fg-2);
+    font: 400 14px/1.6 var(--font-sans);
+    text-align: center;
+  }
   .contact-card {
     margin-top: 48px; padding: 32px; background: #fff; border: 1px solid var(--mui-border); border-radius: 4px;
     display: flex; align-items: center; gap: 24px;
@@ -48,6 +57,7 @@
   /* ── 다크 모드 보정 ── 검색바/아코디언/문의카드 흰 배경 → 다크 표면색 */
   :root[data-theme="dark"] .search-bar,
   :root[data-theme="dark"] .accordion,
+  :root[data-theme="dark"] .faq-empty,
   :root[data-theme="dark"] .contact-card,
   :root[data-theme="dark"] .accordion .feedback button { background: var(--bg-1); }
   :root[data-theme="dark"] .search-bar input { background: transparent; color: var(--fg-1); }

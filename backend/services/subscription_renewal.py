@@ -84,7 +84,11 @@ def _find_due_renewal_subscriptions(db: Session, limit: int = 50):
                 s.next_billing_at,
                 p.plan_code,
                 p.plan_name,
-                p.price_amount,
+                CASE
+                    WHEN s.billing_period_days >= 365
+                    THEN COALESCE(NULLIF(p.yearly_price_amount, 0), p.price_amount * 10)
+                    ELSE p.price_amount
+                END AS price_amount,
                 p.credits,
                 p.billing_period_days -- [한글 주석] 동적 만료일 설정을 위해 추가
             FROM subscriptions s
@@ -519,6 +523,7 @@ def _insert_scheduled_downgrade_subscription(db: Session, plan_change, billing_k
                 auto_renew,
                 cancel_at_period_end,
                 billing_status,
+                billing_period_days,
                 created_at,
                 updated_at
             )
@@ -536,6 +541,7 @@ def _insert_scheduled_downgrade_subscription(db: Session, plan_change, billing_k
                 true,
                 false,
                 'paid',
+                :period_days,
                 NOW(),
                 NOW()
             )

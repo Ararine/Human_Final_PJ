@@ -12,6 +12,6 @@ export function useAuthStatus() {
 }
 
 export function useAuthUser() {
-  const { isAuthenticated, user } = useContext(AuthContext);
-  return { isAuthenticated, user };
+  const { isAuthenticated, user, loading } = useContext(AuthContext);
+  return { isAuthenticated, user, loading };
 }

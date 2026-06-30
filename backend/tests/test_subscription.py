@@ -36,6 +36,8 @@ def test_resolve_current_plan_uses_valid_active_subscription_rank_order():
     assert "s.current_period_start <= NOW()" in sql
     assert "s.current_period_end > NOW()" in sql
     assert "p.plan_rank DESC" in sql
+    assert "yearly_price_amount" in sql
+    assert "s.billing_period_days >= 365" in sql
     assert "cancel_at_period_end = false" not in sql
     assert "auto_renew = true" not in sql
     assert result["current_plan"]["plan_code"] == "studio"
@@ -697,12 +699,16 @@ def test_apply_upgrade_with_proration_creates_upper_and_cancels_lower():
     
     insert_upper_sql = str(db_mock.execute.call_args_list[2].args[0])
     insert_upper_params = db_mock.execute.call_args_list[2].args[1]
-    
+    find_lower_sql = str(db_mock.execute.call_args_list[1].args[0])
+
     cancel_lower_sql = str(db_mock.execute.call_args_list[3].args[0])
     
     change_sql = str(db_mock.execute.call_args_list[5].args[0])
     change_params = db_mock.execute.call_args_list[5].args[1]
-    
+
+    assert "yearly_price_amount" in find_lower_sql
+    assert "s.billing_period_days >= 365" in find_lower_sql
+
     # [한글 주석] 상위 구독 insert 쿼리 및 파라미터 체크
     assert "INSERT INTO subscriptions" in insert_upper_sql
     assert "billing_key_id" in insert_upper_sql

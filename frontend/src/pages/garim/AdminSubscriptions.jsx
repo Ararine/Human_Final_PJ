@@ -6,30 +6,15 @@ import {
   getAdminSubscriptionDetail,
   getAdminSubscriptions,
 } from "../../utils/api";
+import { formatKstDate, formatKstDateTime } from "../../utils/timezone";
 
 function formatDateTime(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("ko-KR", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatKstDateTime(value);
 }
 
 // 구독 기간 종료일 등을 연.월.일 형식으로 간결하게 렌더링하여 모달 카드를 두 줄로 맞추기 위한 한국어 날짜 헬퍼 함수
 function formatDateOnly(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString("ko-KR", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
+  return formatKstDate(value);
 }
 
 function formatMoney(value) {
@@ -218,6 +203,7 @@ export default function AdminSubscriptions() {
   return (
     <GarimPage bodyClass="" screenLabel="31 Admin Subscriptions">
       <div className="adm-shell">
+        {/* 일관된 순서로 정비된 공통 관리자 사이드바 */}
         <aside className="adm-side">
           <div className="sec">운영</div>
           <a href="/admin/monitoring">
@@ -232,7 +218,7 @@ export default function AdminSubscriptions() {
             <span className="material-icons">verified_user</span>
             컴플라이언스
           </a>
-          <div className="sec">서비스</div>
+          <div className="sec">시스템</div>
           <a href="/admin/users">
             <span className="material-icons">people</span>
             사용자

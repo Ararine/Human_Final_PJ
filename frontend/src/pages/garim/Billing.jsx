@@ -7,25 +7,43 @@ import {
   requestPlanChange,
   resumeSubscription,
 } from "../../utils/api";
+import { formatKstDateTime } from "../../utils/timezone";
 import "../../css/garim-pages/Billing.css";
 
 import GarimPage from "../../components/garim/GarimPage";
 
 function formatDateTime(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return new Intl.DateTimeFormat("ko-KR", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+  return formatKstDateTime(value);
 }
 
 function formatPrice(value) {
   return new Intl.NumberFormat("ko-KR").format(Number(value || 0));
+}
+
+function formatPlanName(name, code) {
+  const normalizedCode = String(code || "").toLowerCase();
+  if (normalizedCode === "free" || name === "Free") return "무료";
+  return name || "-";
+}
+
+function formatPaymentMethod(value) {
+  const normalized = String(value || "").toLowerCase();
+  if (!normalized) return "-";
+  if (normalized === "billing") return "자동결제";
+  if (normalized === "card") return "카드";
+  if (normalized === "easy_pay") return "간편결제";
+  if (normalized === "free_bypass") return "무료 처리";
+  return value;
+}
+
+function formatOrderName(value) {
+  if (!value) return "-";
+  return String(value)
+    .replace(/yearly subscription/gi, "연 구독")
+    .replace(/monthly subscription/gi, "월 구독")
+    .replace(/renewal/gi, "자동결제 갱신")
+    .replace(/scheduled downgrade/gi, "예약 다운그레이드")
+    .replace(/\bFree\b/g, "무료");
 }
 
 // 결제 상태(billing_status)값을 한국어로 변환해주는 유틸리티 함수
@@ -176,8 +194,8 @@ export default function Billing() {
               <div className="billing-surface billing-hero">
                 <div className="billing-hero__meta">
                   <span className="mui-chip mui-chip--primary mui-chip--md">현재 플랜</span>
-                  <h2>{currentPlan?.plan_name || "Free"}</h2>
-                  <p>{currentPlan?.plan_code?.toUpperCase() || "FREE"}</p>
+                  <h2>{formatPlanName(currentPlan?.plan_name, currentPlan?.plan_code)}</h2>
+                  <p>{currentPlan?.plan_code === "free" ? "무료" : currentPlan?.plan_code?.toUpperCase() || "무료"}</p>
                 </div>
                 <div className="billing-hero__price">
                   {formatPrice(currentPlan?.price_amount)}
@@ -210,9 +228,9 @@ export default function Billing() {
               <section className="billing-surface billing-message">
                 <h3>구독 업그레이드 정산 내역</h3>
                 <p>
-                  기존 {latestUpgradeProration.from_plan_name} 플랜의 남은 이용분{" "}
+                  기존 {formatPlanName(latestUpgradeProration.from_plan_name, latestUpgradeProration.from_plan_code)} 플랜의 남은 이용분{" "}
                   {formatPrice(latestUpgradeProration.discount_amount)}원이{" "}
-                  {latestUpgradeProration.to_plan_name} 결제 금액에서 차감되었습니다. (실제 결제 금액:{" "}
+                  {formatPlanName(latestUpgradeProration.to_plan_name, latestUpgradeProration.to_plan_code)} 결제 금액에서 차감되었습니다. (실제 결제 금액:{" "}
                   {formatPrice(latestUpgradeProration.charged_amount)}원)
                 </p>
               </section>
@@ -222,8 +240,8 @@ export default function Billing() {
               <section className="billing-surface billing-message">
                 <h3>다운그레이드 예약</h3>
                 <p>
-                  {currentPlan?.plan_name}는 {formatDateTime(currentSubscription?.current_period_end)}까지 유지되고,
-                  이후 {scheduledPlanChange?.to_plan_name} 플랜으로 변경됩니다.
+                  {formatPlanName(currentPlan?.plan_name, currentPlan?.plan_code)}는 {formatDateTime(currentSubscription?.current_period_end)}까지 유지되고,
+                  이후 {formatPlanName(scheduledPlanChange?.to_plan_name, scheduledPlanChange?.to_plan_code)} 플랜으로 변경됩니다.
                 </p>
                 <div className="billing-actions">
                   <button
@@ -242,8 +260,8 @@ export default function Billing() {
               <section className="billing-surface billing-message">
                 <h3>구독 취소 예약</h3>
                 <p>
-                  {formatDateTime(currentSubscription?.current_period_end)}까지 {currentPlan?.plan_name} 플랜을 사용할
-                  수 있습니다. 이후 유효한 다른 구독이 없으면 Free 플랜으로 전환됩니다.
+                  {formatDateTime(currentSubscription?.current_period_end)}까지 {formatPlanName(currentPlan?.plan_name, currentPlan?.plan_code)} 플랜을 사용할
+                  수 있습니다. 이후 유효한 다른 구독이 없으면 무료 플랜으로 전환됩니다.
                 </p>
                 <div className="billing-actions">
                   <button
@@ -307,12 +325,12 @@ export default function Billing() {
                   {data.payment_history.map((item) => (
                     <div key={item.orderId} className="billing-history__row">
                       <div>
-                        <strong>{item.orderName}</strong>
+                        <strong>{formatOrderName(item.orderName)}</strong>
                         <span>{formatDateTime(item.approvedAt)}</span>
                       </div>
                       <div>
                         <strong>{formatPrice(item.amount)}원</strong>
-                        <span>{item.method}</span>
+                        <span>{formatPaymentMethod(item.method)}</span>
                       </div>
                     </div>
                   ))}

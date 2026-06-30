@@ -130,7 +130,11 @@ def resolve_current_plan(db: Session, user_id: str):
                 p.plan_code,
                 p.plan_name,
                 p.plan_rank,
-                p.price_amount,
+                CASE
+                    WHEN s.billing_period_days >= 365
+                    THEN COALESCE(NULLIF(p.yearly_price_amount, 0), p.price_amount * 10)
+                    ELSE p.price_amount
+                END AS price_amount,
                 p.credits,
                 p.billing_period_days -- [한글 주석] 동적 만료일 설정을 위해 추가
             FROM subscriptions s
@@ -214,14 +218,12 @@ def _get_target_plan(db: Session, to_plan_id: str):
 def calculate_upgrade_proration(current_plan, current_subscription, target_plan, now=None):
     """업그레이드 시 기존 플랜의 잔여 이용 가치를 금액으로 계산한다. (소수점 이하 버림)"""
     if now is None:
-        from datetime import datetime
-        now = datetime.now()
+        from utils.timezone import now_kst
+        now = now_kst()
 
-    from dateutil.parser import parse
     def parse_dt(dt_val):
-        if isinstance(dt_val, str):
-            return parse(dt_val)
-        return dt_val
+        from utils.timezone import to_kst
+        return to_kst(dt_val)
 
     current_period_start = parse_dt(current_subscription["current_period_start"])
     current_period_end = parse_dt(current_subscription["current_period_end"])
@@ -670,10 +672,11 @@ def create_or_extend_subscription(
     plan_id,
     payment_id=None,
     billing_key_id=None, # [한글 주석] 정기 결제 빌링키 ID 파라미터 추가
+    period_days=None,
 ):
     """결제 성공 후 같은 플랜 구독을 동적으로 정의된 기간만큼 생성하거나 연장한다."""
     target_plan = _get_target_plan(db, str(plan_id))
-    p_days = int(target_plan.get("billing_period_days") or 30)
+    p_days = int(period_days or target_plan.get("billing_period_days") or 30)
 
     existing_row = db.execute(
         text("""
@@ -734,6 +737,7 @@ def create_or_extend_subscription(
                     billing_status = 'paid',
                     last_payment_id = :payment_id,
                     billing_key_id = COALESCE(CAST(:billing_key_id AS uuid), billing_key_id), -- [한글 주석] 빌링키 정보 업데이트
+                    billing_period_days = :period_days,
                     updated_at = NOW()
                 WHERE subscription_id = :subscription_id
                 RETURNING subscription_id, current_period_start, current_period_end, next_billing_at
@@ -765,6 +769,7 @@ def create_or_extend_subscription(
                     billing_status = 'paid',
                     last_payment_id = :payment_id,
                     billing_key_id = CAST(:billing_key_id AS uuid), -- [한글 주석] 빌링키 정보 재설정
+                    billing_period_days = :period_days,
                     updated_at = NOW()
                 WHERE subscription_id = :subscription_id
                 RETURNING subscription_id, current_period_start, current_period_end, next_billing_at
@@ -795,6 +800,7 @@ def create_or_extend_subscription(
                 billing_status,
                 last_payment_id,
                 billing_key_id, -- [한글 주석] 빌링키 컬럼 추가
+                billing_period_days,
                 created_at,
                 updated_at
             )
@@ -813,6 +819,7 @@ def create_or_extend_subscription(
                 'paid',
                 :payment_id,
                 CAST(:billing_key_id AS uuid), -- [한글 주석] 빌링키 컬럼 바인딩
+                :period_days,
                 NOW(),
                 NOW()
             )
@@ -836,6 +843,7 @@ def apply_upgrade_with_proration(
     to_plan_id=None,
     payment_id=None,
     billing_key_id=None, # [한글 주석] 정기 결제 빌링키 ID 파라미터 추가
+    period_days=None,
 ):
     """업그레이드 시 기존 구독을 즉시 취소하고, 새 플랜 구독을 정산 차액 기준으로 적용합니다."""
     if not to_plan_id:
@@ -878,6 +886,7 @@ def apply_upgrade_with_proration(
                 billing_status,
                 last_payment_id,
                 billing_key_id, -- [한글 주석] 빌링키 고유키 매핑
+                billing_period_days,
                 created_at,
                 updated_at
             )
@@ -896,6 +905,7 @@ def apply_upgrade_with_proration(
                 'paid',
                 :payment_id,
                 CAST(:billing_key_id AS uuid), -- [한글 주석] 빌링키 컬럼 바인딩
+                :period_days,
                 NOW(),
                 NOW()
             )
@@ -906,7 +916,7 @@ def apply_upgrade_with_proration(
             "plan_id": target_plan["plan_id"],
             "payment_id": payment_id,
             "billing_key_id": billing_key_id,
-            "period_days": int(target_plan.get("billing_period_days") or 30),
+            "period_days": int(period_days or target_plan.get("billing_period_days") or 30),
         },
     ).fetchone()
     upper = _row_mapping(upper_row)
@@ -1048,7 +1058,11 @@ def _find_upgrade_source_subscription(
                 s.current_period_start,
                 s.current_period_end,
                 p.plan_rank,
-                p.price_amount -- [한글 주석] 기존 구독 플랜의 잔여 가치 금액 계산을 위해 가격 추가
+                CASE
+                    WHEN s.billing_period_days >= 365
+                    THEN COALESCE(NULLIF(p.yearly_price_amount, 0), p.price_amount * 10)
+                    ELSE p.price_amount
+                END AS price_amount -- [한글 주석] 기존 구독 플랜의 잔여 가치 금액 계산을 위해 가격 추가
             FROM subscriptions s
             JOIN plans p ON p.plan_id = s.plan_id
             WHERE s.user_id = :user_id

@@ -17,9 +17,9 @@ function isProtectedRoute(route) {
   return route.requiresAuth ?? PROTECTED_LAYOUTS.has(route.layout);
 }
 
-function ProtectedRoute({ children }) {
+function ProtectedRoute({ children, requireAdmin = false }) {
   const location = useLocation();
-  const { isAuthenticated, loading } = useAuthUser();
+  const { isAuthenticated, user, loading } = useAuthUser();
 
   if (loading) {
     return (
@@ -35,7 +35,15 @@ function ProtectedRoute({ children }) {
     return <Navigate to={`/login?next=${encodeURIComponent(nextPath)}`} replace />;
   }
 
+  if (requireAdmin && user?.role !== "admin") {
+    return <Navigate to="/" replace />;
+  }
+
   return children;
+}
+
+function AdminIndexRoute() {
+  return <Navigate to="/admin/monitoring" replace />;
 }
 
 function renderRouteElement(route) {
@@ -49,7 +57,7 @@ function renderRouteElement(route) {
     return page;
   }
 
-  return <ProtectedRoute>{page}</ProtectedRoute>;
+  return <ProtectedRoute requireAdmin={route.layout === "admin"}>{page}</ProtectedRoute>;
 }
 
 function App() {
@@ -66,6 +74,14 @@ function App() {
             element={renderRouteElement(route)}
           />
         ))}
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute requireAdmin>
+              <AdminIndexRoute />
+            </ProtectedRoute>
+          }
+        />
         <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </NotificationProvider>

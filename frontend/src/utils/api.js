@@ -81,7 +81,17 @@ export async function saveConsents(isAgreed, version) {
 }
 
 export async function logout() {
-  return requestJson("/auth/logout", { method: "POST" });
+  const response = await fetch(`${getApiBaseUrl()}/auth/logout`, {
+    method: "POST",
+    credentials: "include",
+  });
+  const body = await response.json().catch(() => ({ authenticated: false }));
+
+  if (response.ok || response.status === 401) {
+    return body;
+  }
+
+  throw new Error(body.message || body.detail || "로그아웃에 실패했습니다.");
 }
 
 export async function getUserSettings() {
@@ -486,9 +496,14 @@ export async function uploadFile(file) {
 }
 
 let refreshPromise = null;
+let sessionExpiredHandled = false;
 
 // 세션 만료 시 사유 알림 후 로그인 페이지로 이동
 function handleSessionExpired(reason) {
+  if (sessionExpiredHandled) return;
+  sessionExpiredHandled = true;
+
+  if (typeof window === "undefined") return;
   // 이미 로그인 페이지면 알림 없이 종료 (무한 루프 방지)
   if (window.location.pathname === "/login") return;
 

@@ -142,10 +142,6 @@ export default function AdminQueue() {
             <span className="material-icons">manage_history</span>
             로그인 히스토리
           </a>
-          <a href="/admin/analytics">
-            <span className="material-icons">analytics</span>
-            분석
-          </a>
           <a href="/admin/policy">
             <span className="material-icons">tune</span>
             정책 및 상품 관리
@@ -157,6 +153,10 @@ export default function AdminQueue() {
           <a href="/admin/payments">
             <span className="material-icons">payments</span>
             사용자 결제 확인
+          </a>
+          <a href="/admin/analytics">
+            <span className="material-icons">analytics</span>
+            분석
           </a>
           <a href="/admin/reports">
             <span className="material-icons">report_problem</span>

@@ -291,6 +291,10 @@ def test_service_list_subscription_plans_filters_and_sorts(monkeypatch):
         "badge_label": "추천",
         "badge_class": "mui-chip--soft-warning",
         "description": "자주 분석하는 사용자에게 적합합니다.",
+        "price_amount": 2900,
+        "yearly_price_amount": 29000,
+        "credits": 50,
+        "yearly_credits": 600,
         "sort_order": 20,
         "status": "active",
     }
@@ -311,6 +315,8 @@ def test_service_list_subscription_plans_filters_and_sorts(monkeypatch):
     assert "badge_label" in sql
     assert "badge_class" in sql
     assert "description" in sql
+    assert "yearly_price_amount" in sql
+    assert "yearly_credits" in sql
     assert "cta_label" not in sql
     assert "status <> 'deleted'" in sql
     assert "LOWER(plan_code)" in sql
@@ -321,6 +327,8 @@ def test_service_list_subscription_plans_filters_and_sorts(monkeypatch):
     data = data["data"]
     assert data[0]["plan_code"] == "pro"
     assert data[0]["badge_label"] == "추천"
+    assert data[0]["yearly_price_amount"] == 29000
+    assert data[0]["yearly_credits"] == 600
     db.close.assert_called_once()
 
 
@@ -373,6 +381,8 @@ def test_service_update_subscription_plan_pricing_copy_sql(monkeypatch):
             "badge_label": "추천",
             "badge_class": "mui-chip--soft-warning",
             "description": "자주 분석하는 사용자에게 적합합니다.",
+            "yearly_price_amount": 29000,
+            "yearly_credits": 600,
         },
     )
 
@@ -382,10 +392,58 @@ def test_service_update_subscription_plan_pricing_copy_sql(monkeypatch):
     assert "badge_label = :badge_label" in sql
     assert "badge_class = :badge_class" in sql
     assert "description = :description" in sql
+    assert "yearly_price_amount = :yearly_price_amount" in sql
+    assert "yearly_credits = :yearly_credits" in sql
     assert "cta_label" not in sql
     assert params["badge_label"] == "추천"
+    assert params["yearly_price_amount"] == 29000
+    assert params["yearly_credits"] == 600
     assert data["description"] == "자주 분석하는 사용자에게 적합합니다."
     db.commit.assert_called_once()
+
+
+def test_service_get_admin_policies_includes_yearly_plan_fields(monkeypatch):
+    plan_row = MagicMock()
+    plan_row._mapping = {
+        "plan_code": "pro",
+        "plan_name": "Pro",
+        "badge_label": "인기",
+        "badge_class": "mui-chip--soft-warning",
+        "description": "정기적으로 영상을 다루는 플랜입니다.",
+        "file_size_limit": 500,
+        "max_jobs": 3,
+        "monthly_quota": 50,
+        "result_retention_days": 30,
+        "price_amount": 2900,
+        "yearly_price_amount": 29000,
+        "watermark_required": False,
+        "auto_delete_original_hours": 12,
+        "metadata_retention_days": 90,
+        "credits": 50,
+        "yearly_credits": 650,
+        "status": "active",
+        "sort_order": 20,
+        "plan_rank": 10,
+    }
+    db = MagicMock()
+    db.execute.side_effect = [
+        MagicMock(fetchall=MagicMock(return_value=[])),
+        MagicMock(fetchall=MagicMock(return_value=[plan_row])),
+        MagicMock(fetchall=MagicMock(return_value=[])),
+    ]
+    monkeypatch.setattr(admin_service, "SessionLocal", lambda: db)
+
+    policies = admin_service.get_admin_policies()
+
+    plan_policy = policies["payment"]["plans"]["pro"]
+    plan_sql = str(db.execute.call_args_list[1].args[0])
+    assert "yearly_price_amount" in plan_sql
+    assert "yearly_credits" in plan_sql
+    assert plan_policy["price"] == 2900
+    assert plan_policy["credits"] == 50
+    assert plan_policy["yearlyPrice"] == 29000
+    assert plan_policy["yearlyCredits"] == 650
+    db.close.assert_called_once()
 
 
 def test_service_list_credit_plans_filters_and_sorts(monkeypatch):

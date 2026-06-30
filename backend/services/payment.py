@@ -8,12 +8,35 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from services import subscription as subscription_service
 from services.subscription import resolve_current_plan
+from utils.timezone import now_kst, to_kst
 
 load_dotenv()
 
 TOSS_SECRET_KEY = os.getenv(
     "TOSS_SECRET_KEY"
 )
+
+
+def _positive_int_or_none(value):
+    try:
+        parsed = int(value or 0)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _subscription_amount_for_cycle(plan, billing_cycle: str) -> int:
+    monthly_amount = int(plan.get("price_amount") or 0)
+    if billing_cycle != "yearly":
+        return monthly_amount
+    return _positive_int_or_none(plan.get("yearly_price_amount")) or monthly_amount * 10
+
+
+def _subscription_credits_for_cycle(plan, billing_cycle: str) -> int:
+    monthly_credits = int(plan.get("credits") or 0)
+    if billing_cycle != "yearly":
+        return monthly_credits
+    return _positive_int_or_none(plan.get("yearly_credits")) or monthly_credits * 12
 
 async def create_temp_order(
     db: Session,
@@ -992,13 +1015,24 @@ async def confirm_billing_payment(
     auth_key: str,
     customer_key: str,
     plan_code: str,
-    user_id: str
+    user_id: str,
+    billing_cycle: str = "monthly"
 ):
     try:
+        billing_cycle = "yearly" if billing_cycle == "yearly" else "monthly"
+        billing_period_days = 365 if billing_cycle == "yearly" else 30
+        billing_cycle_label = "연 구독" if billing_cycle == "yearly" else "월 구독"
+
         # 1. plan_code에 해당하는 active 플랜 정보 조회
         plan_row = db.execute(
             text("""
-                SELECT plan_id, plan_name, price_amount, credits
+                SELECT
+                    plan_id,
+                    plan_name,
+                    price_amount,
+                    yearly_price_amount,
+                    credits,
+                    yearly_credits
                 FROM plans
                 WHERE LOWER(plan_code) = LOWER(:plan_code)
                   AND status = 'active'
@@ -1023,9 +1057,32 @@ async def confirm_billing_payment(
         is_upgrade = (plan_change["change_type"] == "upgrade" and plan_change.get("current_subscription"))
 
         if is_upgrade:
-            amount = plan_change["proration"]["charged_amount"]
+            if billing_cycle == "yearly":
+                from math import floor
+
+                current_sub = plan_change.get("current_subscription") or {}
+                current_plan_data = plan_change.get("current_plan") or {}
+                target_yearly_amount = _subscription_amount_for_cycle(plan, "yearly")
+
+                try:
+                    period_start = to_kst(current_sub.get("current_period_start"))
+                    period_end = to_kst(current_sub.get("current_period_end"))
+                    now = now_kst()
+
+                    period_seconds = max(1.0, (period_end - period_start).total_seconds())
+                    remaining_seconds = max(0.0, (period_end - now).total_seconds())
+                    current_price = int(current_plan_data.get("price_amount") or 0)
+                    remaining_amount = min(
+                        floor(current_price * remaining_seconds / period_seconds),
+                        current_price,
+                    )
+                    amount = max(0, target_yearly_amount - remaining_amount)
+                except Exception:
+                    amount = target_yearly_amount
+            else:
+                amount = plan_change["proration"]["charged_amount"]
         else:
-            amount = plan["price_amount"]
+            amount = _subscription_amount_for_cycle(plan, billing_cycle)
 
         # 2. 토스 빌링키 발급 API 호출
         toss_billing_result = await _issue_toss_billing_key(auth_key, customer_key)
@@ -1069,7 +1126,7 @@ async def confirm_billing_payment(
                 "user_id": user_id,
                 "plan_id": plan_id,
                 "amount": amount,
-                "order_name": f"Garim {plan_name} 정기구독",
+                "order_name": f"Garim {plan_name} {billing_cycle_label}",
             }
         )
 
@@ -1077,7 +1134,7 @@ async def confirm_billing_payment(
         if is_upgrade and amount == 0:
             toss_status = "SUCCESS"
             receipt_url = None
-            from datetime import datetime
+            approved_at = now_kst().isoformat()
             toss_result = {
                 "status": "DONE",
                 "paymentKey": "MOCK_ZERO_UPGRADE_KEY_" + payment_id,
@@ -1086,8 +1143,8 @@ async def confirm_billing_payment(
                 "totalAmount": 0,
                 "balanceAmount": 0,
                 "currency": "KRW",
-                "requestedAt": datetime.now().isoformat(),
-                "approvedAt": datetime.now().isoformat(),
+                "requestedAt": approved_at,
+                "approvedAt": approved_at,
                 "isPartialCancelable": False,
                 "receipt": {"url": None}
             }
@@ -1097,7 +1154,7 @@ async def confirm_billing_payment(
                 customer_key=customer_key,
                 order_id=payment_id,
                 amount=amount,
-                order_name=f"Garim {plan_name} 정기구독"
+                order_name=f"Garim {plan_name} {billing_cycle_label}"
             )
             toss_status = str(toss_result.get("status", "")).upper()
 
@@ -1186,6 +1243,7 @@ async def confirm_billing_payment(
                 to_plan_id=plan_id,
                 payment_id=payment_id,
                 billing_key_id=billing_key_id,
+                period_days=billing_period_days,
             )
         else:
             subscription = subscription_service.create_or_extend_subscription(
@@ -1194,6 +1252,7 @@ async def confirm_billing_payment(
                 plan_id=plan_id,
                 payment_id=payment_id,
                 billing_key_id=billing_key_id,
+                period_days=billing_period_days,
             )
 
         subscription_id = subscription["subscription_id"]
@@ -1214,7 +1273,7 @@ async def confirm_billing_payment(
         )
 
         # 9. 구독 플랜 기본 크레딧 지급
-        grant_amount = int(plan.get("credits") or 0)
+        grant_amount = _subscription_credits_for_cycle(plan, billing_cycle)
         if grant_amount > 0:
             _add_user_credits(
                 db=db,
@@ -1231,8 +1290,9 @@ async def confirm_billing_payment(
         return {
             "status": toss_status,
             "orderId": payment_id,
-            "orderName": f"Garim {plan_name} 정기구독",
+            "orderName": f"Garim {plan_name} {billing_cycle_label}",
             "amount": amount,
+            "billingCycle": billing_cycle,
             "method": toss_result.get("method"),
             "approvedAt": toss_result.get("approvedAt"),
             "receiptUrl": receipt_url,

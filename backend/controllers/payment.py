@@ -137,6 +137,7 @@ async def confirm_billing_payment(
             auth_key=body.authKey,
             customer_key=body.customerKey,
             plan_code=body.planCode,
+            billing_cycle=body.billingCycle,
             user_id=current_user["id"],
         )
         return result

@@ -35,6 +35,7 @@ PLAN_FIELDS = {
     "result_retention_days",
     "watermark_required",
     "price_amount",
+    "yearly_price_amount",
     "sort_order",
     "plan_rank",
     "status",
@@ -43,6 +44,7 @@ PLAN_FIELDS = {
     "auto_delete_original_hours",
     "metadata_retention_days",
     "credits",
+    "yearly_credits",
 }
 
 CREDIT_PLAN_FIELDS = {
@@ -151,6 +153,7 @@ def list_subscription_plans(
                     result_retention_days,
                     watermark_required,
                     price_amount,
+                    yearly_price_amount,
                     sort_order,
                     plan_rank,
                     status,
@@ -159,6 +162,7 @@ def list_subscription_plans(
                     auto_delete_original_hours,
                     metadata_retention_days,
                     credits,
+                    yearly_credits,
                     created_at,
                     updated_at
                 FROM plans
@@ -212,6 +216,7 @@ def create_subscription_plan(payload: dict):
                     result_retention_days,
                     watermark_required,
                     price_amount,
+                    yearly_price_amount,
                     sort_order,
                     plan_rank,
                     status,
@@ -220,6 +225,7 @@ def create_subscription_plan(payload: dict):
                     auto_delete_original_hours,
                     metadata_retention_days,
                     credits,
+                    yearly_credits,
                     created_at,
                     updated_at
             """),
@@ -269,6 +275,7 @@ def update_subscription_plan(plan_id: str, payload: dict):
                     result_retention_days,
                     watermark_required,
                     price_amount,
+                    yearly_price_amount,
                     sort_order,
                     plan_rank,
                     status,
@@ -277,6 +284,7 @@ def update_subscription_plan(plan_id: str, payload: dict):
                     auto_delete_original_hours,
                     metadata_retention_days,
                     credits,
+                    yearly_credits,
                     created_at,
                     updated_at
             """),
@@ -834,9 +842,11 @@ def get_admin_subscription_detail(user_id: str):
             last_paid_at = m["last_paid_at"]
             days_since_last_payment = None
             if last_paid_at:
-                now_utc = datetime.now(timezone.utc)
-                paid_utc = last_paid_at.replace(tzinfo=timezone.utc) if last_paid_at.tzinfo is None else last_paid_at
-                days_since_last_payment = (now_utc - paid_utc).days
+                # KST 시간 헬퍼를 임포트하여 결제일 경과 일수를 KST 기준으로 정밀하게 계산합니다.
+                from utils.timezone import now_kst, to_kst
+                now_kst_dt = now_kst()
+                paid_kst = to_kst(last_paid_at)
+                days_since_last_payment = (now_kst_dt - paid_kst).days
 
             # 크레딧 사용률 계산 (경고 판단용)
             plan_credits = int(m["plan_credits"] or 0)
@@ -1051,10 +1061,12 @@ def get_admin_policies():
                     monthly_quota,
                     result_retention_days,
                     price_amount,
+                    yearly_price_amount,
                     watermark_required,
                     auto_delete_original_hours,
                     metadata_retention_days,
                     credits,
+                    yearly_credits,
                     status,
                     sort_order,
                     plan_rank
@@ -1088,6 +1100,8 @@ def get_admin_policies():
                 **common,
                 "credits": pm["credits"],
                 "price": pm["price_amount"],
+                "yearlyCredits": pm["yearly_credits"],
+                "yearlyPrice": pm["yearly_price_amount"],
             }
             policies["retention"]["plans"][pcode] = {
                 **common,
@@ -1443,9 +1457,11 @@ def get_payment_detail(payment_id: str):
         paid_at = m["paid_at"] or m["created_at"]
         days_since_payment = 0
         if paid_at:
-            now_utc = datetime.now(timezone.utc)
-            paid_utc = paid_at.replace(tzinfo=timezone.utc) if paid_at.tzinfo is None else paid_at
-            days_since_payment = (now_utc - paid_utc).days
+            # KST 시간 헬퍼를 임포트하여 결제일 경과 일수를 KST 기준으로 정밀하게 계산합니다.
+            from utils.timezone import now_kst, to_kst
+            now_kst_dt = now_kst()
+            paid_kst = to_kst(paid_at)
+            days_since_payment = (now_kst_dt - paid_kst).days
 
         # 크레딧 사용률 계산 (충전 크레딧 대비 충전 이후 사용량 비율)
         credit_amount = int(m["credit_amount"] or 0)
@@ -1699,9 +1715,11 @@ def cancel_subscription_for_user(user_id: str, subscription_id: str, cancel_reas
         if prev_sub:
             prev = prev_sub._mapping
             period_end = prev["current_period_end"]
-            now_utc = datetime.now(timezone.utc)
-            # period_end가 미래이면 이전 구독 복원
-            if period_end and period_end.replace(tzinfo=timezone.utc) > now_utc:
+            # KST 시간 헬퍼를 임포트하여 현재 시간과 만료 만기일을 KST 기준으로 비교합니다.
+            from utils.timezone import now_kst, to_kst
+            now_kst_dt = now_kst()
+            # period_end가 미래이면 이전 구독 복원 (KST 기준 비교)
+            if period_end and to_kst(period_end) > now_kst_dt:
                 db.execute(
                     text("""
                         UPDATE subscriptions
@@ -2904,7 +2922,9 @@ def _parse_user_agent_to_device(ua: str | None) -> str:
 def _parse_period_dates(period, start_date=None, end_date=None):
     # [한글 주석] 기간 필터 값에 따라 시작일과 종료일을 datetime 객체로 변환합니다. 기본값은 30일입니다.
     from datetime import datetime, timedelta
-    now = datetime.now()
+    from utils.timezone import now_kst
+
+    now = now_kst().replace(tzinfo=None)
     if period == "7d":
         return now - timedelta(days=7), now + timedelta(days=1)
     elif period == "30d":

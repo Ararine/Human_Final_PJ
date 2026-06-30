@@ -49,7 +49,8 @@ export default function AdminUsers() {
   const [total,      setTotal]      = useState(0);
   const [roleFilter, setRoleFilter] = useState("");
   const [statFilter, setStatFilter] = useState("");
-  const [search,     setSearch]     = useState("");
+  const [searchKeyword, setSearchKeyword] = useState(""); // 입력 중인 임시 검색어 상태
+  const [activeSearch, setActiveSearch] = useState("");   // 실제 조회에 적용된 검색어 상태
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState(null);
   const [queryVersion, setQueryVersion] = useState(0); // 강제 목록 갱신용 카운터
@@ -120,11 +121,27 @@ export default function AdminUsers() {
     }
   };
 
-  // 사용자의 요청에 따라 검색 시 UID 매칭을 배제하고 이메일로만 필터링하도록 수정합니다.
-  const filteredUsers = search
+  // 검색 버튼 클릭 혹은 Enter 입력 시 검색 필터를 적용하는 핸들러 함수
+  const handleSearch = (e) => {
+    if (e) e.preventDefault();
+    setActiveSearch(searchKeyword);
+    setPage(1);
+  };
+
+  // 모든 필터와 검색 키워드를 리셋하는 초기화 핸들러 함수
+  const handleReset = () => {
+    setSearchKeyword("");
+    setActiveSearch("");
+    setRoleFilter("");
+    setStatFilter("");
+    setPage(1);
+  };
+
+  // 사용자의 요청에 따라 검색 시 UID 매칭을 배제하고 이메일로만 필터링합니다 (적용된 검색어 기준).
+  const filteredUsers = activeSearch
     ? users.filter(
         (u) =>
-          u.email.toLowerCase().includes(search.toLowerCase())
+          u.email.toLowerCase().includes(activeSearch.toLowerCase())
       )
     : users;
 
@@ -253,16 +270,29 @@ export default function AdminUsers() {
                     <option value="suspended">정지</option>
                     <option value="deleted">탈퇴</option>
                   </select>
-                  <div className="usr-search-wrap">
-                    <input
-                      className="usr-search"
-                      type="search"
-                      placeholder="이메일 검색…"
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      aria-label="사용자 검색"
-                    />
-                  </div>
+                  <form onSubmit={handleSearch} className="usr-search-form" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    <div className="usr-search-wrap">
+                      <input
+                        className="usr-search"
+                        type="search"
+                        placeholder="이메일 검색…"
+                        value={searchKeyword}
+                        onChange={(e) => setSearchKeyword(e.target.value)}
+                        aria-label="사용자 검색"
+                      />
+                    </div>
+                    <div className="usr-filter-actions" style={{ display: "flex", gap: "6px" }}>
+                      {/* 검색(조회) 버튼 */}
+                      <button type="submit" className="mui-btn mui-btn--contained usr-btn-submit" style={{ height: "38px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                        <span className="material-icons" style={{ fontSize: "18px" }}>search</span>
+                        조회
+                      </button>
+                      {/* 초기화 버튼 */}
+                      <button type="button" className="mui-btn mui-btn--outlined usr-btn-reset" onClick={handleReset} style={{ height: "38px" }}>
+                        초기화
+                      </button>
+                    </div>
+                  </form>
                 </div>
               </div>
             </div>

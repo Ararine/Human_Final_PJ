@@ -92,6 +92,7 @@ export default function AdminAnalytics() {
   return (
     <GarimPage bodyClass="" screenLabel="29 Admin analytics">
       <div className="adm-shell">
+        {/* 일관된 순서로 정비된 공통 관리자 사이드바 */}
         <aside className="adm-side">
           <div className="sec">운영</div>
           <a href="/admin/monitoring">
@@ -115,10 +116,6 @@ export default function AdminAnalytics() {
             <span className="material-icons">manage_history</span>
             로그인 히스토리
           </a>
-          <a href="/admin/analytics" className="active">
-            <span className="material-icons">analytics</span>
-            분석
-          </a>
           <a href="/admin/policy">
             <span className="material-icons">tune</span>
             정책 및 상품 관리
@@ -131,7 +128,11 @@ export default function AdminAnalytics() {
             <span className="material-icons">payments</span>
             사용자 결제 확인
           </a>
-                  <a href="/admin/reports">
+          <a href="/admin/analytics" className="active">
+            <span className="material-icons">analytics</span>
+            분석
+          </a>
+          <a href="/admin/reports">
             <span className="material-icons">report_problem</span>
             문의 내역
           </a>
@@ -186,13 +187,13 @@ export default function AdminAnalytics() {
                     <h3>일별 처리 건수</h3>
                     <span className="meta">최근 {days}일</span>
                   </div>
-                  <div className="body an-chart-placeholder an-chart-scroll">
-                    <div className="an-plan-row tbl-head">
+                  <div className="body an-chart-scroll">
+                    <div className="an-daily-row tbl-head">
                       <span>날짜</span>
                       <span>처리 건수</span>
                     </div>
                     {data.daily_jobs.map((d) => (
-                      <div className="an-plan-row an-plan-row--bordered" key={d.date}>
+                      <div className="an-daily-row" key={d.date}>
                         <span>{d.date}</span>
                         <span>{d.count.toLocaleString()}</span>
                       </div>
@@ -204,14 +205,14 @@ export default function AdminAnalytics() {
                   <div className="head">
                     <h3>제공자별 가입 비율</h3>
                   </div>
-                  <div className="body an-chart-placeholder an-chart-scroll">
-                    <div className="an-plan-row tbl-head">
+                  <div className="body an-chart-scroll">
+                    <div className="an-provider-row tbl-head">
                       <span>제공자</span>
                       <span>가입 수</span>
                       <span>비율</span>
                     </div>
                     {data.providers.map((p) => (
-                      <div className="an-plan-row an-plan-row--bordered" key={p.provider}>
+                      <div className="an-provider-row" key={p.provider}>
                         <span>{p.provider}</span>
                         <span>{p.count.toLocaleString()}</span>
                         <span>{p.pct}%</span>

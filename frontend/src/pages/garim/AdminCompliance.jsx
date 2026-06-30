@@ -6,6 +6,7 @@ import {
   getComplianceConsent,
   getComplianceReports,
 } from "../../utils/api";
+import { formatKstDateTime } from "../../utils/timezone";
 import "../../css/garim-pages/AdminCompliance.css";
 import GarimPage from "../../components/garim/GarimPage";
 
@@ -160,6 +161,7 @@ export default function AdminCompliance() {
     <GarimPage bodyClass="" screenLabel="27 Admin compliance">
       <div className="adm-shell">
         {/* ── 사이드바 ── */}
+        {/* 일관된 순서로 정비된 공통 관리자 사이드바 */}
         <aside className="adm-side">
           <div className="sec">운영</div>
           <a href="/admin/monitoring"><span className="material-icons">monitor_heart</span>사용자 모니터링</a>
@@ -168,10 +170,10 @@ export default function AdminCompliance() {
           <div className="sec">시스템</div>
           <a href="/admin/users"><span className="material-icons">people</span>사용자</a>
           <a href="/admin/login-history"><span className="material-icons">manage_history</span>로그인 히스토리</a>
-          <a href="/admin/analytics"><span className="material-icons">analytics</span>분석</a>
           <a href="/admin/policy"><span className="material-icons">tune</span>정책 및 상품 관리</a>
           <a href="/admin/subscriptions"><span className="material-icons">subscriptions</span>구독 관리</a>
           <a href="/admin/payments"><span className="material-icons">payments</span>사용자 결제 확인</a>
+          <a href="/admin/analytics"><span className="material-icons">analytics</span>분석</a>
           <a href="/admin/reports"><span className="material-icons">report_problem</span>문의 내역</a>
         </aside>
 
@@ -428,7 +430,7 @@ export default function AdminCompliance() {
                               {r.filename}
                             </span>
                             <span className="policy" style={{ fontSize: 11 }}>
-                              {r.created_at.slice(0, 16)}
+                              {formatKstDateTime(r.created_at)}
                             </span>
                             <span className="caption-k">{r.file_size}</span>
                             <span className="policy">{mediaInfo}</span>
@@ -453,8 +455,8 @@ export default function AdminCompliance() {
                             ["처리 ID",     r.short_id],
                             ["사용자 이메일", r.email],
                             ["처리 상태",    r.status],
-                            ["처리 시점",    r.created_at],
-                            ["완료 시점",    r.completed_at],
+                            ["처리 시점",    formatKstDateTime(r.created_at)],
+                            ["완료 시점",    formatKstDateTime(r.completed_at)],
                             ["파일 유형",    r.content_type],
                             ["파일 크기",    r.file_size],
                             ["영상 길이",    r.duration],
@@ -495,7 +497,7 @@ export default function AdminCompliance() {
                           </span>
                         </div>
                         <div style={{ padding: "12px 16px", font: "400 13px var(--font-sans)" }}>
-                          <div><strong>{r.type_label}</strong> · {r.created_at}</div>
+                          <div><strong>{r.type_label}</strong> · {formatKstDateTime(r.created_at)}</div>
                           <div style={{ marginTop: 6, color: "var(--fg-2)" }}>{r.description || "상세 내용 없음"}</div>
                         </div>
                       </div>
@@ -542,7 +544,7 @@ export default function AdminCompliance() {
                         </h3>
                         {!consentRes.is_default && consentRes.user?.joined_at && (
                           <span className="caption-k" style={{ fontSize: 11 }}>
-                            가입: {consentRes.user.joined_at}
+                            가입: {formatKstDateTime(consentRes.user.joined_at)}
                           </span>
                         )}
                       </div>
@@ -559,7 +561,7 @@ export default function AdminCompliance() {
                               fontFamily: "var(--font-mono)", fontSize: 12,
                               color: "var(--fg-2)", minWidth: 160
                             }}>
-                              {c.created_at}
+                              {formatKstDateTime(c.created_at)}
                             </span>
                             {/* 기본 50건 목록일 때 이메일도 표시 */}
                             {consentRes.is_default && (
@@ -633,7 +635,7 @@ export default function AdminCompliance() {
                         borderBottom: isLast ? "none" : undefined
                       }}>
                       <span className="caption-k" style={{ fontFamily: "var(--font-mono)" }}>
-                        {r.created_at}
+                        {formatKstDateTime(r.created_at)}
                       </span>
                       <span>
                         <span className={`${reportChipClass(r.report_type)} mui-chip`}

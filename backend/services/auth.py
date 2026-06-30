@@ -4,13 +4,14 @@ import hmac
 import json
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import uuid4
 
 from fastapi import Cookie, HTTPException, status
 from sqlalchemy import text
 
 from services import redis_store, users
+from utils.timezone import KST, now_kst
 
 
 ACCESS_COOKIE_NAME = "access_token"
@@ -137,8 +138,8 @@ def create_login_session(user, user_agent=None, ip_address=None):
             "role": role,
             "user_agent": user_agent,
             "ip": ip_address,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "expires_at": datetime.fromtimestamp(refresh_expires_at, timezone.utc).isoformat(),
+            "created_at": now_kst().isoformat(),
+            "expires_at": datetime.fromtimestamp(refresh_expires_at, KST).isoformat(),
         },
     )
     return {
@@ -192,7 +193,7 @@ def refresh_login_session(refresh_token):
             "refresh_jti": new_refresh_jti,
             "refresh_hash": hash_refresh_token(new_refresh_token),
             "role": role,
-            "expires_at": datetime.fromtimestamp(refresh_expires_at, timezone.utc).isoformat(),
+            "expires_at": datetime.fromtimestamp(refresh_expires_at, KST).isoformat(),
         }
     )
     redis_store.save_session(session_id, session)

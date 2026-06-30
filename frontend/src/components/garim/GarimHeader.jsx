@@ -170,8 +170,16 @@ export default function GarimHeader({ layout = "public", current = "" }) {
         </a>
         <div className="spacer" />
         <div className="gh__right">
-
           <ThemeToggle />
+          {/* 사용자 페이지로 이동 버튼 */}
+          <Link
+            to="/"
+            className="gh__icon"
+            title="사용자 페이지로 이동"
+            aria-label="사용자 페이지로 이동"
+          >
+            <span className="material-icons">home</span>
+          </Link>
           {renderBell()}
           <div className="gh__avatar gh__avatar--admin">
             A
@@ -269,9 +277,11 @@ export default function GarimHeader({ layout = "public", current = "" }) {
             {headerUserInfo.role === "admin" && (
               <Link
                 to="/admin/monitoring"
-                className="mui-btn mui-btn--outlined mui-btn--sm gh__admin-btn"
+                className="gh__icon"
+                title="관리자 페이지로 이동"
+                aria-label="관리자 페이지로 이동"
               >
-                관리자 페이지로 이동
+                <span className="material-icons">admin_panel_settings</span>
               </Link>
             )}
             {renderBell()}

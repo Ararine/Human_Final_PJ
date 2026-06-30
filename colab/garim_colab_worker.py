@@ -22,7 +22,7 @@ import requests
 
 # ===== 환경설정 (모든 환경설정은 이부분에서 변경) =====
 # 정식 도메인이 있으면 정식 도메인 입력, 없으면 cloudflare_tunnel.py로 생성한 임시 URL 입력 (임시URL/api/v1)
-BACKEND_URL                = "https://garim.shop/api/v1"  # Cloudflare Tunnel URL (마지막 슬래시 없이)
+BACKEND_URL                = "https://keeping-desired-duo-somewhat.trycloudflare.com"  # Cloudflare Tunnel URL (마지막 슬래시 없이)
 WORKER_SECRET              = "change_me_to_a_long_random_secret"
 WORKER_ID                  = "colab-worker-01"
 POLL_INTERVAL_SECONDS      = 10   # job이 없을 때 재polling 간격 (초)
@@ -417,7 +417,7 @@ import sys
 # 플랫폼에서 파일을 삭제하면 드라이브에서도 자동 삭제되도록 연동되어 있으나, 구글 드라이브 정책상 '휴지통'으로 이동할 뿐 용량은 계속 차지하게 됩니다.
 # 따라서 테스트 용도로 사용할 때 드라이브 용량이 작다면, 원활한 구동을 위해 주기적으로 구글 드라이브의 '휴지통 비우기'를 진행해야 합니다.
 
-GARIM_COLAB_DIR      = "/content/drive/MyDrive/final_PJ_model"  # 본인의 구글 드라이브 내 실제 파이프라인 파일이 있는 폴더 경로로 변경하세요.
+GARIM_COLAB_DIR      = "/content/drive/MyDrive/final_test_folder"  # 본인의 구글 드라이브 내 실제 파이프라인 파일이 있는 폴더 경로로 변경하세요.
 PIPELINE_FILENAME    = "colab_pipeline_stt.py"                  
 MASK_PIPELINE_FILE   = "colab_pipeline_mask.py"                 
 

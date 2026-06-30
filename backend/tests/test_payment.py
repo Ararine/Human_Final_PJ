@@ -1024,6 +1024,8 @@ def test_find_due_renewal_subscriptions_filters_auto_renew_only():
     assert "s.auto_renew = true" in sql
     assert "s.cancel_at_period_end = false" in sql
     assert "s.next_billing_at <= NOW()" in sql
+    assert "yearly_price_amount" in sql
+    assert "s.billing_period_days >= 365" in sql
     assert "FOR UPDATE OF s SKIP LOCKED" in sql
     assert params["limit"] == 25
 
@@ -1496,6 +1498,177 @@ def test_service_get_my_payment_info_returns_current_plan_code():
     assert result["latest_upgrade_proration"]["to_plan_name"] == "Studio"
     assert result["latest_upgrade_proration"]["discount_amount"] == 1000
     assert result["scheduled_plan_change"]["change_type"] == "downgrade"
+
+
+@pytest.mark.anyio
+async def test_confirm_billing_payment_uses_explicit_yearly_amount_and_credits(monkeypatch):
+    db_mock = MagicMock()
+    plan_row = MagicMock()
+    plan_row._mapping = {
+        "plan_id": "plan-pro",
+        "plan_name": "Pro",
+        "price_amount": 2900,
+        "yearly_price_amount": 25000,
+        "credits": 50,
+        "yearly_credits": 650,
+    }
+    db_mock.execute.side_effect = [
+        MagicMock(fetchone=MagicMock(return_value=plan_row)),
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+    ]
+    monkeypatch.setattr(
+        payment_service.subscription_service,
+        "classify_plan_change",
+        lambda db, user_id, to_plan_id: {
+            "change_type": "same_plan",
+            "current_subscription": None,
+        },
+    )
+    create_call = MagicMock(return_value={"subscription_id": "subscription-pro-yearly"})
+    monkeypatch.setattr(
+        payment_service.subscription_service,
+        "create_or_extend_subscription",
+        create_call,
+    )
+    async def fake_issue_toss_billing_key(auth_key, customer_key):
+        return {
+            "billingKey": "raw-billing-key",
+            "card": {"company": "테스트카드", "number": "****1234"},
+        }
+
+    monkeypatch.setattr(payment_service, "_issue_toss_billing_key", fake_issue_toss_billing_key)
+
+    async def fake_confirm_billing_payment(billing_key, customer_key, order_id, amount, order_name):
+        assert amount == 25000
+        assert "연 구독" in order_name
+        return {
+            "status": "DONE",
+            "paymentKey": "payment-key-yearly",
+            "lastTransactionKey": "tx-yearly",
+            "method": "card",
+            "totalAmount": amount,
+            "balanceAmount": amount,
+            "currency": "KRW",
+            "requestedAt": "2026-06-29T10:00:00+09:00",
+            "approvedAt": "2026-06-29T10:00:10+09:00",
+            "isPartialCancelable": True,
+            "receipt": {"url": "https://example.com/receipt"},
+        }
+
+    monkeypatch.setattr(payment_service, "_confirm_toss_billing_payment", fake_confirm_billing_payment)
+    monkeypatch.setattr(
+        billing_service,
+        "save_billing_key",
+        MagicMock(return_value={"billing_key_id": "billing-key-yearly"}),
+    )
+    credit_grant = MagicMock()
+    monkeypatch.setattr(payment_service, "_add_user_credits", credit_grant)
+
+    result = await payment_service.confirm_billing_payment(
+        db=db_mock,
+        auth_key="auth-key",
+        customer_key="customer-key",
+        plan_code="pro",
+        user_id="user-yearly",
+        billing_cycle="yearly",
+    )
+
+    plan_sql = str(db_mock.execute.call_args_list[0].args[0])
+    ready_payment_params = db_mock.execute.call_args_list[1].args[1]
+    assert "yearly_price_amount" in plan_sql
+    assert "yearly_credits" in plan_sql
+    assert ready_payment_params["amount"] == 25000
+    assert result["amount"] == 25000
+    assert result["billingCycle"] == "yearly"
+    create_call.assert_called_once_with(
+        db=db_mock,
+        user_id="user-yearly",
+        plan_id="plan-pro",
+        payment_id=result["orderId"],
+        billing_key_id="billing-key-yearly",
+        period_days=365,
+    )
+    credit_grant.assert_called_once()
+    assert credit_grant.call_args.kwargs["amount"] == 650
+
+
+@pytest.mark.anyio
+async def test_confirm_billing_payment_yearly_falls_back_to_monthly_formula(monkeypatch):
+    db_mock = MagicMock()
+    plan_row = MagicMock()
+    plan_row._mapping = {
+        "plan_id": "plan-pro",
+        "plan_name": "Pro",
+        "price_amount": 2900,
+        "yearly_price_amount": None,
+        "credits": 50,
+        "yearly_credits": None,
+    }
+    db_mock.execute.side_effect = [
+        MagicMock(fetchone=MagicMock(return_value=plan_row)),
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+    ]
+    monkeypatch.setattr(
+        payment_service.subscription_service,
+        "classify_plan_change",
+        lambda db, user_id, to_plan_id: {
+            "change_type": "same_plan",
+            "current_subscription": None,
+        },
+    )
+    monkeypatch.setattr(
+        payment_service.subscription_service,
+        "create_or_extend_subscription",
+        MagicMock(return_value={"subscription_id": "subscription-pro-yearly-fallback"}),
+    )
+    async def fake_issue_toss_billing_key(auth_key, customer_key):
+        return {"billingKey": "raw-billing-key", "card": {}}
+
+    monkeypatch.setattr(payment_service, "_issue_toss_billing_key", fake_issue_toss_billing_key)
+
+    async def fake_confirm_billing_payment(billing_key, customer_key, order_id, amount, order_name):
+        assert amount == 29000
+        return {
+            "status": "DONE",
+            "paymentKey": "payment-key-yearly-fallback",
+            "lastTransactionKey": "tx-yearly-fallback",
+            "method": "card",
+            "totalAmount": amount,
+            "balanceAmount": amount,
+            "currency": "KRW",
+            "requestedAt": "2026-06-29T10:00:00+09:00",
+            "approvedAt": "2026-06-29T10:00:10+09:00",
+            "isPartialCancelable": True,
+            "receipt": {"url": "https://example.com/receipt"},
+        }
+
+    monkeypatch.setattr(payment_service, "_confirm_toss_billing_payment", fake_confirm_billing_payment)
+    monkeypatch.setattr(
+        billing_service,
+        "save_billing_key",
+        MagicMock(return_value={"billing_key_id": "billing-key-yearly-fallback"}),
+    )
+    credit_grant = MagicMock()
+    monkeypatch.setattr(payment_service, "_add_user_credits", credit_grant)
+
+    result = await payment_service.confirm_billing_payment(
+        db=db_mock,
+        auth_key="auth-key",
+        customer_key="customer-key",
+        plan_code="pro",
+        user_id="user-yearly-fallback",
+        billing_cycle="yearly",
+    )
+
+    ready_payment_params = db_mock.execute.call_args_list[1].args[1]
+    assert ready_payment_params["amount"] == 29000
+    assert result["amount"] == 29000
+    credit_grant.assert_called_once()
+    assert credit_grant.call_args.kwargs["amount"] == 600
 
 
 def test_spend_user_credits_insufficient_balance():

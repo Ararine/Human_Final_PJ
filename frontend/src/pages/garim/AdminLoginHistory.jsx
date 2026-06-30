@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
+import { formatKstDateTime } from "../../utils/timezone";
 import "../../css/garim-pages/AdminLoginHistory.css";
 
 import GarimPage from "../../components/garim/GarimPage";
@@ -31,7 +32,7 @@ const RESULT_CLASS = {
 // 날짜시간 포맷팅 헬퍼 함수
 function formatDateTimeSeconds(value) {
   if (!value) return "-";
-  return value.replace("T", " ").split(".")[0];
+  return formatKstDateTime(value, { second: "2-digit", hour12: false });
 }
 
 export default function AdminLoginHistory() {
@@ -203,7 +204,7 @@ export default function AdminLoginHistory() {
   return (
     <GarimPage bodyClass="" screenLabel="32 Admin login history">
       <div className="adm-shell">
-        {/* 관리자 사이드바 */}
+        {/* 일관된 순서로 정비된 공통 관리자 사이드바 */}
         <aside className="adm-side">
           <div className="sec">운영</div>
           <a href="/admin/monitoring">
@@ -242,6 +243,10 @@ export default function AdminLoginHistory() {
           <a href="/admin/analytics">
             <span className="material-icons">analytics</span>
             분석
+          </a>
+          <a href="/admin/reports">
+            <span className="material-icons">report_problem</span>
+            문의 내역
           </a>
         </aside>
 

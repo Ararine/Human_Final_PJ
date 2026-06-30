@@ -29,8 +29,28 @@ if str(_LOCAL_WORKER_DIR) not in sys.path:
     sys.path.insert(0, str(_LOCAL_WORKER_DIR))
 
 
+def check_and_migrate_db():
+    from utils.database import SessionLocal
+    from sqlalchemy import text
+    db = SessionLocal()
+    try:
+        db.execute(text("ALTER TABLE plans ADD COLUMN IF NOT EXISTS yearly_price_amount integer;"))
+        db.execute(text("ALTER TABLE plans ADD COLUMN IF NOT EXISTS yearly_credits integer;"))
+        db.execute(text("ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS billing_period_days integer NOT NULL DEFAULT 30;"))
+        db.commit()
+        logger.info("Database migration check (yearly plan columns, subscription billing_period_days) completed successfully.")
+    except Exception as e:
+        db.rollback()
+        logger.error("Failed to migrate database (yearly columns check): %s", e)
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # 서버 기동 시 누락된 DB 컬럼 자동 복구 마이그레이션 실행
+    check_and_migrate_db()
+
     settings = subscription_scheduler.get_scheduler_settings()
     subscription_scheduler_task = subscription_scheduler.start_subscription_scheduler(
         enabled=settings.enabled,

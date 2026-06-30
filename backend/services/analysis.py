@@ -761,13 +761,11 @@ def download_result_file(
 
         m = file_row._mapping
 
-        # 만료 여부 확인
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc)
+        # KST 타임존 헬퍼를 가져와 파일의 만료 여부를 KST 기준으로 체크합니다.
+        from utils.timezone import now_kst, to_kst
+        now_kst_dt = now_kst()
         expires_at = m["expires_at"]
-        if expires_at and expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=timezone.utc)
-        is_expired = expires_at and now > expires_at
+        is_expired = expires_at and now_kst_dt > to_kst(expires_at)
 
         # 다운로드 이력 기록
         import logging
@@ -1035,9 +1033,9 @@ def get_dashboard_data(user_id: str) -> dict:
 
         recent_jobs = get_history_list(user_id, limit=5, offset=0)["items"]
 
-        # 월 1일 초기화되는 무료 처리 횟수 계산
-        import datetime
-        current_month_start = datetime.datetime.now(datetime.timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        # KST 기준으로 이번 달 1일 00:00:00 시간을 계산하여 무료 사용량을 산출합니다.
+        from utils.timezone import now_kst
+        current_month_start = now_kst().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         
         used_free_limit = db.execute(
             text("""

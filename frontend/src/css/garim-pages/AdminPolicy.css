@@ -51,18 +51,19 @@ body { background: #fafafa; }
 
 .pol-data-table { width: 100%; }
 /* 구독 플랜: 플랜명(2fr) | 상태 | 월 결제 금액 | 월 제공 크레딧 | 최대 파일 크기 | 결과 보존 기간 | 작업(90px) */
-.pol-data-table--subscription .pol-data-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 90px; gap: 0; align-items: center; padding: 0 20px; border-bottom: 1px solid var(--mui-divider); cursor: pointer; min-height: 56px; }
+.pol-data-table--subscription .pol-data-row { display: grid; grid-template-columns: 2fr 0.8fr 1.2fr 1.2fr 1.2fr 1.2fr 1fr 1fr 90px; gap: 12px; align-items: center; padding: 0 20px; cursor: pointer; min-height: 56px; }
 /* 크레딧 플랜: 플랜명(2fr) | 상태 | 결제 방식 | 결제 금액 | 제공 크레딧 | 보너스 크레딧 | 유효 기간 | 작업(90px) */
-.pol-data-table--credit .pol-data-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr 90px; gap: 0; align-items: center; padding: 0 20px; border-bottom: 1px solid var(--mui-divider); cursor: pointer; min-height: 56px; }
+.pol-data-table--credit .pol-data-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr 90px; gap: 12px; align-items: center; padding: 0 20px; cursor: pointer; min-height: 56px; }
 .pol-data-row:hover { background: rgba(25,118,210,0.03); }
 .pol-data-row.selected { background: rgba(25,118,210,0.07); }
 /* 헤더 */
 .pol-data-head { background: #fafafa; color: var(--fg-2); cursor: default; font: 500 11px var(--font-sans); text-transform: uppercase; letter-spacing: 0.4px; min-height: 40px; }
-.pol-data-head span { display: flex; align-items: center; justify-content: center; height: 100%; padding: 0 8px; text-align: center; }
+.pol-data-head span { display: flex; align-items: center; justify-content: center; height: 100%; padding: 0 8px; text-align: center; border-bottom: 1px solid var(--mui-divider); align-self: stretch; }
 .pol-data-head span:first-child { justify-content: flex-start; }
 .pol-data-head span:last-child { justify-content: center; }
 /* 데이터 셀 */
-.pol-data-row span { min-width: 0; font: 400 13px var(--font-sans); color: var(--fg-1); display: flex; align-items: center; justify-content: center; text-align: center; padding: 10px 8px; }
+.pol-data-row > span { min-width: 0; font: 400 13px var(--font-sans); color: var(--fg-1); display: flex; align-items: center; justify-content: center; text-align: center; padding: 10px 8px; border-bottom: 1px solid var(--mui-divider); align-self: stretch; }
+.pol-data-row:last-child > span { border-bottom: none; }
 .pol-data-row span:first-child { justify-content: flex-start; text-align: left; padding-left: 0; }
 .pol-data-row strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 13px var(--font-sans); }
 .pol-data-row small { display: block; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 11px var(--font-sans); color: var(--fg-2); }
@@ -175,8 +176,8 @@ body { background: #fafafa; }
   transition: background-color 0.2s, border-color 0.2s;
 }
 .pol-switch.on {
-  background: #1976d2;
-  border-color: #1976d2;
+  background: #3b82f6;
+  border-color: #3b82f6;
 }
 .pol-switch .knob {
   position: absolute;
@@ -202,7 +203,7 @@ body { background: #fafafa; }
   display: flex;
   flex-direction: column;
   gap: 16px;
-  width: 320px;
+  width: 340px;
   min-height: 440px;
   padding: 32px 28px;
   background: rgba(255, 255, 255, 0.7) !important;
@@ -350,7 +351,7 @@ body { background: #fafafa; }
 .pol-credit-preview {
   display: flex;
   flex-direction: column;
-  width: 320px;
+  width: 300px;
   min-height: 260px;
   padding: 32px 28px;
   text-align: center;
@@ -451,7 +452,7 @@ body { background: #fafafa; }
 .pol-modal {
   position: relative;
   width: 100%;
-  max-width: 960px;
+  max-width: 1020px;
   max-height: calc(100vh - 48px);
   background: #fff;
   border-radius: 10px;
@@ -495,7 +496,7 @@ body { background: #fafafa; }
 
 .pol-modal-body {
   display: grid;
-  grid-template-columns: 1fr 380px;
+  grid-template-columns: 1fr 420px;
   gap: 0;
   overflow-y: auto;
   flex: 1;
@@ -512,8 +513,8 @@ body { background: #fafafa; }
   padding: 24px;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
-  align-items: stretch;
+  justify-content: center;
+  align-items: center;
   gap: 16px;
 }
 
@@ -529,9 +530,12 @@ body { background: #fafafa; }
   box-shadow: none;
   background: transparent;
   width: 100%;
+  max-width: 360px;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  transform: translateY(-8%);
 }
 .pol-preview-panel--modal .pol-card-head {
   border-bottom: none;
@@ -714,3 +718,132 @@ body { background: #fafafa; }
   color: var(--fg-1);
 }
 :root[data-theme="dark"] .price-card__feats li:hover { background: rgba(255,255,255,0.1); }
+
+/* 결제 정책 월/연 결제 탭 세그먼트 컨트롤 스타일링 */
+.pol-billing-tabs {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  background: #e2e8f0;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--mui-border);
+  gap: 4px;
+  width: fit-content;
+  margin-bottom: 12px;
+}
+
+.pol-billing-tabs button {
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font: 600 12px var(--font-sans);
+  padding: 8px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pol-billing-tabs button:hover {
+  color: #1e293b;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.pol-billing-tabs button.active {
+  background: #1976d2;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(25, 118, 210, 0.2);
+}
+
+/* 다크모드 대응 */
+:root[data-theme="dark"] .pol-billing-tabs {
+  background: #1e1e24;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] .pol-billing-tabs button {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+:root[data-theme="dark"] .pol-billing-tabs button:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+:root[data-theme="dark"] .pol-billing-tabs button.active {
+  background: #90caf9;
+  color: #0d47a1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+/* 미리보기 모달 요금제 카드 내의 크레딧 박스 및 중앙 정렬 스타일링 */
+.pol-price-preview .price-card__credit-line {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font: 600 19px var(--font-serif);
+  color: var(--fg-1);
+  text-align: center;
+  padding: 14px 20px;
+  margin: 16px 0 12px;
+  border-radius: 10px;
+  background: var(--surface-alt);
+  border: 1px solid var(--mui-divider);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.pol-price-preview .price-card__credit-note {
+  font: 400 12px var(--font-sans);
+  color: var(--fg-3);
+  margin-top: 2px;
+}
+
+/* 다크모드 대응 */
+:root[data-theme="dark"] .pol-price-preview .price-card__credit-line {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--fg-1);
+}
+
+/* 다크모드 스위치/토글 보정 */
+:root[data-theme="dark"] .pol-switch {
+  background: #334155;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+:root[data-theme="dark"] .pol-switch.on {
+  background: #60a5fa;
+  border-color: #60a5fa;
+}
+
+/* 다크모드 세부 스타일 보완 */
+:root[data-theme="dark"] .pol-search input {
+  background: transparent;
+  color: var(--fg-1);
+}
+:root[data-theme="dark"] .pol-status-select,
+:root[data-theme="dark"] .pol-limit-select,
+:root[data-theme="dark"] .pol-input {
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--fg-1);
+}
+:root[data-theme="dark"] .pol-data-row > span {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+:root[data-theme="dark"] .pol-data-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+:root[data-theme="dark"] .pol-save-bar {
+  background: var(--surface-alt);
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+:root[data-theme="dark"] .pol-modal-header {
+  background: var(--bg-1);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+:root[data-theme="dark"] .pol-modal-form-col {
+  border-right-color: rgba(255, 255, 255, 0.08);
+}
+
+
