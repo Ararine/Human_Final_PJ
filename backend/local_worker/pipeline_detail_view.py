@@ -28,7 +28,7 @@ try:
 except NameError:
     _LOCAL_BASE = Path.cwd()
 
-_DRIVE_BASE = Path("/content/drive/MyDrive/final_PJ_model")
+_DRIVE_BASE = Path("/content/drive/MyDrive/final_test_folder")
 BASE_DIR        = _DRIVE_BASE if _DRIVE_BASE.exists() else _LOCAL_BASE
 INPUT_IMAGE_DIR = BASE_DIR / "test_image_file"
 INPUT_VIDEO_DIR = BASE_DIR / "test_video_file"

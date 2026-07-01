@@ -22,8 +22,8 @@ from typing import Callable
 
 # ===== (환경설정) =====
 # 1. 모델 설정
-WHISPER_MODEL_SIZE = "large"  # 사용할 Whisper 모델 체급 (base / small / medium / large)
-WHISPER_MODEL_PATH = "/content/drive/MyDrive/final_PJ_model/STT_Model/Large" # 구글 드라이브 내 오프라인 모델 경로 (없을 시 자동 다운로드)
+WHISPER_MODEL_SIZE = "large-v3"  # 사용할 Whisper 모델 체급 (base / small / medium / large)
+WHISPER_MODEL_PATH = "/content/drive/MyDrive/final_test_folder/STT_Model/Large" # 구글 드라이브 내 오프라인 모델 경로 (없을 시 자동 다운로드)
 
 # 2. STT 성능 및 가속 설정 (VRAM 및 속도 제어)
 STT_BATCH_SIZE     = 16        # 배치 처리 단위 (숫자가 클수록 빠르나 VRAM을 더 사용함. L4/T4에서는 16~32 권장)
@@ -31,8 +31,8 @@ STT_BEAM_SIZE      = 5         # 탐색 범위 (기본 5. 숫자를 2~3으로 �
 STT_LANGUAGE       = "ko"      # 음성 인식 언어 고정 (한국어로 고정 시 인식률 향상 및 처리 속도 증가)
 
 # 3. 경로 설정
-AUDIO_DIR          = "/content/drive/MyDrive/final_PJ_model/output_file"  # 추출된 임시 오디오 저장 경로 (index.json과 동일 폴더)
-VISUAL_OCR_DIR     = "/content/drive/MyDrive/final_PJ_model/output_file"  # 임시 시각 정보 저장 경로
+AUDIO_DIR          = "/content/drive/MyDrive/final_test_folder/output_file"  # 추출된 임시 오디오 저장 경로 (index.json과 동일 폴더)
+VISUAL_OCR_DIR     = "/content/drive/MyDrive/final_test_folder/output_file"  # 임시 시각 정보 저장 경로
 
 # 4. 탐지 구간 및 마스킹 설정
 BEEP_FREQ          = 1000       # 삐 소리(Beep)의 주파수 (Hz)
@@ -40,7 +40,7 @@ BEEP_GAIN_DB       = -8         # 삐 소리(Beep)의 볼륨 크기 (dB)
 PAD_SEC            = 0.08       # 개인정보가 탐지된 단어의 앞뒤 여유 시간 (초 단위로 조금 넉넉하게 마스킹)
 
 # 5. 테스트 환경 설정 (실제 서버 구동시 제거 예정)
-TEST_MEDIA_PATH    = "/content/drive/MyDrive/final_PJ_model/test_video_file/카드_음성_영상1.mp4" # 테스트에 사용할 미디어 파일 하드코딩 경로
+TEST_MEDIA_PATH    = "/content/drive/MyDrive/final_test_folder/test_video_file/카드_음성_영상1.mp4" # 테스트에 사용할 미디어 파일 하드코딩 경로
 # ==================================
 
 os.makedirs(AUDIO_DIR, exist_ok=True)

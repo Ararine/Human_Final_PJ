@@ -68,7 +68,7 @@ if not hasattr(_pil_util, 'is_directory'):
 # ═════════════════════════════════════════════════════════════════════════════
 # ▶ 환경설정 (경로 · 마스킹/추적/FFmpeg/워터마크 파라미터 — 모든 설정은 여기서 변경)
 # ═════════════════════════════════════════════════════════════════════════════
-_DRIVE_BASE = Path("/content/drive/MyDrive/final_PJ_model")
+_DRIVE_BASE = Path("/content/drive/MyDrive/final_test_folder")
 try:
     _LOCAL_BASE = Path(__file__).parent
 except NameError:                       # Colab exec() 실행 시 __file__ 없음
